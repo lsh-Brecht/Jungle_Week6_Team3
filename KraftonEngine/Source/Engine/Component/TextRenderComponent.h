@@ -50,6 +50,7 @@ public:
 
 	// Owner의 UUID를 문자열로 반환
 	FString GetOwnerUUIDToString() const;
+	void RefreshOwnerUUIDText();
 
 	// Owner의 FName을 문자열로 반환
 	FString GetOwnerNameToString() const;

@@ -130,6 +130,15 @@ FString UTextRenderComponent::GetOwnerUUIDToString() const
 	return std::to_string(OwnerActor->GetUUID());
 }
 
+void UTextRenderComponent::RefreshOwnerUUIDText()
+{
+	static const FString UUIDPrefix = "UUID : ";
+	if (Text.rfind(UUIDPrefix, 0) == 0)
+	{
+		SetText(UUIDPrefix + GetOwnerUUIDToString());
+	}
+}
+
 FString UTextRenderComponent::GetOwnerNameToString() const
 {
 	AActor* OwnerActor = GetOwner();
