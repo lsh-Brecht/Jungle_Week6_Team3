@@ -6,6 +6,7 @@ struct FGuiInputState
 {
     bool bUsingMouse = false;
     bool bUsingKeyboard = false;
+    bool bUsingTextInput = false;
 };
 
 class InputSystem : public TSingleton<InputSystem>

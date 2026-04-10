@@ -76,7 +76,8 @@ void FObjViewerViewportClient::Tick(float DeltaTime)
 void FObjViewerViewportClient::TickInput(float DeltaTime)
 {
 	if (!Camera) return;
-	if (InputSystem::Get().GetGuiInputState().bUsingKeyboard) return;
+	const FGuiInputState& GuiInput = InputSystem::Get().GetGuiInputState();
+	if (GuiInput.bUsingKeyboard || GuiInput.bUsingTextInput) return;
 
 	// 마우스가 뷰포트 영역 안에 있는지 확인
 	POINT MousePos = InputSystem::Get().GetMousePos();
