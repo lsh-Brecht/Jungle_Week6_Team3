@@ -27,6 +27,17 @@ void FDefaultRenderPipeline::Execute(float DeltaTime, FRenderer& Renderer)
 
 		Bus.SetCameraInfo(Camera);
 		Bus.SetRenderSettings(ViewMode, ShowFlags);
+		const D3D11_VIEWPORT& Viewport = Renderer.GetFD3DDevice().GetViewport();
+		Bus.SetViewportTargets(
+			Viewport.Width,
+			Viewport.Height,
+			Renderer.GetFD3DDevice().GetFrameBufferRTV(),
+			Renderer.GetFD3DDevice().GetDepthStencilView(),
+			Renderer.GetFD3DDevice().GetStencilSRV(),
+			Renderer.GetFD3DDevice().GetGBufferAlbedoRTV(),
+			Renderer.GetFD3DDevice().GetGBufferNormalRTV(),
+			Renderer.GetFD3DDevice().GetGBufferAlbedoSRV(),
+			Renderer.GetFD3DDevice().GetGBufferNormalSRV());
 
 		Collector.CollectWorld(World, Bus);
 		Collector.CollectDebugDraw(World->GetDebugDrawQueue(), Bus);

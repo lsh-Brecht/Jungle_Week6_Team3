@@ -17,6 +17,15 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	Shaders[(uint32)EShaderType::StaticMesh].Create(InDevice, L"Shaders/StaticMeshShader.hlsl",
 		"VS", "PS", FVertexPNCTInputLayout, ARRAYSIZE(FVertexPNCTInputLayout));
 
+	Shaders[(uint32)EShaderType::SelectionMaskPrimitive].Create(InDevice, L"Shaders/SelectionMaskPrimitive.hlsl",
+		"VS", "PS", FVertexInputLayout, ARRAYSIZE(FVertexInputLayout));
+
+	Shaders[(uint32)EShaderType::SelectionMaskStaticMesh].Create(InDevice, L"Shaders/SelectionMask.hlsl",
+		"VS", "PS", FVertexPNCTInputLayout, ARRAYSIZE(FVertexPNCTInputLayout));
+
+	Shaders[(uint32)EShaderType::DeferredComposite].Create(InDevice, L"Shaders/DeferredComposite.hlsl",
+		"VS", "PS", nullptr, 0);
+
 	// PostProcess outline: fullscreen quad (InputLayout 없음)
 	Shaders[(uint32)EShaderType::OutlinePostProcess].Create(InDevice, L"Shaders/OutlinePostProcess.hlsl",
 		"VS", "PS", nullptr, 0);

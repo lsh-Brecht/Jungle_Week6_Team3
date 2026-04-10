@@ -95,6 +95,29 @@ bool FViewport::CreateResources()
 	hr = Device->CreateShaderResourceView(RTTexture, nullptr, &SRV);
 	if (FAILED(hr)) return false;
 
+	// ── Deferred G-buffer: Albedo ──
+	D3D11_TEXTURE2D_DESC GBufferDesc = TexDesc;
+	GBufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	hr = Device->CreateTexture2D(&GBufferDesc, nullptr, &GBufferAlbedoTexture);
+	if (FAILED(hr)) return false;
+
+	hr = Device->CreateRenderTargetView(GBufferAlbedoTexture, nullptr, &GBufferAlbedoRTV);
+	if (FAILED(hr)) return false;
+
+	hr = Device->CreateShaderResourceView(GBufferAlbedoTexture, nullptr, &GBufferAlbedoSRV);
+	if (FAILED(hr)) return false;
+
+	// ── Deferred G-buffer: Normal ──
+	hr = Device->CreateTexture2D(&GBufferDesc, nullptr, &GBufferNormalTexture);
+	if (FAILED(hr)) return false;
+
+	hr = Device->CreateRenderTargetView(GBufferNormalTexture, nullptr, &GBufferNormalRTV);
+	if (FAILED(hr)) return false;
+
+	hr = Device->CreateShaderResourceView(GBufferNormalTexture, nullptr, &GBufferNormalSRV);
+	if (FAILED(hr)) return false;
+
 	// ── 뎁스/스텐실 (TYPELESS → DSV + StencilSRV) ──
 	D3D11_TEXTURE2D_DESC DepthDesc = {};
 	DepthDesc.Width = Width;
@@ -151,6 +174,12 @@ bool FViewport::CreateResources()
 
 void FViewport::ReleaseResources()
 {
+	if (GBufferNormalSRV) { GBufferNormalSRV->Release(); GBufferNormalSRV = nullptr; }
+	if (GBufferNormalRTV) { GBufferNormalRTV->Release(); GBufferNormalRTV = nullptr; }
+	if (GBufferNormalTexture) { GBufferNormalTexture->Release(); GBufferNormalTexture = nullptr; }
+	if (GBufferAlbedoSRV) { GBufferAlbedoSRV->Release(); GBufferAlbedoSRV = nullptr; }
+	if (GBufferAlbedoRTV) { GBufferAlbedoRTV->Release(); GBufferAlbedoRTV = nullptr; }
+	if (GBufferAlbedoTexture) { GBufferAlbedoTexture->Release(); GBufferAlbedoTexture = nullptr; }
 	if (StencilSRV) { StencilSRV->Release(); StencilSRV = nullptr; }
 	if (DepthSRV) { DepthSRV->Release(); DepthSRV = nullptr; }
 	if (DSV) { DSV->Release(); DSV = nullptr; }

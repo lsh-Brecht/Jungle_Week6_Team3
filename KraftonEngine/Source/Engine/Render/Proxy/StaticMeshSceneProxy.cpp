@@ -71,7 +71,8 @@ void FStaticMeshSceneProxy::UpdateMesh()
 {
 	MeshBuffer = Owner->GetMeshBuffer();
 	Shader = FShaderManager::Get().GetShader(EShaderType::StaticMesh);
-	Pass = ERenderPass::Opaque;
+	// 1차 deferred 전환은 static mesh base pass만 대상으로 한다.
+	Pass = ERenderPass::DeferredGeometry;
 
 	RebuildSectionDraws();
 }

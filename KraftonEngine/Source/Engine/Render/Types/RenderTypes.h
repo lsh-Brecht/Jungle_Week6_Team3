@@ -31,6 +31,8 @@ enum class EMeshShape
 
 enum class ERenderPass : uint32
 {
+	DeferredGeometry,
+	DeferredComposite,
 	Opaque,
 	Font,			// TextRenderComponent → FontBatcher 경유
 	SubUV,			// SubUVComponent     → SubUVBatcher 경유
@@ -49,6 +51,8 @@ enum class ERenderPass : uint32
 inline const char* GetRenderPassName(ERenderPass Pass)
 {
 	static const char* Names[] = {
+		"RenderPass::DeferredGeometry",
+		"RenderPass::DeferredComposite",
 		"RenderPass::Opaque",
 		"RenderPass::Font",
 		"RenderPass::SubUV",

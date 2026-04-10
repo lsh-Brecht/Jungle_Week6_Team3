@@ -20,6 +20,10 @@ void FRenderBus::Clear()
 	ViewportRTV = nullptr;
 	ViewportDSV = nullptr;
 	ViewportStencilSRV = nullptr;
+	ViewportGBufferAlbedoRTV = nullptr;
+	ViewportGBufferNormalRTV = nullptr;
+	ViewportGBufferAlbedoSRV = nullptr;
+	ViewportGBufferNormalSRV = nullptr;
 }
 
 void FRenderBus::AddProxy(ERenderPass Pass, const FPrimitiveSceneProxy* Proxy)
@@ -86,12 +90,38 @@ void FRenderBus::SetViewportInfo(const FViewport* VP)
 	ViewportRTV = VP->GetRTV();
 	ViewportDSV = VP->GetDSV();
 	ViewportStencilSRV = VP->GetStencilSRV();
+	ViewportGBufferAlbedoRTV = VP->GetGBufferAlbedoRTV();
+	ViewportGBufferNormalRTV = VP->GetGBufferNormalRTV();
+	ViewportGBufferAlbedoSRV = VP->GetGBufferAlbedoSRV();
+	ViewportGBufferNormalSRV = VP->GetGBufferNormalSRV();
 }
 
 void FRenderBus::SetRenderSettings(const EViewMode NewViewMode, const FShowFlags NewShowFlags)
 {
 	ViewMode = NewViewMode;
 	ShowFlags = NewShowFlags;
+}
+
+void FRenderBus::SetViewportTargets(
+	float InWidth,
+	float InHeight,
+	ID3D11RenderTargetView* InRTV,
+	ID3D11DepthStencilView* InDSV,
+	ID3D11ShaderResourceView* InStencilSRV,
+	ID3D11RenderTargetView* InGBufferAlbedoRTV,
+	ID3D11RenderTargetView* InGBufferNormalRTV,
+	ID3D11ShaderResourceView* InGBufferAlbedoSRV,
+	ID3D11ShaderResourceView* InGBufferNormalSRV)
+{
+	viewportWidth = InWidth;
+	viewportHeight = InHeight;
+	ViewportRTV = InRTV;
+	ViewportDSV = InDSV;
+	ViewportStencilSRV = InStencilSRV;
+	ViewportGBufferAlbedoRTV = InGBufferAlbedoRTV;
+	ViewportGBufferNormalRTV = InGBufferNormalRTV;
+	ViewportGBufferAlbedoSRV = InGBufferAlbedoSRV;
+	ViewportGBufferNormalSRV = InGBufferNormalSRV;
 }
 
 void FRenderBus::SetViewportSize(float InWidth, float InHeight)

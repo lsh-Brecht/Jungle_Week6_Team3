@@ -40,6 +40,16 @@ public:
 	// Getter,Setter
 	void SetCameraInfo(const UCameraComponent* Camera);
 	void SetViewportInfo(const FViewport* VP);
+	void SetViewportTargets(
+		float InWidth,
+		float InHeight,
+		ID3D11RenderTargetView* InRTV,
+		ID3D11DepthStencilView* InDSV,
+		ID3D11ShaderResourceView* InStencilSRV,
+		ID3D11RenderTargetView* InGBufferAlbedoRTV,
+		ID3D11RenderTargetView* InGBufferNormalRTV,
+		ID3D11ShaderResourceView* InGBufferAlbedoSRV,
+		ID3D11ShaderResourceView* InGBufferNormalSRV);
 	void SetViewportSize(float InWidth, float InHeight);
 	void SetRenderSettings(const EViewMode NewViewMode, const FShowFlags NewShowFlags);
 
@@ -64,6 +74,10 @@ public:
 	ID3D11RenderTargetView*  GetViewportRTV()        const { return ViewportRTV; }
 	ID3D11DepthStencilView*  GetViewportDSV()        const { return ViewportDSV; }
 	ID3D11ShaderResourceView* GetViewportStencilSRV() const { return ViewportStencilSRV; }
+	ID3D11RenderTargetView* GetViewportGBufferAlbedoRTV() const { return ViewportGBufferAlbedoRTV; }
+	ID3D11RenderTargetView* GetViewportGBufferNormalRTV() const { return ViewportGBufferNormalRTV; }
+	ID3D11ShaderResourceView* GetViewportGBufferAlbedoSRV() const { return ViewportGBufferAlbedoSRV; }
+	ID3D11ShaderResourceView* GetViewportGBufferNormalSRV() const { return ViewportGBufferNormalSRV; }
 
 	// GPU Occlusion Culling — set by render pipeline, read by collector
 	void SetOcclusionCulling(FGPUOcclusionCulling* InOcclusion) { OcclusionCulling = InOcclusion; }
@@ -105,6 +119,10 @@ private:
 	ID3D11RenderTargetView*   ViewportRTV        = nullptr;
 	ID3D11DepthStencilView*   ViewportDSV        = nullptr;
 	ID3D11ShaderResourceView* ViewportStencilSRV = nullptr;
+	ID3D11RenderTargetView*   ViewportGBufferAlbedoRTV = nullptr;
+	ID3D11RenderTargetView*   ViewportGBufferNormalRTV = nullptr;
+	ID3D11ShaderResourceView* ViewportGBufferAlbedoSRV = nullptr;
+	ID3D11ShaderResourceView* ViewportGBufferNormalSRV = nullptr;
 
 	// GPU Occlusion
 	FGPUOcclusionCulling* OcclusionCulling = nullptr;

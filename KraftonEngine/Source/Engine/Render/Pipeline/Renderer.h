@@ -57,9 +57,11 @@ private:
 
 	void ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Context, EViewMode ViewMode);
 	void UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
+	void BindPassTargets(ERenderPass Pass, ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
+	void DrawDeferredComposite(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 
 	// 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회, 필드 직접 접근
-	void ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context);
+	void ExecutePass(ERenderPass Pass, const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context);
 
 	// ExecutePass 내부 헬퍼
 	struct FDrawState
@@ -78,7 +80,7 @@ private:
 	};
 
 	void SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies);
-	void BindShader(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceContext* Ctx, FDrawState& State);
+	void BindShader(ERenderPass Pass, const FPrimitiveSceneProxy& Proxy, ID3D11DeviceContext* Ctx, FDrawState& State);
 	void EnsurePerObjectCBPoolCapacity(uint32 RequiredCount);
 	FConstantBuffer* GetPerObjectCBForProxy(const FPrimitiveSceneProxy& Proxy);
 	bool BindPerObjectCB(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceContext* Ctx, FDrawState& State);

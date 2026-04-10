@@ -222,19 +222,26 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		const auto& Batcher = PassBatchers[i];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
-		if (!bHasBatcher && !bHasProxies) continue;
+		// Fullscreen composite는 proxy queue가 없어도 G-buffer가 준비돼 있으면 반드시 실행한다.
+		const bool bRequiresCompositePass = (CurPass == ERenderPass::DeferredComposite)
+			&& InRenderBus.GetViewportGBufferAlbedoSRV()
+			&& InRenderBus.GetViewportGBufferNormalSRV();
+		if (!bHasBatcher && !bHasProxies && !bRequiresCompositePass) continue;
 		if (bHasBatcher && !bHasProxies && Batcher.IsEmpty && Batcher.IsEmpty()) continue;
 
 		const char* PassName = GetRenderPassName(CurPass);
 		SCOPE_STAT_CAT(PassName, "4_ExecutePass");
 		GPU_SCOPE_STAT(PassName);
 
+		BindPassTargets(CurPass, Context, InRenderBus);
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
 
-		if (bHasBatcher)
+		if (CurPass == ERenderPass::DeferredComposite)
+			DrawDeferredComposite(InRenderBus, Context);
+		else if (bHasBatcher)
 			PassBatchers[i].DrawBatch(CurPass, InRenderBus, Context);
 		else
-			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
+			ExecutePass(CurPass, InRenderBus.GetProxies(CurPass), Context);
 	}
 }
 
@@ -247,6 +254,8 @@ void FRenderer::InitializePassRenderStates()
 	auto& S = PassRenderStates;
 
 	//                              DepthStencil                    Blend                Rasterizer                   Topology                                WireframeAware
+	S[(uint32)E::DeferredGeometry] = { EDepthStencilState::Default,      EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::DeferredComposite] = { EDepthStencilState::NoDepth,       EBlendState::Opaque,     ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::Opaque] = { EDepthStencilState::Default,      EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::Translucent] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::SelectionMask] = { EDepthStencilState::StencilWrite,  EBlendState::NoColor,    ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
@@ -318,6 +327,40 @@ void FRenderer::InitializePassBatchers()
 	};
 }
 
+void FRenderer::BindPassTargets(ERenderPass Pass, ID3D11DeviceContext* Context, const FRenderBus& Bus)
+{
+	if (Pass == ERenderPass::DeferredGeometry)
+	{
+		ID3D11RenderTargetView* GBufferRTVs[2] = {
+			Bus.GetViewportGBufferAlbedoRTV(),
+			Bus.GetViewportGBufferNormalRTV()
+		};
+		ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
+		if (!GBufferRTVs[0] || !GBufferRTVs[1] || !DSV)
+		{
+			return;
+		}
+
+		const float ClearColor[4] = { 0.f, 0.f, 0.f, 0.f };
+		const float ClearNormal[4] = { 0.5f, 0.5f, 1.0f, 0.f };
+		Context->ClearRenderTargetView(GBufferRTVs[0], ClearColor);
+		Context->ClearRenderTargetView(GBufferRTVs[1], ClearNormal);
+		Context->OMSetRenderTargets(2, GBufferRTVs, DSV);
+		return;
+	}
+
+	if (Pass == ERenderPass::DeferredComposite)
+	{
+		ID3D11RenderTargetView* RTV = Bus.GetViewportRTV();
+		Context->OMSetRenderTargets(1, &RTV, nullptr);
+		return;
+	}
+
+	ID3D11RenderTargetView* RTV = Bus.GetViewportRTV();
+	ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
+	Context->OMSetRenderTargets(1, &RTV, DSV);
+}
+
 // ============================================================
 // LineBatcher DrawBatch 공통
 // ============================================================
@@ -331,10 +374,37 @@ void FRenderer::DrawLineBatcher(FLineBatcher& Batcher, ID3D11DeviceContext* Cont
 	Batcher.DrawBatch(Context);
 }
 
+void FRenderer::DrawDeferredComposite(const FRenderBus& Bus, ID3D11DeviceContext* Context)
+{
+	ID3D11ShaderResourceView* GBufferSRVs[2] = {
+		Bus.GetViewportGBufferAlbedoSRV(),
+		Bus.GetViewportGBufferNormalSRV()
+	};
+	if (!GBufferSRVs[0] || !GBufferSRVs[1] || !Bus.GetViewportRTV())
+	{
+		return;
+	}
+
+	FShader* CompositeShader = FShaderManager::Get().GetShader(EShaderType::DeferredComposite);
+	if (CompositeShader)
+	{
+		CompositeShader->Bind(Context);
+	}
+
+	Context->PSSetShaderResources(0, 2, GBufferSRVs);
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->Draw(3, 0);
+	FDrawCallStats::Increment();
+
+	ID3D11ShaderResourceView* NullSRVs[2] = { nullptr, nullptr };
+	Context->PSSetShaderResources(0, 2, NullSRVs);
+}
+
 // ============================================================
 // 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회
 // ============================================================
-void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context)
+void FRenderer::ExecutePass(ERenderPass Pass, const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context)
 {
 	SortProxies(Proxies);
 
@@ -346,7 +416,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
-			BindShader(Proxy, Context, State);	
+			BindShader(Pass, Proxy, Context, State);
 			BindExtraCB(Proxy, Context);
 			
 			if(Proxy.SectionDraws.size() == 1)
@@ -401,12 +471,22 @@ void FRenderer::SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies)
 	std::sort(SortedProxyBuffer.begin(), SortedProxyBuffer.end(), ProxyLess);
 }
 
-void FRenderer::BindShader(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceContext* Ctx, FDrawState& State)
+void FRenderer::BindShader(ERenderPass Pass, const FPrimitiveSceneProxy& Proxy, ID3D11DeviceContext* Ctx, FDrawState& State)
 {
-	if (Proxy.Shader && Proxy.Shader != State.LastShader)
+	FShader* ShaderToBind = Proxy.Shader;
+	if (Pass == ERenderPass::SelectionMask)
 	{
-		Proxy.Shader->Bind(Ctx);
-		State.LastShader = Proxy.Shader;
+		const uint32 VertexStride = Proxy.MeshBuffer ? Proxy.MeshBuffer->GetVertexBuffer().GetStride() : 0;
+		// Selection mask는 색은 버리고 위치만 쓰므로, 실제 버텍스 레이아웃에 맞는 최소 셰이더를 선택한다.
+		ShaderToBind = (VertexStride == sizeof(FVertexPNCT))
+			? FShaderManager::Get().GetShader(EShaderType::SelectionMaskStaticMesh)
+			: FShaderManager::Get().GetShader(EShaderType::SelectionMaskPrimitive);
+	}
+
+	if (ShaderToBind && ShaderToBind != State.LastShader)
+	{
+		ShaderToBind->Bind(Ctx);
+		State.LastShader = ShaderToBind;
 	}
 }
 

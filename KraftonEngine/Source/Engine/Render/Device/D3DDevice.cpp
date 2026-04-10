@@ -169,10 +169,34 @@ void FD3DDevice::CreateFrameBuffer()
 	frameBufferRTVDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
 	Device->CreateRenderTargetView(FrameBuffer, &frameBufferRTVDesc, &FrameBufferRTV);
+
+	D3D11_TEXTURE2D_DESC GBufferDesc = {};
+	GBufferDesc.Width = static_cast<uint32>(ViewportInfo.Width);
+	GBufferDesc.Height = static_cast<uint32>(ViewportInfo.Height);
+	GBufferDesc.MipLevels = 1;
+	GBufferDesc.ArraySize = 1;
+	GBufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	GBufferDesc.SampleDesc.Count = 1;
+	GBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	GBufferDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+	Device->CreateTexture2D(&GBufferDesc, nullptr, &GBufferAlbedo);
+	Device->CreateRenderTargetView(GBufferAlbedo, nullptr, &GBufferAlbedoRTV);
+	Device->CreateShaderResourceView(GBufferAlbedo, nullptr, &GBufferAlbedoSRV);
+
+	Device->CreateTexture2D(&GBufferDesc, nullptr, &GBufferNormal);
+	Device->CreateRenderTargetView(GBufferNormal, nullptr, &GBufferNormalRTV);
+	Device->CreateShaderResourceView(GBufferNormal, nullptr, &GBufferNormalSRV);
 }
 
 void FD3DDevice::ReleaseFrameBuffer()
 {
+	SAFE_RELEASE(GBufferNormalSRV);
+	SAFE_RELEASE(GBufferNormalRTV);
+	SAFE_RELEASE(GBufferNormal);
+	SAFE_RELEASE(GBufferAlbedoSRV);
+	SAFE_RELEASE(GBufferAlbedoRTV);
+	SAFE_RELEASE(GBufferAlbedo);
 	SAFE_RELEASE(FrameBufferRTV);
 	SAFE_RELEASE(FrameBuffer);
 }
@@ -184,17 +208,29 @@ void FD3DDevice::CreateDepthStencilBuffer()
 	depthStencilDesc.Height = static_cast<uint32>(ViewportInfo.Height);
 	depthStencilDesc.MipLevels = 1;
 	depthStencilDesc.ArraySize = 1;
-	depthStencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;	//	Depth 24bit + Stencil 8bit
+	depthStencilDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
 	depthStencilDesc.SampleDesc.Count = 1;
 	depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
-	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
 
 	Device->CreateTexture2D(&depthStencilDesc, nullptr, &DepthStencilBuffer);
-	Device->CreateDepthStencilView(DepthStencilBuffer, nullptr, &DepthStencilView);
+	D3D11_DEPTH_STENCIL_VIEW_DESC DSVDesc = {};
+	DSVDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	DSVDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+	DSVDesc.Texture2D.MipSlice = 0;
+	Device->CreateDepthStencilView(DepthStencilBuffer, &DSVDesc, &DepthStencilView);
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC StencilSRVDesc = {};
+	StencilSRVDesc.Format = DXGI_FORMAT_X24_TYPELESS_G8_UINT;
+	StencilSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	StencilSRVDesc.Texture2D.MipLevels = 1;
+	StencilSRVDesc.Texture2D.MostDetailedMip = 0;
+	Device->CreateShaderResourceView(DepthStencilBuffer, &StencilSRVDesc, &StencilSRV);
 }
 
 void FD3DDevice::ReleaseDepthStencilBuffer()
 {
+	SAFE_RELEASE(StencilSRV);
 	SAFE_RELEASE(DepthStencilView);
 	SAFE_RELEASE(DepthStencilBuffer);
 }

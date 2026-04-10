@@ -5,9 +5,23 @@
 Texture2D g_txColor : register(t0);
 SamplerState g_Sample : register(s0);
 
-PS_Input_Full VS(VS_Input_PNCT input)
+struct VS_Output
 {
-    PS_Input_Full output;
+    float4 position : SV_POSITION;
+    float3 normal   : NORMAL;
+    float4 color    : COLOR;
+    float2 texcoord : TEXCOORD;
+};
+
+struct PS_Output
+{
+    float4 albedo : SV_TARGET0;
+    float4 normal : SV_TARGET1;
+};
+
+VS_Output VS(VS_Input_PNCT input)
+{
+    VS_Output output;
     output.position = ApplyMVP(input.position);
     output.normal = normalize(mul(input.normal, (float3x3) Model));
     output.color = input.color * SectionColor;
@@ -15,27 +29,26 @@ PS_Input_Full VS(VS_Input_PNCT input)
     float2 texcoord = input.texcoord;
     if (bIsUVScroll != 0)
     {
-        texcoord.x += Time * 0.5f; // 가로 방향으로 스크롤 예시
+        texcoord.x += Time * 0.5f;
     }
     output.texcoord = texcoord;
 
     return output;
 }
 
-float4 PS(PS_Input_Full input) : SV_TARGET
+PS_Output PS(VS_Output input)
 {
     float4 texColor = g_txColor.Sample(g_Sample, input.texcoord);
-
-    // Unbound SRV는 (0,0,0,0)을 반환 — 텍스처 미바인딩 시 white로 대체
     if (texColor.a < 0.001f)
+    {
         texColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    }
 
-    //float3 lightDir = normalize(float3(1.0f, -1.0f, 1.0f));
-    //float diffuse = max(dot(input.normal, -lightDir), 0.0f);
-    //float ambient = 0.2f;
-
-    float4 finalColor = texColor * input.color /* * (diffuse + ambient)*/;
+    float4 finalColor = texColor * input.color;
     finalColor.a = texColor.a * input.color.a;
 
-    return float4(ApplyWireframe(finalColor.rgb), finalColor.a);
+    PS_Output output;
+    output.albedo = finalColor;
+    output.normal = float4(normalize(input.normal) * 0.5f + 0.5f, finalColor.a);
+    return output;
 }

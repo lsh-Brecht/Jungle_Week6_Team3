@@ -37,6 +37,10 @@ public:
 	ID3D11ShaderResourceView* GetDepthSRV() const { return DepthSRV; }
 	ID3D11ShaderResourceView* GetStencilSRV() const { return StencilSRV; }
 	ID3D11DepthStencilView* GetDSV() const { return DSV; }
+	ID3D11RenderTargetView* GetGBufferAlbedoRTV() const { return GBufferAlbedoRTV; }
+	ID3D11RenderTargetView* GetGBufferNormalRTV() const { return GBufferNormalRTV; }
+	ID3D11ShaderResourceView* GetGBufferAlbedoSRV() const { return GBufferAlbedoSRV; }
+	ID3D11ShaderResourceView* GetGBufferNormalSRV() const { return GBufferNormalSRV; }
 	const D3D11_VIEWPORT& GetViewportRect() const { return ViewportRect; }
 
 private:
@@ -52,6 +56,14 @@ private:
 	ID3D11Texture2D* RTTexture = nullptr;
 	ID3D11RenderTargetView* RTV = nullptr;
 	ID3D11ShaderResourceView* SRV = nullptr;		// ImGui::Image() 출력용
+
+	// Deferred G-buffer
+	ID3D11Texture2D* GBufferAlbedoTexture = nullptr;
+	ID3D11RenderTargetView* GBufferAlbedoRTV = nullptr;
+	ID3D11ShaderResourceView* GBufferAlbedoSRV = nullptr;
+	ID3D11Texture2D* GBufferNormalTexture = nullptr;
+	ID3D11RenderTargetView* GBufferNormalRTV = nullptr;
+	ID3D11ShaderResourceView* GBufferNormalSRV = nullptr;
 
 	// 뎁스/스텐실 (TYPELESS 텍스처 → DSV + DepthSRV + StencilSRV 분리)
 	ID3D11Texture2D* DepthTexture = nullptr;
