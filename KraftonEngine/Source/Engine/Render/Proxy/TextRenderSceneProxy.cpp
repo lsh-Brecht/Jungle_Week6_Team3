@@ -52,11 +52,7 @@ void FTextRenderSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	if (!bVisible) return;
 
 	// 빌보드 행렬 (CollectEntries에서도 사용)
-	FVector BillboardForward = Bus.GetCameraForward() * -1.0f;
-	FMatrix RotMatrix;
-	RotMatrix.SetAxes(BillboardForward, Bus.GetCameraRight() * -1.0f, Bus.GetCameraUp());
-	CachedBillboardMatrix = FMatrix::MakeScaleMatrix(TextComp->GetWorldScale())
-		* RotMatrix * FMatrix::MakeTranslationMatrix(TextComp->GetWorldLocation());
+	CachedBillboardMatrix = TextComp->ComputeTextBillboardMatrix(Bus.GetCameraForward());
 
 	// SelectionMask용 아웃라인 행렬 (텍스트 너비·높이 반영)
 	FMatrix OutlineMatrix = TextComp->CalculateOutlineMatrix(CachedBillboardMatrix);

@@ -29,7 +29,7 @@ void UTextRenderComponent::UpdateWorldAABB() const
 	float TotalWidth = GetUTF8Length(Text) * CharWidth;
 	float MaxExtent = std::max(TotalWidth, CharHeight);
 
-	FVector WorldScale = GetWorldScale();
+	FVector WorldScale = GetVisualScale();
 	float ScaledMax = MaxExtent * std::max({ WorldScale.X, WorldScale.Y, WorldScale.Z });
 
 	FVector WorldCenter = GetWorldLocation();
@@ -42,7 +42,7 @@ void UTextRenderComponent::UpdateWorldAABB() const
 bool UTextRenderComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult)
 {
 	// Ray 방향으로 빌보드 행렬을 계산 (CachedWorldMatrix는 active 카메라 기준이라 다른 뷰포트에서 틀림)
-	FMatrix PerRayBillboard = ComputeBillboardMatrix(Ray.Direction);
+	FMatrix PerRayBillboard = ComputeTextBillboardMatrix(Ray.Direction);
 	FMatrix OutlineWorldMatrix = CalculateOutlineMatrix(PerRayBillboard);
 	FMatrix InvWorldMatrix = OutlineWorldMatrix.GetInverse();
 
@@ -68,6 +68,31 @@ bool UTextRenderComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHi
 	}
 
 	return false;
+}
+
+FVector UTextRenderComponent::GetVisualScale() const
+{
+	// 부모 프리미티브 스케일과 무관하게 텍스트 크기를 고정한다.
+	return GetRelativeScale();
+}
+
+FMatrix UTextRenderComponent::ComputeTextBillboardMatrix(const FVector& CameraForward) const
+{
+	FVector Forward = (CameraForward * -1.0f).Normalized();
+	FVector WorldUp = FVector(0.0f, 0.0f, 1.0f);
+
+	if (std::abs(Forward.Dot(WorldUp)) > 0.99f)
+	{
+		WorldUp = FVector(0.0f, 1.0f, 0.0f);
+	}
+
+	FVector Right = WorldUp.Cross(Forward).Normalized();
+	FVector Up = Forward.Cross(Right).Normalized();
+
+	FMatrix RotMatrix;
+	RotMatrix.SetAxes(Forward, Right, Up);
+
+	return FMatrix::MakeScaleMatrix(GetVisualScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(GetWorldLocation());
 }
 
 void UTextRenderComponent::Serialize(FArchive& Ar)
@@ -176,7 +201,7 @@ FMatrix UTextRenderComponent::CalculateOutlineMatrix() const
 	FMatrix ScaleMatrix = FMatrix::MakeScaleMatrix(FVector(1.0f, TotalLocalWidth, CharHeight));
 	FMatrix TransMatrix = FMatrix::MakeTranslationMatrix(FVector(0.0f, CenterY, CenterZ));
 
-	return (ScaleMatrix * TransMatrix) * CachedWorldMatrix;
+	return (ScaleMatrix * TransMatrix) * ComputeTextBillboardMatrix(GetForwardVector() * -1.0f);
 }
 
 FMatrix UTextRenderComponent::CalculateOutlineMatrix(const FMatrix& BillboardWorldMatrix) const
