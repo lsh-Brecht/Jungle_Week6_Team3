@@ -192,6 +192,7 @@ void FEditorViewportClient::TickInput(float DeltaTime)
 
 	const FCameraState& CameraState = Camera->GetCameraState();
 	const bool bIsOrtho = CameraState.bIsOrthogonal;
+	const bool bCtrlHeld = InputSystem::Get().GetKey(VK_CONTROL);
 
 	const float MoveSensitivity = RenderOptions.CameraMoveSensitivity;
 	const float CameraSpeed = (Settings ? Settings->CameraSpeed : 10.f) * MoveSensitivity;
@@ -203,17 +204,17 @@ void FEditorViewportClient::TickInput(float DeltaTime)
 		FVector LocalMove = FVector(0, 0, 0);
 		float WorldVerticalMove = 0.0f;
 
-		if (InputSystem::Get().GetKey('W'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('W'))
 			LocalMove.X += CameraSpeed;
-		if (InputSystem::Get().GetKey('A'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('A'))
 			LocalMove.Y -= CameraSpeed;
-		if (InputSystem::Get().GetKey('S'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('S'))
 			LocalMove.X -= CameraSpeed;
-		if (InputSystem::Get().GetKey('D'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('D'))
 			LocalMove.Y += CameraSpeed;
-		if (InputSystem::Get().GetKey('Q'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('Q'))
 			WorldVerticalMove -= CameraSpeed;
-		if (InputSystem::Get().GetKey('E'))
+		if (!bCtrlHeld && InputSystem::Get().GetKey('E'))
 			WorldVerticalMove += CameraSpeed;
 
 		LocalMove *= DeltaTime;
