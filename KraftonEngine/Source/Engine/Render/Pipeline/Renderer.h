@@ -57,6 +57,7 @@ private:
 
 	void ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Context, EViewMode ViewMode);
 	void UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
+	void UpdateSceneEffectBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
 
 	// 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회, 필드 직접 접근
 	void ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context);

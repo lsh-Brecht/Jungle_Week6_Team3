@@ -11,6 +11,7 @@ PS_Input_Full VS(VS_Input_PNCT input)
     output.position = ApplyMVP(input.position);
     output.normal = normalize(mul(input.normal, (float3x3) Model));
     output.color = input.color * SectionColor;
+    output.worldPos = mul(float4(input.position, 1.0f), Model).xyz;
 
     float2 texcoord = input.texcoord;
     if (bIsUVScroll != 0)
@@ -34,7 +35,19 @@ float4 PS(PS_Input_Full input) : SV_TARGET
     //float diffuse = max(dot(input.normal, -lightDir), 0.0f);
     //float ambient = 0.2f;
 
+    float localTintWeight = 0.0f;
+    float radius = LocalTintPositionRadius.w;
+    if (radius > 0.0f)
+    {
+        float distanceToTintCenter = distance(input.worldPos, LocalTintPositionRadius.xyz);
+        float normalizedDistance = saturate(distanceToTintCenter / max(radius, 0.0001f));
+        float attenuation = pow(saturate(1.0f - normalizedDistance), max(LocalTintParams.y, 0.0001f));
+        localTintWeight = saturate(LocalTintParams.x * attenuation);
+    }
+
     float4 finalColor = texColor * input.color /* * (diffuse + ambient)*/;
+    finalColor.rgb = lerp(finalColor.rgb, LocalTintColor.rgb, localTintWeight);
+    finalColor.rgb = saturate(finalColor.rgb);
     finalColor.a = texColor.a * input.color.a;
 
     return float4(ApplyWireframe(finalColor.rgb), finalColor.a);

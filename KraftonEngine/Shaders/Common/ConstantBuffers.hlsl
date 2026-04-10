@@ -14,6 +14,13 @@ cbuffer FrameBuffer : register(b0)
     float3 _framePad;
 }
 
+cbuffer SceneEffectBuffer : register(b5)
+{
+    float4 LocalTintPositionRadius;
+    float4 LocalTintColor;
+    float4 LocalTintParams;
+}
+
 // b1: 오브젝트별 — 월드 변환, 색상
 cbuffer PerObjectBuffer : register(b1)
 {

@@ -1,5 +1,7 @@
 ﻿#include "Render/Proxy/FScene.h"
+#include "Component/FireBallComponent.h"
 #include "Component/PrimitiveComponent.h"
+#include "GameFramework/AActor.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
 
@@ -52,6 +54,7 @@ FScene::~FScene()
 	NeverCullProxies.clear();
 	FreeSlots.clear();
 	VisibleProxies.clear();
+	SceneEffectComponents.clear();
 }
 
 // ============================================================
@@ -225,6 +228,58 @@ void FScene::MarkAllPerObjectCBDirty()
 			Proxy->MarkPerObjectCBDirty();
 		}
 	}
+}
+
+void FScene::RegisterSceneEffectComponent(UFireBallComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	if (std::find(SceneEffectComponents.begin(), SceneEffectComponents.end(), Component) == SceneEffectComponents.end())
+	{
+		SceneEffectComponents.push_back(Component);
+	}
+}
+
+void FScene::UnregisterSceneEffectComponent(UFireBallComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	auto It = std::find(SceneEffectComponents.begin(), SceneEffectComponents.end(), Component);
+	if (It != SceneEffectComponents.end())
+	{
+		*It = SceneEffectComponents.back();
+		SceneEffectComponents.pop_back();
+	}
+}
+
+FSceneEffectConstants FScene::GetSceneEffectConstants() const
+{
+	FSceneEffectConstants Result = {};
+
+	for (UFireBallComponent* EffectComponent : SceneEffectComponents)
+	{
+		if (!EffectComponent || !EffectComponent->IsActive() || EffectComponent->GetRadius() <= 0.0f || EffectComponent->GetIntensity() <= 0.0f)
+		{
+			continue;
+		}
+
+		AActor* OwnerActor = EffectComponent->GetOwner();
+		if (!OwnerActor || !OwnerActor->IsVisible() || !EffectComponent->IsVisible())
+		{
+			continue;
+		}
+
+		EffectComponent->FillSceneEffectConstants(Result);
+		break;
+	}
+
+	return Result;
 }
 
 // ============================================================

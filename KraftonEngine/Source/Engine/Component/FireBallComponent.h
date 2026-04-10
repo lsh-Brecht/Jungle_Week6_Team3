@@ -2,6 +2,7 @@
 
 #include "PrimitiveComponent.h"
 #include "Core/EngineTypes.h"
+#include "Render/Pipeline/RenderConstants.h"
 
 // 복잡한 lighting 계산 대신, 월드 내 특정 위치 주변에 색을 더하는 간단한 반경 기반 효과용 컴포넌트.
 class FPrimitiveSceneProxy;
@@ -14,6 +15,9 @@ public:
 	UFireBallComponent();
 	~UFireBallComponent() override = default;
 
+	void CreateRenderState() override;
+	void DestroyRenderState() override;
+
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
 	void UpdateWorldAABB() const override;
 	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
@@ -23,19 +27,22 @@ public:
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
 
 	void PostEditProperty(const char* PropertyName) override;
+	void FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const;
 
 	float GetIntensity() const { return Intensity; }
 	float GetRadius() const { return Radius; }
 	float GetRadiusFallOff() const { return RadiusFallOff; }
 	const FLinearColor& GetColor() const { return Color; }
 
-	void SetIntensity(float InIntensity) { Intensity = InIntensity; }
-	void SetRadius(float InRadius) { Radius = InRadius; }
-	void SetRadiusFallOff(float InRadiusFallOff) { RadiusFallOff = InRadiusFallOff; }
-	void SetColor(const FLinearColor& InColor) { Color = InColor; }
+	void SetIntensity(float InIntensity);
+	void SetRadius(float InRadius);
+	void SetRadiusFallOff(float InRadiusFallOff);
+	void SetColor(const FLinearColor& InColor);
 
 private:
 	void SyncLocalExtents();
+	void RegisterToScene();
+	void UnregisterFromScene();
 
 	float Intensity = 1.0f;
 	float Radius = 4.0f;

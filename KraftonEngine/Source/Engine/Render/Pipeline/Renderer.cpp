@@ -214,6 +214,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	{
 		SCOPE_STAT_CAT("UpdateFrameBuffer", "4_ExecutePass");
 		UpdateFrameBuffer(Context, InRenderBus);
+		UpdateSceneEffectBuffer(Context, InRenderBus);
 	}
 
 	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
@@ -706,4 +707,13 @@ void FRenderer::UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus
 	ID3D11Buffer* b0 = Resources.FrameBuffer.GetBuffer();
 	Context->VSSetConstantBuffers(ECBSlot::Frame, 1, &b0);
 	Context->PSSetConstantBuffers(ECBSlot::Frame, 1, &b0);
+}
+
+void FRenderer::UpdateSceneEffectBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus)
+{
+	const FSceneEffectConstants& sceneEffectData = InRenderBus.GetSceneEffectConstants();
+	Resources.SceneEffectBuffer.Update(Context, &sceneEffectData, sizeof(FSceneEffectConstants));
+	ID3D11Buffer* b5 = Resources.SceneEffectBuffer.GetBuffer();
+	Context->VSSetConstantBuffers(ECBSlot::SceneEffect, 1, &b5);
+	Context->PSSetConstantBuffers(ECBSlot::SceneEffect, 1, &b5);
 }

@@ -4,6 +4,7 @@
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 
 class UPrimitiveComponent;
+class UFireBallComponent;
 
 // ============================================================
 // FScene — FPrimitiveSceneProxy의 소유자 겸 변경 추적 컨테이너
@@ -37,6 +38,11 @@ public:
 	// PerObjectCBPool(ProxyId 인덱싱, 월드 간 공유)이 타 월드 값으로 오염된 상태를
 	// 리프레시하기 위해 사용. GPU 업로드는 다음 프레임 Render에서 수행된다.
 	void MarkAllPerObjectCBDirty();
+
+	// --- Scene Effects ---
+	void RegisterSceneEffectComponent(UFireBallComponent* Component);
+	void UnregisterSceneEffectComponent(UFireBallComponent* Component);
+	FSceneEffectConstants GetSceneEffectConstants() const;
 
 	// --- 선택 ---
 	void SetProxySelected(FPrimitiveSceneProxy* Proxy, bool bSelected);
@@ -73,4 +79,7 @@ private:
 	// 매 프레임 frustum culling 결과 캐시 (World::UpdateVisibleProxies가 채움)
 	TArray<FPrimitiveSceneProxy*> VisibleProxies;
 	bool bVisibleSetDirty = true;
+
+	// 씬에 등록된 로컬 씬 효과 컴포넌트 목록. 현재는 UFireBallComponent가 이 역할을 맡는다.
+	TArray<UFireBallComponent*> SceneEffectComponents;
 };

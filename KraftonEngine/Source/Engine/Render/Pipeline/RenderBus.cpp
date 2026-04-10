@@ -16,6 +16,7 @@ void FRenderBus::Clear()
 	AABBEntries.clear();
 	GridEntries.clear();
 	DebugLineEntries.clear();
+	SceneEffectConstants = {};
 
 	ViewportRTV = nullptr;
 	ViewportDSV = nullptr;

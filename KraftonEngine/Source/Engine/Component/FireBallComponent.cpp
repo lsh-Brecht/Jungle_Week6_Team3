@@ -1,7 +1,10 @@
 ﻿#include "FireBallComponent.h"
 
+#include "GameFramework/AActor.h"
 #include "Object/ObjectFactory.h"
+#include "Render/Proxy/FScene.h"
 #include "Serialization/Archive.h"
+#include "GameFramework/World.h"
 
 #include <cstring>
 
@@ -10,6 +13,17 @@ IMPLEMENT_CLASS(UFireBallComponent, UPrimitiveComponent)
 UFireBallComponent::UFireBallComponent()
 {
 	SyncLocalExtents();
+}
+
+void UFireBallComponent::CreateRenderState()
+{
+	RegisterToScene();
+}
+
+void UFireBallComponent::DestroyRenderState()
+{
+	UnregisterFromScene();
+	UPrimitiveComponent::DestroyRenderState();
 }
 
 FPrimitiveSceneProxy* UFireBallComponent::CreateSceneProxy()
@@ -49,6 +63,28 @@ void UFireBallComponent::Serialize(FArchive& Ar)
 	}
 }
 
+void UFireBallComponent::SetIntensity(float InIntensity)
+{
+	Intensity = (InIntensity < 0.0f) ? 0.0f : InIntensity;
+}
+
+void UFireBallComponent::SetRadius(float InRadius)
+{
+	Radius = (InRadius < 0.0f) ? 0.0f : InRadius;
+	SyncLocalExtents();
+	MarkWorldBoundsDirty();
+}
+
+void UFireBallComponent::SetRadiusFallOff(float InRadiusFallOff)
+{
+	RadiusFallOff = (InRadiusFallOff < 0.01f) ? 0.01f : InRadiusFallOff;
+}
+
+void UFireBallComponent::SetColor(const FLinearColor& InColor)
+{
+	Color = InColor;
+}
+
 void UFireBallComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
 {
 	UPrimitiveComponent::GetEditableProperties(OutProps);
@@ -64,24 +100,49 @@ void UFireBallComponent::PostEditProperty(const char* PropertyName)
 
 	if (std::strcmp(PropertyName, "Intensity") == 0 && Intensity < 0.0f)
 	{
-		Intensity = 0.0f;
+		SetIntensity(Intensity);
 	}
 	else if (std::strcmp(PropertyName, "Radius") == 0 && Radius < 0.0f)
 	{
-		Radius = 0.0f;
+		SetRadius(Radius);
 	}
 	else if (std::strcmp(PropertyName, "Radius FallOff") == 0)
 	{
-		if (RadiusFallOff < 0.01f)
-		{
-			RadiusFallOff = 0.01f;
-		}
+		SetRadiusFallOff(RadiusFallOff);
 	}
 
 	if (std::strcmp(PropertyName, "Radius") == 0)
 	{
-		SyncLocalExtents();
-		MarkWorldBoundsDirty();
+		SetRadius(Radius);
+	}
+}
+
+void UFireBallComponent::FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const
+{
+	OutConstants.LocalTintPositionRadius = FVector4(GetWorldLocation(), Radius);
+	OutConstants.LocalTintColor = Color.ToVector4();
+	OutConstants.LocalTintParams = FVector4(Intensity, RadiusFallOff, 0.0f, 0.0f);
+}
+
+void UFireBallComponent::RegisterToScene()
+{
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			World->GetScene().RegisterSceneEffectComponent(this);
+		}
+	}
+}
+
+void UFireBallComponent::UnregisterFromScene()
+{
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			World->GetScene().UnregisterSceneEffectComponent(this);
+		}
 	}
 }
 

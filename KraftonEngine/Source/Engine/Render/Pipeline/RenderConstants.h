@@ -23,6 +23,7 @@ namespace ECBSlot
 	constexpr uint32 Gizmo = 2;     // b2: Gizmo state
 	constexpr uint32 PostProcess = 3; // b3: PostProcess Outline params
 	constexpr uint32 Material = 4;    // b4: Material properties (UVScroll 등)
+	constexpr uint32 SceneEffect = 5; // b5: scene-wide special effects
 }
 
 //PerObject
@@ -46,6 +47,13 @@ struct FFrameConstants
 	FVector WireframeColor;
 	float Time;
 	float _pad[3];
+};
+
+struct FSceneEffectConstants
+{
+	FVector4 LocalTintPositionRadius = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector4 LocalTintColor = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector4 LocalTintParams = FVector4(0.0f, 1.0f, 0.0f, 0.0f);
 };
 
 struct FMaterialConstants

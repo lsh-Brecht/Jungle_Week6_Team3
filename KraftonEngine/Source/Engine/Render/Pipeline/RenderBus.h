@@ -28,6 +28,7 @@ public:
 	void AddAABBEntry(FAABBEntry&& Entry);
 	void AddGridEntry(FGridEntry&& Entry);
 	void AddDebugLineEntry(FDebugLineEntry&& Entry);
+	void SetSceneEffectConstants(const FSceneEffectConstants& InConstants) { SceneEffectConstants = InConstants; }
 
 	const TArray<FFontEntry>& GetFontEntries() const { return FontEntries; }
 	const TArray<FFontEntry>& GetOverlayFontEntries() const { return OverlayFontEntries; }
@@ -36,6 +37,7 @@ public:
 	const TArray<FAABBEntry>& GetAABBEntries() const { return AABBEntries; }
 	const TArray<FGridEntry>& GetGridEntries() const { return GridEntries; }
 	const TArray<FDebugLineEntry>& GetDebugLineEntries() const { return DebugLineEntries; }
+	const FSceneEffectConstants& GetSceneEffectConstants() const { return SceneEffectConstants; }
 
 	// Getter,Setter
 	void SetCameraInfo(const UCameraComponent* Camera);
@@ -86,6 +88,7 @@ private:
 	TArray<FAABBEntry>  AABBEntries;
 	TArray<FGridEntry>  GridEntries;
 	TArray<FDebugLineEntry> DebugLineEntries;
+	FSceneEffectConstants SceneEffectConstants = {};
 
 	FMatrix View;
 	FMatrix Proj;

@@ -4,6 +4,7 @@ void FRenderResources::Create(ID3D11Device* InDevice)
 {
 	FrameBuffer.Create(InDevice, sizeof(FFrameConstants));
 	PerObjectConstantBuffer.Create(InDevice, sizeof(FPerObjectConstants));
+	SceneEffectBuffer.Create(InDevice, sizeof(FSceneEffectConstants));
 
 	D3D11_SAMPLER_DESC sampDesc = {};
 	sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -20,5 +21,6 @@ void FRenderResources::Release()
 {
 	FrameBuffer.Release();
 	PerObjectConstantBuffer.Release();
+	SceneEffectBuffer.Release();
 	if (DefaultSampler) { DefaultSampler->Release(); DefaultSampler = nullptr; }
 }
