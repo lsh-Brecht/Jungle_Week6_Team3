@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cmath>
 
@@ -9,9 +9,9 @@ namespace FMath
 	constexpr float RadToDeg = 180.0f / Pi;
 	constexpr float Epsilon = 1e-4f;
 
-	// 유지보수 메모:
-	// 현재는 기존 사용처와 호환되는 float 전용 스칼라 유틸만 이 파일에 둔다.
-	// 차후 수학 유틸이 늘어나면 템플릿 기반 공통 유틸 또는 스칼라/벡터 분리 헤더로 정리하는 편이 낫다.
+	// TODO:
+	// 일단 기존 유틸 함수들과의 위치를 통일하고자 float 전용 스칼라 유틸만 이 파일에 둡니다.
+	// 나중 가서 늘어나면 템플릿 기반 유틸 또는 스칼라/벡터 분리 헤더로 정리하는 편이 좋을 지도요.
 	inline float Clamp(float Val, float Lo, float Hi)
 	{
 		if (Val >= Hi) return Hi;
