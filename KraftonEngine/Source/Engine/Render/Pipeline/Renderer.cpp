@@ -314,7 +314,7 @@ void FRenderer::InitializePassBatchers()
 		[this](ERenderPass Pass, const FRenderBus& Bus, ID3D11DeviceContext* Ctx) {
 			DrawPostProcessOutline(Bus, Ctx);
 		},
-		nullptr  // PostProcess는 내���에서 SelectionMask 체크
+		nullptr  // PostProcess는 내부에서 SelectionMask 체크
 	};
 }
 
