@@ -61,11 +61,11 @@ struct FLinearColor
 		return FVector4(R, G, B, A);
 	}
 
-	static const FLinearColor Red() { return FLinearColor(1.0f, 0.0f, 0.0f); }
-	static const FLinearColor Green() { return FLinearColor(0.0f, 1.0f, 0.0f); }
-	static const FLinearColor Blue() { return FLinearColor(0.0f, 0.0f, 1.0f); }
-	static const FLinearColor White() { return FLinearColor(1.0f, 1.0f, 1.0f); }
-	static const FLinearColor Black() { return FLinearColor(0.0f, 0.0f, 0.0f); }
+	static FLinearColor Red() { return FLinearColor(1.0f, 0.0f, 0.0f); }
+	static FLinearColor Green() { return FLinearColor(0.0f, 1.0f, 0.0f); }
+	static FLinearColor Blue() { return FLinearColor(0.0f, 0.0f, 1.0f); }
+	static FLinearColor White() { return FLinearColor(1.0f, 1.0f, 1.0f); }
+	static FLinearColor Black() { return FLinearColor(0.0f, 0.0f, 0.0f); }
 };
 
 // ============================================================
