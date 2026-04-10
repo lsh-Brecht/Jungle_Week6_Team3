@@ -4,7 +4,7 @@
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 
 class UPrimitiveComponent;
-class UFireBallComponent;
+class ISceneEffectSource;
 
 // ============================================================
 // FScene — FPrimitiveSceneProxy의 소유자 겸 변경 추적 컨테이너
@@ -40,9 +40,9 @@ public:
 	void MarkAllPerObjectCBDirty();
 
 	// --- Scene Effects ---
-	void RegisterSceneEffectComponent(UFireBallComponent* Component);
-	void UnregisterSceneEffectComponent(UFireBallComponent* Component);
-	FSceneEffectConstants GetSceneEffectConstants() const;
+	void RegisterSceneEffectSource(ISceneEffectSource* Source);
+	void UnregisterSceneEffectSource(ISceneEffectSource* Source);
+	FSceneEffectConstants GetPrimarySceneEffectConstants() const;
 
 	// --- 선택 ---
 	void SetProxySelected(FPrimitiveSceneProxy* Proxy, bool bSelected);
@@ -80,6 +80,6 @@ private:
 	TArray<FPrimitiveSceneProxy*> VisibleProxies;
 	bool bVisibleSetDirty = true;
 
-	// 씬에 등록된 로컬 씬 효과 컴포넌트 목록. 현재는 UFireBallComponent가 이 역할을 맡는다.
-	TArray<UFireBallComponent*> SceneEffectComponents;
+	// 씬에 등록된 효과 제공자 목록. 현재는 첫 번째 활성 효과 하나만 사용한다.
+	TArray<ISceneEffectSource*> SceneEffectSources;
 };

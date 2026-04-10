@@ -1,7 +1,6 @@
 ﻿#include "Render/Proxy/FScene.h"
-#include "Component/FireBallComponent.h"
+#include "Component/SceneEffectSource.h"
 #include "Component/PrimitiveComponent.h"
-#include "GameFramework/AActor.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
 
@@ -54,7 +53,7 @@ FScene::~FScene()
 	NeverCullProxies.clear();
 	FreeSlots.clear();
 	VisibleProxies.clear();
-	SceneEffectComponents.clear();
+	SceneEffectSources.clear();
 }
 
 // ============================================================
@@ -230,52 +229,46 @@ void FScene::MarkAllPerObjectCBDirty()
 	}
 }
 
-void FScene::RegisterSceneEffectComponent(UFireBallComponent* Component)
+void FScene::RegisterSceneEffectSource(ISceneEffectSource* Source)
 {
-	if (!Component)
+	if (!Source)
 	{
 		return;
 	}
 
-	if (std::find(SceneEffectComponents.begin(), SceneEffectComponents.end(), Component) == SceneEffectComponents.end())
+	if (std::find(SceneEffectSources.begin(), SceneEffectSources.end(), Source) == SceneEffectSources.end())
 	{
-		SceneEffectComponents.push_back(Component);
+		SceneEffectSources.push_back(Source);
 	}
 }
 
-void FScene::UnregisterSceneEffectComponent(UFireBallComponent* Component)
+void FScene::UnregisterSceneEffectSource(ISceneEffectSource* Source)
 {
-	if (!Component)
+	if (!Source)
 	{
 		return;
 	}
 
-	auto It = std::find(SceneEffectComponents.begin(), SceneEffectComponents.end(), Component);
-	if (It != SceneEffectComponents.end())
+	auto It = std::find(SceneEffectSources.begin(), SceneEffectSources.end(), Source);
+	if (It != SceneEffectSources.end())
 	{
-		*It = SceneEffectComponents.back();
-		SceneEffectComponents.pop_back();
+		*It = SceneEffectSources.back();
+		SceneEffectSources.pop_back();
 	}
 }
 
-FSceneEffectConstants FScene::GetSceneEffectConstants() const
+FSceneEffectConstants FScene::GetPrimarySceneEffectConstants() const
 {
 	FSceneEffectConstants Result = {};
 
-	for (UFireBallComponent* EffectComponent : SceneEffectComponents)
+	for (ISceneEffectSource* EffectSource : SceneEffectSources)
 	{
-		if (!EffectComponent || !EffectComponent->IsActive() || EffectComponent->GetRadius() <= 0.0f || EffectComponent->GetIntensity() <= 0.0f)
+		if (!EffectSource || !EffectSource->IsSceneEffectActive())
 		{
 			continue;
 		}
 
-		AActor* OwnerActor = EffectComponent->GetOwner();
-		if (!OwnerActor || !OwnerActor->IsVisible() || !EffectComponent->IsVisible())
-		{
-			continue;
-		}
-
-		EffectComponent->FillSceneEffectConstants(Result);
+		EffectSource->FillSceneEffectConstants(Result);
 		break;
 	}
 

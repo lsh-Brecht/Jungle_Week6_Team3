@@ -17,6 +17,7 @@ UFireBallComponent::UFireBallComponent()
 
 void UFireBallComponent::CreateRenderState()
 {
+	// 이 컴포넌트는 primitive proxy를 만들지 않고 씬 효과로만 등록합니다. 따라서 프록시 생성 없이 바로 씬에 등록합니다.
 	RegisterToScene();
 }
 
@@ -117,6 +118,17 @@ void UFireBallComponent::PostEditProperty(const char* PropertyName)
 	}
 }
 
+bool UFireBallComponent::IsSceneEffectActive() const
+{
+	if (!IsActive() || !IsVisible() || Radius <= 0.0f || Intensity <= 0.0f)
+	{
+		return false;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	return OwnerActor && OwnerActor->IsVisible();
+}
+
 void UFireBallComponent::FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const
 {
 	OutConstants.LocalTintPositionRadius = FVector4(GetWorldLocation(), Radius);
@@ -130,7 +142,7 @@ void UFireBallComponent::RegisterToScene()
 	{
 		if (UWorld* World = Owner->GetWorld())
 		{
-			World->GetScene().RegisterSceneEffectComponent(this);
+			World->GetScene().RegisterSceneEffectSource(this);
 		}
 	}
 }
@@ -141,7 +153,7 @@ void UFireBallComponent::UnregisterFromScene()
 	{
 		if (UWorld* World = Owner->GetWorld())
 		{
-			World->GetScene().UnregisterSceneEffectComponent(this);
+			World->GetScene().UnregisterSceneEffectSource(this);
 		}
 	}
 }

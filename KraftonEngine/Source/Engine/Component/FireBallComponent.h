@@ -2,12 +2,12 @@
 
 #include "PrimitiveComponent.h"
 #include "Core/EngineTypes.h"
-#include "Render/Pipeline/RenderConstants.h"
+#include "Component/SceneEffectSource.h"
 
 // 복잡한 lighting 계산 대신, 월드 내 특정 위치 주변에 색을 더하는 간단한 반경 기반 효과용 컴포넌트.
 class FPrimitiveSceneProxy;
 
-class UFireBallComponent : public UPrimitiveComponent
+class UFireBallComponent : public UPrimitiveComponent, public ISceneEffectSource
 {
 public:
 	DECLARE_CLASS(UFireBallComponent, UPrimitiveComponent)
@@ -27,7 +27,8 @@ public:
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
 
 	void PostEditProperty(const char* PropertyName) override;
-	void FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const;
+	bool IsSceneEffectActive() const override;
+	void FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const override;
 
 	float GetIntensity() const { return Intensity; }
 	float GetRadius() const { return Radius; }
