@@ -11,6 +11,13 @@
 
 namespace
 {
+	/**
+	 * 발사체의 속도를 시각적으로 표현하여 렌더 버스에 추가합니다.
+	 * 
+	 * \param RenderBus		렌더 버스에 디버그 라인을 추가합니다.
+	 * \param Start			발사체의 시작 위치입니다.
+	 * \param Velocity		발사체의 속도입니다.
+	 */
 	void AddProjectileVelocityArrow(FRenderBus& RenderBus, const FVector& Start, const FVector& Velocity)
 	{
 		constexpr float ProjectileArrowScale = 0.25f;

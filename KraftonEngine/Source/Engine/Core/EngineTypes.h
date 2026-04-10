@@ -3,6 +3,8 @@
 #include "Core/CoreTypes.h"
 #include "Math/Vector.h"
 
+//FColor와 FLinearColor 구조체의 언리얼에서의 경로는 Engine\Source\Runtime\Core\Public\Math\Color.h입니다.
+
 // ============================================================
 // FColor — RGBA 색상 (0~255 정수 기반, 셰이더 전달 시 Normalized)
 // ============================================================
@@ -28,6 +30,42 @@ struct FColor
 	static FColor Black() { return FColor(0, 0, 0); }
 	static FColor Yellow() { return FColor(255, 255, 0); }
 	static FColor Gray() { return FColor(139, 139, 139); }
+};
+
+// ============================================================
+// FLinearColor — RGBA 색상 (0.0~1.0 선형 float 기반)
+// ============================================================
+struct FLinearColor
+{
+	union
+	{
+		struct
+		{
+			float R, G, B, A;
+		};
+		float Data[4];
+	};
+
+	FLinearColor()
+		: R(1.0f), G(1.0f), B(1.0f), A(1.0f)
+	{
+	}
+
+	FLinearColor(float InR, float InG, float InB, float InA = 1.0f)
+		: R(InR), G(InG), B(InB), A(InA)
+	{
+	}
+
+	FVector4 ToVector4() const
+	{
+		return FVector4(R, G, B, A);
+	}
+
+	static const FLinearColor Red() { return FLinearColor(1.0f, 0.0f, 0.0f); }
+	static const FLinearColor Green() { return FLinearColor(0.0f, 1.0f, 0.0f); }
+	static const FLinearColor Blue() { return FLinearColor(0.0f, 0.0f, 1.0f); }
+	static const FLinearColor White() { return FLinearColor(1.0f, 1.0f, 1.0f); }
+	static const FLinearColor Black() { return FLinearColor(0.0f, 0.0f, 0.0f); }
 };
 
 // ============================================================

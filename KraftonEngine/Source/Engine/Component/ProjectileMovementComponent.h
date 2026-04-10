@@ -5,6 +5,8 @@
 #include "Core/CoreTypes.h"
 #include "Math/Vector.h"
 
+//TODO: 언리얼에서처럼 더 많은 지원하는 기능을 지원할 지 고민
+
 enum class EProjectileHitBehavior : int32
 {
 	Stop = 0,
