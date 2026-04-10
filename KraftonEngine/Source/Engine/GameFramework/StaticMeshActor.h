@@ -4,7 +4,6 @@
 
 class UStaticMeshComponent;
 class UTextRenderComponent;
-class USubUVComponent;
 
 class AStaticMeshActor : public AActor
 {
@@ -17,5 +16,4 @@ public:
 private:
 	UStaticMeshComponent* StaticMeshComponent = nullptr;
 	UTextRenderComponent* TextRenderComponent = nullptr;
-	USubUVComponent* SubUVComponent = nullptr;
 };
