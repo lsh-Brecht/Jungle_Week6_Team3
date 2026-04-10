@@ -87,9 +87,14 @@ void UBillboardComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	FMatrix RotMatrix;
 	RotMatrix.SetAxes(Forward, Right, Up);
 
-	CachedWorldMatrix = FMatrix::MakeScaleMatrix(GetWorldScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(WorldLocation);
+	CachedWorldMatrix = FMatrix::MakeScaleMatrix(GetVisualScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(WorldLocation);
 
 	UpdateWorldAABB();
+}
+
+FVector UBillboardComponent::GetVisualScale() const
+{
+	return GetWorldScale();
 }
 
 FMatrix UBillboardComponent::ComputeBillboardMatrix(const FVector& CameraForward) const
@@ -109,5 +114,5 @@ FMatrix UBillboardComponent::ComputeBillboardMatrix(const FVector& CameraForward
 	FMatrix RotMatrix;
 	RotMatrix.SetAxes(Forward, Right, Up);
 
-	return FMatrix::MakeScaleMatrix(GetWorldScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(GetWorldLocation());
+	return FMatrix::MakeScaleMatrix(GetVisualScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(GetWorldLocation());
 }

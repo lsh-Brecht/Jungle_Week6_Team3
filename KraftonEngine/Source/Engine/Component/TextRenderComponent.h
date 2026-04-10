@@ -89,7 +89,7 @@ public:
 	void UpdateWorldAABB() const override;
 	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 
-	FVector GetVisualScale() const;
+	FVector GetVisualScale() const override;
 	FMatrix ComputeTextBillboardMatrix(const FVector& CameraForward) const;
 	FMatrix CalculateOutlineMatrix() const;
 	FMatrix CalculateOutlineMatrix(const FMatrix& BillboardWorldMatrix) const;
