@@ -129,11 +129,17 @@ bool UFireBallComponent::IsSceneEffectActive() const
 	return OwnerActor && OwnerActor->IsVisible();
 }
 
-void UFireBallComponent::FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const
+void UFireBallComponent::WriteSceneEffectConstants(FSceneEffectConstants& OutConstants, uint32 SlotIndex) const
 {
-	OutConstants.LocalTintPositionRadius = FVector4(GetWorldLocation(), Radius);
-	OutConstants.LocalTintColor = Color.ToVector4();
-	OutConstants.LocalTintParams = FVector4(Intensity, RadiusFallOff, 0.0f, 0.0f);
+	if (SlotIndex >= ECBSlot::MaxLocalTintEffects)
+	{
+		return;
+	}
+
+	FLocalTintEffectConstants& Entry = OutConstants.LocalTints[SlotIndex];
+	Entry.PositionRadius = FVector4(GetWorldLocation(), Radius);
+	Entry.Color = Color.ToVector4();
+	Entry.Params = FVector4(Intensity, RadiusFallOff, 0.0f, 0.0f);
 }
 
 void UFireBallComponent::RegisterToScene()

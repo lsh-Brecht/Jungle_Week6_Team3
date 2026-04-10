@@ -35,18 +35,24 @@ float4 PS(PS_Input_Full input) : SV_TARGET
     //float diffuse = max(dot(input.normal, -lightDir), 0.0f);
     //float ambient = 0.2f;
 
-    float localTintWeight = 0.0f;
-    float radius = LocalTintPositionRadius.w;
-    if (radius > 0.0f)
+    float4 finalColor = texColor * input.color /* * (diffuse + ambient)*/;
+
+    [unroll]
+    for (uint i = 0; i < LocalTintCount; ++i)
     {
-        float distanceToTintCenter = distance(input.worldPos, LocalTintPositionRadius.xyz);
+        float radius = LocalTints[i].PositionRadius.w;
+        if (radius <= 0.0f)
+        {
+            continue;
+        }
+
+        float distanceToTintCenter = distance(input.worldPos, LocalTints[i].PositionRadius.xyz);
         float normalizedDistance = saturate(distanceToTintCenter / max(radius, 0.0001f));
-        float attenuation = pow(saturate(1.0f - normalizedDistance), max(LocalTintParams.y, 0.0001f));
-        localTintWeight = saturate(LocalTintParams.x * attenuation);
+        float attenuation = pow(saturate(1.0f - normalizedDistance), max(LocalTints[i].Params.y, 0.0001f));
+        float localTintWeight = saturate(LocalTints[i].Params.x * attenuation);
+        finalColor.rgb = lerp(finalColor.rgb, LocalTints[i].Color.rgb, localTintWeight);
     }
 
-    float4 finalColor = texColor * input.color /* * (diffuse + ambient)*/;
-    finalColor.rgb = lerp(finalColor.rgb, LocalTintColor.rgb, localTintWeight);
     finalColor.rgb = saturate(finalColor.rgb);
     finalColor.a = texColor.a * input.color.a;
 

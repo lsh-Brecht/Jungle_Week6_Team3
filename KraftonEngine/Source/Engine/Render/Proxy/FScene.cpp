@@ -257,9 +257,10 @@ void FScene::UnregisterSceneEffectSource(ISceneEffectSource* Source)
 	}
 }
 
-FSceneEffectConstants FScene::GetPrimarySceneEffectConstants() const
+FSceneEffectConstants FScene::GetSceneEffectConstants() const
 {
 	FSceneEffectConstants Result = {};
+	uint32 LocalTintIndex = 0;
 
 	for (ISceneEffectSource* EffectSource : SceneEffectSources)
 	{
@@ -268,9 +269,16 @@ FSceneEffectConstants FScene::GetPrimarySceneEffectConstants() const
 			continue;
 		}
 
-		EffectSource->FillSceneEffectConstants(Result);
-		break;
+		EffectSource->WriteSceneEffectConstants(Result, LocalTintIndex);
+		++LocalTintIndex;
+
+		if (LocalTintIndex >= ECBSlot::MaxLocalTintEffects)
+		{
+			break;
+		}
 	}
+
+	Result.LocalTintCount = LocalTintIndex;
 
 	return Result;
 }

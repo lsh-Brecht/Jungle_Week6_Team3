@@ -9,5 +9,5 @@ public:
 	virtual ~ISceneEffectSource() = default;
 
 	virtual bool IsSceneEffectActive() const = 0;
-	virtual void FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const = 0;
+	virtual void WriteSceneEffectConstants(FSceneEffectConstants& OutConstants, uint32 SlotIndex) const = 0;
 };

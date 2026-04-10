@@ -42,7 +42,7 @@ public:
 	// --- Scene Effects ---
 	void RegisterSceneEffectSource(ISceneEffectSource* Source);
 	void UnregisterSceneEffectSource(ISceneEffectSource* Source);
-	FSceneEffectConstants GetPrimarySceneEffectConstants() const;
+	FSceneEffectConstants GetSceneEffectConstants() const;
 
 	// --- 선택 ---
 	void SetProxySelected(FPrimitiveSceneProxy* Proxy, bool bSelected);
@@ -80,6 +80,6 @@ private:
 	TArray<FPrimitiveSceneProxy*> VisibleProxies;
 	bool bVisibleSetDirty = true;
 
-	// 씬에 등록된 효과 제공자 목록. 현재는 첫 번째 활성 효과 하나만 사용한다.
+	// 씬에 등록된 효과 제공자 목록. 현재는 고정 개수만큼 활성 효과를 순서대로 채웁니다.
 	TArray<ISceneEffectSource*> SceneEffectSources;
 };

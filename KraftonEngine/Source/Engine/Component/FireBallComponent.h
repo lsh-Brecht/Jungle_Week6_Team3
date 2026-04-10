@@ -28,7 +28,7 @@ public:
 
 	void PostEditProperty(const char* PropertyName) override;
 	bool IsSceneEffectActive() const override;
-	void FillSceneEffectConstants(FSceneEffectConstants& OutConstants) const override;
+	void WriteSceneEffectConstants(FSceneEffectConstants& OutConstants, uint32 SlotIndex) const override;
 
 	float GetIntensity() const { return Intensity; }
 	float GetRadius() const { return Radius; }

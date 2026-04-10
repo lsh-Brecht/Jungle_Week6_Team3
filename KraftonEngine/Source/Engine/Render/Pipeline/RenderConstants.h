@@ -24,6 +24,8 @@ namespace ECBSlot
 	constexpr uint32 PostProcess = 3; // b3: PostProcess Outline params
 	constexpr uint32 Material = 4;    // b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5; // b5: scene-wide special effects
+
+	constexpr uint32 MaxLocalTintEffects = 8;
 }
 
 //PerObject
@@ -49,11 +51,18 @@ struct FFrameConstants
 	float _pad[3];
 };
 
+struct FLocalTintEffectConstants
+{
+	FVector4 PositionRadius = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector4 Color = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector4 Params = FVector4(0.0f, 1.0f, 0.0f, 0.0f);
+};
+
 struct FSceneEffectConstants
 {
-	FVector4 LocalTintPositionRadius = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
-	FVector4 LocalTintColor = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
-	FVector4 LocalTintParams = FVector4(0.0f, 1.0f, 0.0f, 0.0f);
+	FLocalTintEffectConstants LocalTints[ECBSlot::MaxLocalTintEffects];
+	uint32 LocalTintCount = 0;
+	float _pad[3] = {};
 };
 
 struct FMaterialConstants
