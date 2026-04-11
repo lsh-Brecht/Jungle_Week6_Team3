@@ -7,10 +7,11 @@ Texture2D SceneColor : register(t0);
 SamplerState Sampler : register(s0);
 
 // ── FXAA 전용 Constant Buffer (기존 b0~b4 사용 중이므로 b5 할당) ──
-cbuffer FXAAParams : register(b5)
+cbuffer FXAAParams : register(b9)
 {
     float2 TexelSize; // 1.0f / ViewportWidth, 1.0f / ViewportHeight
-    float2 _fxaaPad;
+    float EdgeThreshold; // 기본값: 0.125f
+    float EdgeThresholdMin; // 기본값: 0.0312f
 };
 
 // 밝기(Luma)를 구하는 함수
@@ -48,7 +49,7 @@ float4 PS(PS_Input_Tex input) : SV_TARGET
     float lumaContrast = lumaMax - lumaMin;
 
     // 조기 종료 (Early Exit): 대비가 너무 낮으면 즉시 원본 반환
-    float threshold = max(0.0312f, lumaMax * 0.125f);
+    float threshold = max(EdgeThresholdMin, lumaMax * EdgeThreshold);
     if (lumaContrast < threshold)
     {
         return float4(colorM, 1.0f);
