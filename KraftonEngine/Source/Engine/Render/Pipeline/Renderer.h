@@ -57,6 +57,8 @@ private:
 
 	void ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Context, EViewMode ViewMode);
 	void UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
+
+	//fireball 등 Fscene 효과용 상수버퍼 업데이트
 	void UpdateSceneEffectBuffer(ID3D11DeviceContext* Context, const FRenderBus& InRenderBus);
 
 	// 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회, 필드 직접 접근

@@ -80,6 +80,6 @@ private:
 	TArray<FPrimitiveSceneProxy*> VisibleProxies;
 	bool bVisibleSetDirty = true;
 
-	// 씬에 등록된 효과 제공자 목록. 현재는 고정 개수만큼 활성 효과를 순서대로 채웁니다.
+	// FScene에 등록된 특수효과 목록. 현재는 고정 개수만큼 활성 효과를 순서대로 채웁니다.
 	TArray<ISceneEffectSource*> SceneEffectSources;
 };

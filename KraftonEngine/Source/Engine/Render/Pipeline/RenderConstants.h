@@ -18,12 +18,12 @@ class FShader;
 // HLSL Common.hlsl과 1:1 대응하는 CB 슬롯 정의
 namespace ECBSlot
 {
-	constexpr uint32 Frame = 0;     // b0: View/Projection/Wireframe
-	constexpr uint32 PerObject = 1; // b1: Model/Color
-	constexpr uint32 Gizmo = 2;     // b2: Gizmo state
-	constexpr uint32 PostProcess = 3; // b3: PostProcess Outline params
-	constexpr uint32 Material = 4;    // b4: Material properties (UVScroll 등)
-	constexpr uint32 SceneEffect = 5; // b5: scene-wide special effects
+	constexpr uint32 Frame = 0;			// b0: View/Projection/Wireframe
+	constexpr uint32 PerObject = 1;		// b1: Model/Color
+	constexpr uint32 Gizmo = 2;			// b2: Gizmo state
+	constexpr uint32 PostProcess = 3;	// b3: PostProcess Outline params
+	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
+	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
 
 	constexpr uint32 MaxLocalTintEffects = 8;
 }

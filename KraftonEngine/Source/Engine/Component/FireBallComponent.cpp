@@ -27,11 +27,6 @@ void UFireBallComponent::DestroyRenderState()
 	UPrimitiveComponent::DestroyRenderState();
 }
 
-FPrimitiveSceneProxy* UFireBallComponent::CreateSceneProxy()
-{
-	return nullptr;
-}
-
 void UFireBallComponent::UpdateWorldAABB() const
 {
 	const FVector Center = GetWorldLocation();
@@ -40,11 +35,6 @@ void UFireBallComponent::UpdateWorldAABB() const
 	WorldAABBMaxLocation = Center + Extent;
 	bWorldAABBDirty = false;
 	bHasValidWorldAABB = (Radius > 0.0f);
-}
-
-bool UFireBallComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult)
-{
-	return false;
 }
 
 void UFireBallComponent::Serialize(FArchive& Ar)
