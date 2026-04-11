@@ -284,6 +284,19 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
 	{
 		ERenderPass CurPass = static_cast<ERenderPass>(i);
+
+		// PostProcess는 배처/프록시 유무와 무관하게 체인 패스로 실행한다.
+		if (CurPass == ERenderPass::PostProcess)
+		{
+			const char* PassName = GetRenderPassName(CurPass);
+			SCOPE_STAT_CAT(PassName, "4_ExecutePass");
+			GPU_SCOPE_STAT(PassName);
+
+			ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
+			ExecutePostProcessChain(InRenderBus, Context);
+			continue;
+		}
+
 		const auto& Batcher = PassBatchers[i];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
@@ -298,12 +311,6 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		if (CurPass == ERenderPass::SelectionMask)
 		{
 			ExecuteSelectionMaskPass(InRenderBus, Context);
-			continue;
-		}
-
-		if (CurPass == ERenderPass::PostProcess)
-		{
-			ExecutePostProcessChain(InRenderBus, Context);
 			continue;
 		}
 
@@ -331,9 +338,9 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::Grid] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     false };
 	S[(uint32)E::GizmoOuter] = { EDepthStencilState::GizmoOutside, EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::GizmoInner] = { EDepthStencilState::GizmoInside,  EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	//	Outline에 대한 Masking 방해로 인해 Patch
-	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Font] = { EDepthStencilState::DepthReadOnly,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	//	Font는 UUID 라벨 등이 SelectionMask를 뚫지 않도록 사실상 OverlayFont로 사용함.
+	//	이후에 World Space에서 Text를 출력할 일이 있다면, 이는 UUID Comp랑 Text Comp를 분리해야 함
+	S[(uint32)E::Font] = { EDepthStencilState::NoDepth,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::OverlayFont] = { EDepthStencilState::NoDepth,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::SubUV] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::Billboard] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
@@ -388,11 +395,6 @@ void FRenderer::InitializePassBatchers()
 		[this]() { return BillboardBatcher.GetSpriteCount() == 0; }
 	};
 
-	PassBatchers[(uint32)ERenderPass::PostProcess] = {
-		[this](ERenderPass, const FRenderBus&, ID3D11DeviceContext*) {
-		},
-		nullptr  // PostProcess는 내부에서 SelectionMask 체크
-	};
 }
 
 // ============================================================

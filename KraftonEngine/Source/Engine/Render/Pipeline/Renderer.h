@@ -123,7 +123,7 @@ private:
 	// LineBatcher DrawBatch 공통 — EditorShader 바인딩 + DrawBatch
 	void DrawLineBatcher(FLineBatcher& Batcher, ID3D11DeviceContext* Context);
 
-	// PostProcess Outline — StencilSRV 읽어 edge detection 후 fullscreen draw
+	//	PostProcess Outline - SceneColor와 OutlineMask를 합성
 	void DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);

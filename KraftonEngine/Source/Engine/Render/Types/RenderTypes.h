@@ -32,13 +32,13 @@ enum class EMeshShape
 enum class ERenderPass : uint32
 {
 	Opaque,
+	Grid,
 	Font,			// TextRenderComponent → FontBatcher 경유
 	SubUV,			// SubUVComponent     → SubUVBatcher 경유
 	Billboard,		// BillboardComponent → BillboardBatcher 경유
 	Translucent,
 	SelectionMask,
 	Editor,
-	Grid,
 	PostProcess,
 	GizmoOuter,
 	GizmoInner,
@@ -50,13 +50,13 @@ inline const char* GetRenderPassName(ERenderPass Pass)
 {
 	static const char* Names[] = {
 		"RenderPass::Opaque",
+		"RenderPass::Grid",
 		"RenderPass::Font",
 		"RenderPass::SubUV",
 		"RenderPass::Billboard",
 		"RenderPass::Translucent",
 		"RenderPass::SelectionMask",
 		"RenderPass::Editor",
-		"RenderPass::Grid",
 		"RenderPass::PostProcess",
 		"RenderPass::GizmoOuter",
 		"RenderPass::GizmoInner",

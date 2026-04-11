@@ -88,7 +88,7 @@ struct FOutlinePostProcessConstants
 {
 	FVector4 OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
 	float OutlineThickness = 1.0f;
-	float OutlineFalloff = 1.6f;
+	float OutlineFalloff = 2.0f;
 	float Padding[2] = {};
 };
 
