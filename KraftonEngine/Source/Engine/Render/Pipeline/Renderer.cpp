@@ -313,6 +313,10 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 
 		if (CurPass == ERenderPass::PostProcess)
 		{
+			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+			{
+				DrawScenenDepthVisualize(InRenderBus, Context);
+			}
 			ExecutePostProcessChain(InRenderBus, Context);
 			continue;
 		}
@@ -321,11 +325,6 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			PassBatchers[i].DrawBatch(CurPass, InRenderBus, Context);
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
-	}
-
-	if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
-	{
-		DrawScenenDepthVisualize(InRenderBus, Context);
 	}
 }
 
