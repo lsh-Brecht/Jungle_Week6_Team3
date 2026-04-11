@@ -53,12 +53,12 @@ private:
 	void UnregisterFromScene();
 	void SanitizeProperties();
 
-	float FogDensity;			// 참고 프로젝트 기준 기본 밀도
-	float FogHeightFalloff;		// 높이에 따른 감쇠율
-	float FogHeight;			// 안개 기준 높이
-	float StartDistance;		// 안개 시작 거리
-	float FogCutoffDistance;	// 이 거리 너머로는 안개 미적용
-	float FogMaxOpacity;		// 최대 불투명도
+	float FogDensity = 0.05f;		// 기본 밀도
+	float FogHeightFalloff = 0.2f;	// 안개 감쇠 계수(0이면 높이에 따른 감쇠 없음, 1이면 완전 지수 감쇠)
+	float FogHeight = 0.0f;			// 안개 기준 높이(이 높이보다 낮은 곳은 더 짙은 안개)
+	float StartDistance = 0.0f;		// 안개 시작 거리
+	float FogCutoffDistance = 0.0f;	// 이 거리 너머로는 안개 미적용
+	float FogMaxOpacity = 1.0f;		// 최대 불투명도
 
 	FLinearColor FogInscatteringColor = FLinearColor(0.8f, 0.8f, 0.9f, 1.0f);
 };
