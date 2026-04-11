@@ -1,4 +1,4 @@
-#include "RenderBus.h"
+﻿#include "RenderBus.h"
 #include "Component/CameraComponent.h"
 #include "Viewport/Viewport.h"
 
@@ -78,6 +78,8 @@ void FRenderBus::SetCameraInfo(const UCameraComponent* Camera)
 	CameraForward = Camera->GetForwardVector();
 	CameraRight = Camera->GetRightVector();
 	CameraUp = Camera->GetUpVector();
+	NearPlane = Camera->GetNearPlane();
+	FarPlane = Camera->GetFarPlane();
 	bIsOrtho = Camera->IsOrthogonal();
 	OrthoWidth = Camera->GetOrthoWidth();
 }

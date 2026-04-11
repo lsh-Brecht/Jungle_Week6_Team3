@@ -125,6 +125,8 @@ private:
 
 	// PostProcess Outline — StencilSRV 읽어 edge detection 후 fullscreen draw
 	void DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
+	
+	void DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 	//	Post 체인(Decal/Fog/Outline/FXAA) 실행

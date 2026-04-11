@@ -159,15 +159,15 @@
     <FxCompile Include="Shaders\StaticMeshShader.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\Common\ConstantBuffers.hlsl">
+    <None Include="Shaders\Common\ConstantBuffers.hlsl">
       <Filter>Shaders\Common</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Common\Functions.hlsl">
+    </None>
+    <None Include="Shaders\Common\Functions.hlsl">
       <Filter>Shaders\Common</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Common\VertexLayouts.hlsl">
+    </None>
+    <None Include="Shaders\Common\VertexLayouts.hlsl">
       <Filter>Shaders\Common</Filter>
-    </FxCompile>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Editor\EditorEngine.cpp">

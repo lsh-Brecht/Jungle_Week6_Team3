@@ -48,7 +48,9 @@ struct FFrameConstants
 	float bIsWireframe;
 	FVector WireframeColor;
 	float Time;
-	float _pad[3];
+	float NearPlane;
+	float FarPlane;
+	float _pad[1];
 };
 
 struct FLocalTintEffectConstants
