@@ -325,6 +325,16 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 				DrawScenenDepthVisualize(InRenderBus, Context);
 			}
 			ExecutePostProcessChain(InRenderBus, Context);
+
+			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+			{
+				ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
+				const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
+				if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))
+				{
+					FontBatcher.DrawBatch(ERenderPass::Font, InRenderBus, Context);
+				}
+			}
 			continue;
 		}
 
