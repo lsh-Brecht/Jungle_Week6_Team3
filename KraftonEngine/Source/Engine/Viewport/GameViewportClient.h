@@ -3,10 +3,11 @@
 #include "Object/Object.h"
 #include "Viewport/ViewportClient.h"
 
+class AActor;
 class FViewport;
+class UCameraComponent;
+class UStaticMeshComponent;
 
-// UE의 UGameViewportClient 대응 — UObject + FViewportClient 다중상속
-// 게임 런타임 뷰포트를 담당 (PIE / Standalone)
 class UGameViewportClient : public UObject, public FViewportClient
 {
 public:
@@ -15,14 +16,36 @@ public:
 	UGameViewportClient() = default;
 	~UGameViewportClient() override = default;
 
-	// FViewportClient overrides
-	void Draw(FViewport* Viewport, float DeltaTime) override {}
+	void Draw(FViewport* InViewport, float DeltaTime) override {}
 	bool InputKey(int32 Key, bool bPressed) override { return false; }
+	bool ProcessInput(FViewportInputContext& Context) override;
+	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
 
-	// Viewport 소유
 	void SetViewport(FViewport* InViewport) { Viewport = InViewport; }
 	FViewport* GetViewport() const { return Viewport; }
 
+	void SetDrivingCamera(UCameraComponent* InCamera) { DrivingCamera = InCamera; }
+	UCameraComponent* GetDrivingCamera() const { return DrivingCamera; }
+
+	void OnBeginPIE();
+	void OnEndPIE();
+
+private:
+	void EnsurePIEPlayer();
+	void ReleasePIEPlayer();
+	void SyncPlayerViewToEditorViewport();
+
 private:
 	FViewport* Viewport = nullptr;
+	UCameraComponent* DrivingCamera = nullptr;
+
+	AActor* PIEPlayerActor = nullptr;
+	uint32 PIEPlayerActorUUID = 0u;
+	UStaticMeshComponent* PIEPlayerMesh = nullptr;
+	UCameraComponent* PIEPlayerCamera = nullptr;
+	float PIECameraBoomLength = 6.0f;
+	float PIECameraPitch = -20.0f;
+	float PIECameraYaw = 0.0f;
+	bool bPIEInputArmed = false;
 };
+

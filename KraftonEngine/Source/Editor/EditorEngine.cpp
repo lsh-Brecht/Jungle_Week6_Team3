@@ -10,6 +10,7 @@
 #include "Mesh/ObjManager.h"
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
+#include "Viewport/GameViewportClient.h"
 
 IMPLEMENT_CLASS(UEditorEngine, UEngine)
 
@@ -44,6 +45,8 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 
 	// Editor render pipeline
 	SetRenderPipeline(std::make_unique<FEditorRenderPipeline>(this, Renderer));
+
+	InputRouter.SetOwnerWindow(Window->GetHWND());
 }
 
 void UEditorEngine::Shutdown()
@@ -82,13 +85,78 @@ void UEditorEngine::Tick(float DeltaTime)
 		StartQueuedPlaySessionRequest();
 	}
 
+	MainPanel.Update();
+
+	InputRouter.SetImGuiCaptureState(
+		InputSystem::Get().GetGuiInputState().bUsingMouse,
+		InputSystem::Get().GetGuiInputState().bUsingKeyboard || InputSystem::Get().GetGuiInputState().bUsingTextInput);
+	InputRouter.ClearTargets();
+
+	for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+	{
+		if (!VC || !VC->GetViewport())
+		{
+			continue;
+		}
+
+		FViewportClient* ReceiverClient = VC;
+		EInteractionDomain Domain = GetCurrentInteractionDomain();
+		if (IsPlayingInEditor()
+			&& PIEControlMode == EPIEControlMode::Possessed
+			&& VC == PIEEntryViewportClient
+			&& GetGameViewportClient())
+		{
+			ReceiverClient = GetGameViewportClient();
+			Domain = EInteractionDomain::PIE;
+			GetGameViewportClient()->SetViewport(VC->GetViewport());
+		}
+
+		InputRouter.RegisterTarget(
+			VC->GetViewport(),
+			ReceiverClient,
+			Domain,
+			[VC](FRect& OutRect)
+			{
+				const FRect& R = VC->GetViewportScreenRect();
+				if (R.Width <= 0.0f || R.Height <= 0.0f)
+				{
+					return false;
+				}
+				OutRect = R;
+				return true;
+			},
+			[this]()
+			{
+				return GetWorld();
+			});
+	}
+
+	FViewportInputContext RoutedInputContext;
+	FInteractionBinding InteractionBinding;
+	if (InputRouter.Tick(RoutedInputContext, InteractionBinding))
+	{
+		if (HandleGlobalShortcuts(RoutedInputContext))
+		{
+			RoutedInputContext.bConsumed = true;
+		}
+
+		for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+		{
+			if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
+			{
+				ViewportLayout.SetActiveViewport(VC);
+				break;
+			}
+		}
+	}
+
 	for (FEditorViewportClient* VC : ViewportLayout.GetAllViewportClients())
 	{
 		VC->Tick(DeltaTime);
 	}
 
-	MainPanel.Update();
-	UEngine::Tick(DeltaTime);
+	WorldTick(DeltaTime);
+	Render(DeltaTime);
 	SelectionManager.Tick();
 }
 
@@ -193,6 +261,11 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 		}
 	}
 	PlayInEditorSessionInfo = Info;
+	PIEEntryViewportClient = ViewportLayout.GetActiveViewport();
+	if (PIEEntryViewportClient)
+	{
+		bSavedEntryViewportGizmo = PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo;
+	}
 
 	// 4) ActiveWorldHandle을 PIE로 전환 — 이후 GetWorld()는 PIE 월드를 반환.
 	SetActiveWorld(FName("PIE"));
@@ -220,6 +293,24 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 	SelectionManager.ClearSelection();
 	//SelectionManager.SetGizmoEnabled(false); //PIE가 시작되면 gizmo 비활성화
 	SelectionManager.SetWorld(PIEWorld);
+
+	if (!GetGameViewportClient())
+	{
+		UGameViewportClient* PIEVC = UObjectManager::Get().CreateObject<UGameViewportClient>();
+		SetGameViewportClient(PIEVC);
+	}
+	if (UGameViewportClient* PIEVC = GetGameViewportClient())
+	{
+		if (PIEEntryViewportClient)
+		{
+			PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
+			PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
+		}
+		PIEVC->OnBeginPIE();
+	}
+
+	// PIE 시작 직후 기본 진입 모드는 항상 Possessed로 맞춘다.
+	EnterPIEPossessedMode();
 	
 	//이 코드와 대응되는 게 아래 EndPlayMap()에 있음.
 	//MainPanel.HideEditorWindowsForPIE(); //PIE 중에는 에디터 패널을 숨김.
@@ -280,6 +371,10 @@ void UEditorEngine::EndPlayMap()
 	SelectionManager.ClearSelection();
 	//SelectionManager.SetGizmoEnabled(true); //PIE가 끝나면 gizmo 활성화
 	SelectionManager.SetWorld(GetWorld());
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = bSavedEntryViewportGizmo;
+	}
 	
 	//이 코드와 대응되는 게 위의 StartPlayInEditorSession()에 있음.
 	//MainPanel.RestoreEditorWindowsAfterPIE();
@@ -295,6 +390,14 @@ void UEditorEngine::EndPlayMap()
 	}
 
 	PlayInEditorSessionInfo.reset();
+	if (UGameViewportClient* PIEVC = GetGameViewportClient())
+	{
+		PIEVC->OnEndPIE();
+		UObjectManager::Get().DestroyObject(PIEVC);
+		SetGameViewportClient(nullptr);
+	}
+	PIEEntryViewportClient = nullptr;
+	PIEControlMode = EPIEControlMode::Possessed;
 }
 
 // ─── 기존 메서드 ──────────────────────────────────────────
@@ -307,6 +410,87 @@ void UEditorEngine::ResetViewport()
 void UEditorEngine::CloseScene()
 {
 	ClearScene();
+}
+
+EInteractionDomain UEditorEngine::GetCurrentInteractionDomain() const
+{
+	if (!IsPlayingInEditor())
+	{
+		return EInteractionDomain::Editor;
+	}
+	return (PIEControlMode == EPIEControlMode::Possessed) ? EInteractionDomain::PIE : EInteractionDomain::EditorOnPIE;
+}
+
+bool UEditorEngine::HandleGlobalShortcuts(const FViewportInputContext& InputContext)
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	for (const FInputEvent& Event : InputContext.Events)
+	{
+		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_ESCAPE)
+		{
+			RequestEndPlayMap();
+			return true;
+		}
+		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_F8)
+		{
+			return TogglePIEControlMode();
+		}
+	}
+
+	return false;
+}
+
+bool UEditorEngine::TogglePIEControlMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	if (PIEControlMode == EPIEControlMode::Possessed)
+	{
+		return EnterPIEEjectedMode();
+	}
+	return EnterPIEPossessedMode();
+}
+
+bool UEditorEngine::EnterPIEPossessedMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	PIEControlMode = EPIEControlMode::Possessed;
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = false;
+		if (UGameViewportClient* PIEVC = GetGameViewportClient())
+		{
+			PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
+			PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
+		}
+	}
+	return true;
+}
+
+bool UEditorEngine::EnterPIEEjectedMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	PIEControlMode = EPIEControlMode::Ejected;
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = true;
+	}
+	return true;
 }
 
 void UEditorEngine::NewScene()

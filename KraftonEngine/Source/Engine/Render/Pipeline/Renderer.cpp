@@ -308,6 +308,8 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		GPU_SCOPE_STAT(PassName);
 
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
+		
+
 		if (CurPass == ERenderPass::SelectionMask)
 		{
 			ExecuteSelectionMaskPass(InRenderBus, Context);
