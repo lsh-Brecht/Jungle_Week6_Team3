@@ -1,6 +1,7 @@
 ﻿#include "Render/Proxy/FScene.h"
 #include "Component/SceneEffectSource.h"
 #include "Component/PrimitiveComponent.h"
+#include "Component/ExponentialHeightFogComponent.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
 
@@ -54,6 +55,7 @@ FScene::~FScene()
 	FreeSlots.clear();
 	VisibleProxies.clear();
 	SceneEffectSources.clear();
+	FogComponents.clear();
 }
 
 // ============================================================
@@ -280,6 +282,59 @@ FSceneEffectConstants FScene::GetSceneEffectConstants() const
 
 	Result.LocalTintCount = LocalTintIndex;
 
+	return Result;
+}
+
+void FScene::RegisterFogComponent(UExponentialHeightFogComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	if (std::find(FogComponents.begin(), FogComponents.end(), Component) == FogComponents.end())
+	{
+		FogComponents.push_back(Component);
+	}
+}
+
+void FScene::UnregisterFogComponent(UExponentialHeightFogComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	auto It = std::find(FogComponents.begin(), FogComponents.end(), Component);
+	if (It != FogComponents.end())
+	{
+		*It = FogComponents.back();
+		FogComponents.pop_back();
+	}
+}
+
+FFogPostProcessConstants FScene::GetFogPostProcessConstants() const
+{
+	FFogPostProcessConstants Result = {};
+	uint32 FogIndex = 0;
+
+	for (UExponentialHeightFogComponent* FogComponent : FogComponents)
+	{
+		if (!FogComponent || !FogComponent->IsFogActive())
+		{
+			continue;
+		}
+
+		if (FogIndex >= ECBSlot::MaxFogComponents)
+		{
+			break;
+		}
+
+		Result.Fogs[FogIndex] = FogComponent->BuildFogUniformParameters();
+		++FogIndex;
+	}
+
+	Result.FogCount = FogIndex;
 	return Result;
 }
 

@@ -24,8 +24,10 @@ namespace ECBSlot
 	constexpr uint32 PostProcess = 3;	// b3: PostProcess effect params
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
+	constexpr uint32 Fog = 6;			// b6: fog post-process params
 
 	constexpr uint32 MaxLocalTintEffects = 8;
+	constexpr uint32 MaxFogComponents = 8;
 }
 
 //PerObject
@@ -49,6 +51,11 @@ struct FFrameConstants
 	FVector WireframeColor;
 	float Time;
 	float _pad[3];
+	FVector CameraPosition;
+	float _pad2 = 0.0f;
+	FMatrix InverseView;
+	FMatrix InverseProjection;
+	FMatrix InverseViewProjection;
 };
 
 struct FLocalTintEffectConstants
@@ -96,11 +103,15 @@ struct FOutlinePostProcessConstants
 struct FFogUniformParameters
 {
     FVector4 ExponentialFogParameters;      // x: 밀도 계수, y: Falloff, z: 관찰자 최대 높이, w: StartDistance
-	FVector4 ExponentialFogParameters2;     // 두 번째 안개 데이터
 	FVector4 ExponentialFogColorParameter;  // rgb: Inscattering Color, a: 1.0 - MaxOpacity
 	FVector4 ExponentialFogParameters3;     // x: 밀도, y: 안개 높이, z: 큐브맵 유무, w: CutoffDistance
-	FVector4 InscatteringLightDirection;    // w: DirectionalInscatteringStartDistance
-	FVector4 DirectionalInscatteringColor;  // rgb: 컬러, a: DirectionalInscatteringExponent
+};
+
+struct FFogPostProcessConstants
+{
+	FFogUniformParameters Fogs[ECBSlot::MaxFogComponents];
+	uint32 FogCount = 0;
+	float _pad[3] = {};
 };
 
 struct FAABBConstants

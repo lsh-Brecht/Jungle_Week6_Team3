@@ -1,7 +1,11 @@
 ﻿#include "ExponentialHeightFogComponent.h"
+
+#include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
-#include "SceneComponent.h"
+#include "Render/Proxy/FScene.h"
 #include "Serialization/Archive.h"
+
 #include <cstring>
 
 IMPLEMENT_CLASS(UExponentialHeightFogComponent, UPrimitiveComponent)
@@ -11,16 +15,45 @@ UExponentialHeightFogComponent::UExponentialHeightFogComponent()
 	SanitizeProperties();
 }
 
+void UExponentialHeightFogComponent::CreateRenderState()
+{
+	RegisterToScene();
+}
+
+void UExponentialHeightFogComponent::DestroyRenderState()
+{
+	UnregisterFromScene();
+	UPrimitiveComponent::DestroyRenderState();
+}
+
 void UExponentialHeightFogComponent::SanitizeProperties()
 {
 	FogDensity = Clamp(FogDensity, 0.0f, 100000.0f);
 	FogHeightFalloff = Clamp(FogHeightFalloff, 0.0f, 100000.0f);
+	FogHeight = Clamp(FogHeight, -100000.0f, 100000.0f);
 	StartDistance = Clamp(StartDistance, 0.0f, 100000.0f);
 	FogCutoffDistance = Clamp(FogCutoffDistance, 0.0f, 100000.0f);
 	FogMaxOpacity = Clamp(FogMaxOpacity, 0.0f, 1.0f);
-	EndDistance = Clamp(EndDistance, 0.0f, 100000.0f);
-	DirectionalInscatteringExponent = Clamp(DirectionalInscatteringExponent, 0.0f, 100000.0f);
-	DirectionalInscatteringStartDistance = Clamp(DirectionalInscatteringStartDistance, 0.0f, 100000.0f);
+}
+
+bool UExponentialHeightFogComponent::IsFogActive() const
+{
+	if (!IsActive() || !IsVisible() || FogDensity <= 0.0f)
+	{
+		return false;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	return OwnerActor && OwnerActor->IsVisible();
+}
+
+FFogUniformParameters UExponentialHeightFogComponent::BuildFogUniformParameters() const
+{
+	FFogUniformParameters Result = {};
+	Result.ExponentialFogParameters = FVector4(FogDensity, FogHeightFalloff, 0.0f, StartDistance);
+	Result.ExponentialFogColorParameter = FVector4(FogInscatteringColor.R, FogInscatteringColor.G, FogInscatteringColor.B, 1.0f - FogMaxOpacity);
+	Result.ExponentialFogParameters3 = FVector4(FogDensity, FogHeight, 0.0f, FogCutoffDistance);
+	return Result;
 }
 
 void UExponentialHeightFogComponent::Serialize(FArchive& Ar)
@@ -29,17 +62,12 @@ void UExponentialHeightFogComponent::Serialize(FArchive& Ar)
 
 	Ar << FogDensity;
 	Ar << FogHeightFalloff;
+	Ar << FogHeight;
 	Ar << StartDistance;
 	Ar << FogCutoffDistance;
 	Ar << FogMaxOpacity;
 
 	Ar << FogInscatteringColor;
-	Ar << FogInscatteringLuminance;
-
-	Ar << EndDistance;
-	Ar << DirectionalInscatteringExponent;
-	Ar << DirectionalInscatteringStartDistance;
-	Ar << DirectionalInscatteringLuminance;
 
 	if (Ar.IsLoading())
 	{
@@ -52,12 +80,11 @@ void UExponentialHeightFogComponent::GetEditableProperties(TArray<FPropertyDescr
 	UPrimitiveComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Fog Density", EPropertyType::Float, &FogDensity, 0.0f, 10.0f, 0.001f });
 	OutProps.push_back({ "Fog Height Falloff", EPropertyType::Float, &FogHeightFalloff, 0.0f, 10.0f, 0.001f });
+	OutProps.push_back({ "Fog Height", EPropertyType::Float, &FogHeight, -10000.0f, 10000.0f, 1.0f });
+	OutProps.push_back({ "Fog Color", EPropertyType::Vec4, &FogInscatteringColor, 0.0f, 1.0f, 0.01f });
 	OutProps.push_back({ "Start Distance", EPropertyType::Float, &StartDistance, 0.0f, 10000.0f, 1.0f });
 	OutProps.push_back({ "Fog Cutoff Distance", EPropertyType::Float, &FogCutoffDistance, 0.0f, 100000.0f, 1.0f });
 	OutProps.push_back({ "Fog Max Opacity", EPropertyType::Float, &FogMaxOpacity, 0.0f, 1.0f, 0.01f });
-	OutProps.push_back({ "End Distance", EPropertyType::Float, &EndDistance, 0.0f, 100000.0f, 1.0f });
-	OutProps.push_back({ "Directional Inscattering Exponent", EPropertyType::Float, &DirectionalInscatteringExponent, 0.0f, 128.0f, 0.1f });
-	OutProps.push_back({ "Directional Inscattering Start Distance", EPropertyType::Float, &DirectionalInscatteringStartDistance, 0.0f, 100000.0f, 1.0f });
 }
 
 void UExponentialHeightFogComponent::PostEditProperty(const char* PropertyName)
@@ -66,13 +93,34 @@ void UExponentialHeightFogComponent::PostEditProperty(const char* PropertyName)
 
 	if (std::strcmp(PropertyName, "Fog Density") == 0 ||
 		std::strcmp(PropertyName, "Fog Height Falloff") == 0 ||
+		std::strcmp(PropertyName, "Fog Height") == 0 ||
+		std::strcmp(PropertyName, "Fog Color") == 0 ||
 		std::strcmp(PropertyName, "Start Distance") == 0 ||
 		std::strcmp(PropertyName, "Fog Cutoff Distance") == 0 ||
-		std::strcmp(PropertyName, "Fog Max Opacity") == 0 ||
-		std::strcmp(PropertyName, "End Distance") == 0 ||
-		std::strcmp(PropertyName, "Directional Inscattering Exponent") == 0 ||
-		std::strcmp(PropertyName, "Directional Inscattering Start Distance") == 0)
+		std::strcmp(PropertyName, "Fog Max Opacity") == 0)
 	{
 		SanitizeProperties();
+	}
+}
+
+void UExponentialHeightFogComponent::RegisterToScene()
+{
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			World->GetScene().RegisterFogComponent(this);
+		}
+	}
+}
+
+void UExponentialHeightFogComponent::UnregisterFromScene()
+{
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			World->GetScene().UnregisterFogComponent(this);
+		}
 	}
 }

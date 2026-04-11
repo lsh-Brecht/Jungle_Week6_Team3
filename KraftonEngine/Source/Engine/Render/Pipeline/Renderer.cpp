@@ -52,8 +52,15 @@ void FRenderer::Create(HWND hWindow)
 		{
 			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
 		});
+
+	RegisterPostEffect(EPostEffectType::Fog,
+		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+		{
+			DrawPostProcessFog(Bus, Context, IO);
+		});
 	
 	SetPostEffectEnabled(EPostEffectType::Outline, true);
+	SetPostEffectEnabled(EPostEffectType::Fog, true);
 
 	// GPU Profiler 초기화
 	FGPUProfiler::Get().Initialize(Device.GetDevice(), Device.GetDeviceContext());
@@ -406,6 +413,49 @@ void FRenderer::DrawLineBatcher(FLineBatcher& Batcher, ID3D11DeviceContext* Cont
 	if (EditorShader) EditorShader->Bind(Context);
 
 	Batcher.DrawBatch(Context);
+}
+
+void FRenderer::DrawPostProcessFog(const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+{
+	if (!IO.ColorInput || !IO.ColorOutput || !Context)
+	{
+		return;
+	}
+
+	const FFogPostProcessConstants& FogConstants = Bus.GetFogPostProcessConstants();
+	if (FogConstants.FogCount == 0 || !IO.DepthInput)
+	{
+		BlitSRVToRTV(IO.ColorInput, IO.ColorOutput, Context);
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &IO.ColorOutput, nullptr);
+
+	ID3D11ShaderResourceView* SRVs[2] = { IO.ColorInput, IO.DepthInput };
+	Context->PSSetShaderResources(0, 2, SRVs);
+
+	FShader* FogShader = FShaderManager::Get().GetShader(EShaderType::FogPostProcess);
+	if (!FogShader)
+	{
+		ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+		Context->PSSetShaderResources(0, 2, NullSRV);
+		BlitSRVToRTV(IO.ColorInput, IO.ColorOutput, Context);
+		return;
+	}
+	FogShader->Bind(Context);
+
+	FConstantBuffer* FogCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Fog, sizeof(FFogPostProcessConstants));
+	FogCB->Update(Context, &FogConstants, sizeof(FogConstants));
+	ID3D11Buffer* cb = FogCB->GetBuffer();
+	Context->PSSetConstantBuffers(ECBSlot::Fog, 1, &cb);
+
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->Draw(3, 0);
+	FDrawCallStats::Increment();
+
+	ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+	Context->PSSetShaderResources(0, 2, NullSRV);
 }
 
 // ============================================================
@@ -965,6 +1015,10 @@ void FRenderer::UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus
 	frameConstantData.Projection = InRenderBus.GetProj();
 	frameConstantData.bIsWireframe = (InRenderBus.GetViewMode() == EViewMode::Wireframe);
 	frameConstantData.WireframeColor = InRenderBus.GetWireframeColor();
+	frameConstantData.CameraPosition = InRenderBus.GetCameraPosition();
+	frameConstantData.InverseView = InRenderBus.GetView().GetInverse();
+	frameConstantData.InverseProjection = InRenderBus.GetProj().GetInverse();
+	frameConstantData.InverseViewProjection = (InRenderBus.GetView() * InRenderBus.GetProj()).GetInverse();
 
 	if (GEngine && GEngine->GetTimer())
 	{

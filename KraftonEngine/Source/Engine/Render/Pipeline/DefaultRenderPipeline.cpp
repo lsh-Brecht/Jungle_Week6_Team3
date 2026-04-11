@@ -28,6 +28,7 @@ void FDefaultRenderPipeline::Execute(float DeltaTime, FRenderer& Renderer)
 		Bus.SetCameraInfo(Camera);
 		Bus.SetRenderSettings(ViewMode, ShowFlags);
 		Bus.SetSceneEffectConstants(World->GetScene().GetSceneEffectConstants());
+		Bus.SetFogPostProcessConstants(World->GetScene().GetFogPostProcessConstants());
 
 		Collector.CollectWorld(World, Bus);
 		Collector.CollectDebugDraw(World->GetDebugDrawQueue(), Bus);
