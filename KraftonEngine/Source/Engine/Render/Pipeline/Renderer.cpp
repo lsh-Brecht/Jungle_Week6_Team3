@@ -52,8 +52,18 @@ void FRenderer::Create(HWND hWindow)
 		{
 			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
 		});
+
+	RegisterPostEffect(EPostEffectType::FXAA,
+		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+		{
+			DrawPostProcessFXAA(Bus, Context, IO.ColorInput, IO.ColorOutput);
+		});
 	
+
+	SetPostEffectEnabled(EPostEffectType::Decal, false);
+	SetPostEffectEnabled(EPostEffectType::Fog, false);
 	SetPostEffectEnabled(EPostEffectType::Outline, true);
+	SetPostEffectEnabled(EPostEffectType::FXAA, true);
 
 	// GPU Profiler 초기화
 	FGPUProfiler::Get().Initialize(Device.GetDevice(), Device.GetDeviceContext());
@@ -796,10 +806,6 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 		{
 			Callback(Bus, Context, IO);
 		}
-		else if (Type == EPostEffectType::Outline)
-		{
-			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
-		}
 		else
 		{
 			BlitSRVToRTV(IO.ColorInput, IO.ColorOutput, Context);
@@ -955,6 +961,58 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 
 	ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
 	Context->PSSetShaderResources(0, 2, NullSRV);
+}
+
+void FRenderer::DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV)
+{
+	if (!Context || !SceneColorSRV || !OutputRTV)
+	{
+		return;
+	}
+
+	const float Width = Bus.GetViewportWidth();
+	const float Height = Bus.GetViewportHeight();
+	if (Width <= 0.0f || Height <= 0.0f)
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &OutputRTV, nullptr);
+
+	ID3D11ShaderResourceView* SRV = SceneColorSRV;
+	Context->PSSetShaderResources(0, 1, &SRV);
+	ID3D11SamplerState* Sampler = Resources.DefaultSampler;
+	Context->PSSetSamplers(0, 1, &Sampler);
+
+	FShader* FXAAShader = FShaderManager::Get().GetShader(EShaderType::FXAAPostProcess);
+	if (!FXAAShader)
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		ID3D11ShaderResourceView* NullSRV = nullptr;
+		Context->PSSetShaderResources(0, 1, &NullSRV);
+		return;
+	}
+	FXAAShader->Bind(Context);
+
+	FFXAAConstants FXAAData = {};
+	FXAAData.TexelSize = FVector2(1.0f / Width, 1.0f / Height);
+
+	FConstantBuffer* FXAACB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess_FXAA, sizeof(FFXAAConstants));
+	if (FXAACB && FXAACB->GetBuffer())
+	{
+		FXAACB->Update(Context, &FXAAData, sizeof(FXAAData));
+		ID3D11Buffer* CB = FXAACB->GetBuffer();
+		Context->PSSetConstantBuffers(ECBSlot::PostProcess_FXAA, 1, &CB);
+	}
+
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->Draw(3, 0);
+	FDrawCallStats::Increment();
+
+	ID3D11ShaderResourceView* NullSRV = nullptr;
+	Context->PSSetShaderResources(0, 1, &NullSRV);
 }
 
 void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context)

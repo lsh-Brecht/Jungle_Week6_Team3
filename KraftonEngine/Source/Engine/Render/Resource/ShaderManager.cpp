@@ -21,6 +21,9 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	Shaders[(uint32)EShaderType::OutlinePostProcess].Create(InDevice, L"Shaders/OutlinePostProcess.hlsl",
 		"VS", "PS", nullptr, 0);
 
+	Shaders[(uint32)EShaderType::FXAAPostProcess].Create(InDevice, L"Shaders/FXAA.hlsl",
+		"VS", "PS", nullptr, 0);
+
 	// Batcher 셰이더 (FTextureVertex: POSITION + TEXCOORD)
 	Shaders[(uint32)EShaderType::DepthView].Create(InDevice, L"Shaders/SceneDepthVisualize.hlsl",
 		"VS", "PS", nullptr, 0);

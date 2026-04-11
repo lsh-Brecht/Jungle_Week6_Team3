@@ -25,7 +25,9 @@ namespace ECBSlot
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
 
-	constexpr uint32 MaxLocalTintEffects = 8;
+
+	constexpr uint32 PostProcess_FXAA = 9;    // b9: FXAA effect params
+	constexpr uint32 MaxLocalTintEffects = 10;
 }
 
 //PerObject
@@ -93,6 +95,14 @@ struct FOutlinePostProcessConstants
 	float OutlineFalloff = 1.6f;
 	float Padding[2] = {};
 };
+
+struct FFXAAConstants
+{
+	FVector2 TexelSize = FVector2(0.0f, 0.0f);
+	float EdgeThreshold = 0.063f;
+	float EdgeThresholdMin = 0.0312f;
+};
+
 
 struct FAABBConstants
 {
