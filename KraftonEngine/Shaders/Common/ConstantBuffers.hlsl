@@ -11,7 +11,9 @@ cbuffer FrameBuffer : register(b0)
     float bIsWireframe;
     float3 WireframeRGB;
     float Time;
-    float3 _framePad;
+    float NearPlane;
+    float FarPlane;
+    float _framePad;
 }
 
 struct LocalTintEffectData

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 
@@ -8,6 +8,7 @@ enum class EViewMode : int32
 	Unlit,
 	Wireframe,
 	Depth,
+	SceneDepth,
 	Count
 };
 

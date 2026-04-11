@@ -127,6 +127,8 @@ private:
 	void DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
  // PostProcess FXAA — SceneColor를 입력으로 받아 fullscreen FXAA 적용
 	void DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
+	
+	void DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 

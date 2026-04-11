@@ -51,6 +51,8 @@ public:
 	const FVector& GetCameraForward() const { return CameraForward; }
 	const FVector& GetCameraUp() const { return CameraUp; }
 	const FVector& GetCameraRight() const { return CameraRight; }
+	float GetNearPlane() const { return NearPlane; }
+	float GetFarPlane() const { return FarPlane; }
 	bool  IsOrtho()        const { return bIsOrtho; }
 	bool  IsFixedOrtho()   const { return bIsOrtho && ViewportType != ELevelViewportType::Perspective && ViewportType != ELevelViewportType::FreeOrthographic; }
 	float GetOrthoWidth()  const { return OrthoWidth; }
@@ -100,6 +102,8 @@ private:
 	FVector CameraForward;
 	FVector CameraRight;
 	FVector CameraUp;
+	float NearPlane = 0.1f;
+	float FarPlane = 1000.0f;
 
 	float viewportWidth = 0.0f;
 	float viewportHeight = 0.0f;

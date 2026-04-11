@@ -322,6 +322,11 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
 	}
+
+	if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+	{
+		DrawScenenDepthVisualize(InRenderBus, Context);
+	}
 }
 
 // ============================================================
@@ -1010,6 +1015,31 @@ void FRenderer::DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* 
 	Context->PSSetShaderResources(0, 1, &NullSRV);
 }
 
+void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context)
+{
+	ID3D11ShaderResourceView* DepthSRV = Bus.GetViewportDepthSRV();
+	ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
+	ID3D11RenderTargetView* RTV = Bus.GetViewportRTV();
+	if (!DepthSRV || !RTV)
+	{
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &RTV, nullptr);
+	Context->PSSetShaderResources(0, 1, &DepthSRV);
+	FShader* Shader = FShaderManager::Get().GetShader(EShaderType::DepthView);
+	if (Shader) Shader->Bind(Context);
+	Context->PSSetSamplers(0, 1, &Resources.DefaultSampler);
+	// Full-Screen Triangle (SV_VertexID, no VB)
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->Draw(3, 0);
+
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	Context->PSSetShaderResources(0, 1, &nullSRV);
+	Context->OMSetRenderTargets(1, &RTV, DSV);
+}
+
 //	Present the rendered frame to the screen. 반드시 Render 이후에 호출되어야 함.
 void FRenderer::EndFrame()
 {
@@ -1023,6 +1053,8 @@ void FRenderer::UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus
 	frameConstantData.Projection = InRenderBus.GetProj();
 	frameConstantData.bIsWireframe = (InRenderBus.GetViewMode() == EViewMode::Wireframe);
 	frameConstantData.WireframeColor = InRenderBus.GetWireframeColor();
+	frameConstantData.NearPlane = InRenderBus.GetNearPlane();
+	frameConstantData.FarPlane = InRenderBus.GetFarPlane();
 
 	if (GEngine && GEngine->GetTimer())
 	{
