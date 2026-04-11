@@ -14,12 +14,6 @@ cbuffer FXAAParams : register(b9)
     float EdgeThresholdMin; // 기본값: 0.0312f
 };
 
-// 밝기(Luma)를 구하는 함수
-float RgbToLuma(float3 rgb)
-{
-    return dot(rgb, float3(0.299f, 0.587f, 0.114f));
-}
-
 // ── VS: Fullscreen Triangle (OutlinePostProcess.hlsl 구조 활용) ──
 // Vertex Buffer를 바인딩할 필요 없이 Draw(3, 0)으로 호출하면 화면 전체를 덮습니다.
 PS_Input_Tex VS(uint vertexID : SV_VertexID)
@@ -34,14 +28,17 @@ PS_Input_Tex VS(uint vertexID : SV_VertexID)
 float4 PS(PS_Input_Tex input) : SV_TARGET
 {
     float2 uv = input.texcoord;
-    float3 colorM = SceneColor.Sample(Sampler, uv).rgb;
     
-    // 1. 현재 픽셀과 상하좌우 십자 샘플링
-    float lumaM = RgbToLuma(colorM);
-    float lumaS = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(0, TexelSize.y)).rgb);
-    float lumaN = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(0, -TexelSize.y)).rgb);
-    float lumaW = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(-TexelSize.x, 0)).rgb);
-    float lumaE = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(TexelSize.x, 0)).rgb);
+    // 1. 현재 픽셀 샘플링 (RGB는 최종 출력용, Alpha는 Luma용으로 분리)
+    float4 sampleM = SceneColor.SampleLevel(Sampler, uv, 0);
+    float3 colorM = sampleM.rgb;
+    float lumaM = sampleM.a;
+    
+    // 상하좌우 십자 샘플링 (Alpha 채널만 바로 가져옴)
+    float lumaS = SceneColor.SampleLevel(Sampler, uv + float2(0, TexelSize.y), 0).a;
+    float lumaN = SceneColor.SampleLevel(Sampler, uv + float2(0, -TexelSize.y), 0).a;
+    float lumaW = SceneColor.SampleLevel(Sampler, uv + float2(-TexelSize.x, 0), 0).a;
+    float lumaE = SceneColor.SampleLevel(Sampler, uv + float2(TexelSize.x, 0), 0).a;
 
     // 2. 엣지 검출 (대비 계산)
     float lumaMax = max(lumaM, max(max(lumaN, lumaS), max(lumaW, lumaE)));
@@ -55,11 +52,11 @@ float4 PS(PS_Input_Tex input) : SV_TARGET
         return float4(colorM, 1.0f);
     }
 
-    // 3-1. 대각선 픽셀 추가 샘플링
-    float lumaNW = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(-TexelSize.x, -TexelSize.y)).rgb);
-    float lumaNE = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(TexelSize.x, -TexelSize.y)).rgb);
-    float lumaSW = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(-TexelSize.x, TexelSize.y)).rgb);
-    float lumaSE = RgbToLuma(SceneColor.Sample(Sampler, uv + float2(TexelSize.x, TexelSize.y)).rgb);
+    // 3-1. 대각선 픽셀 추가 샘플링 (Alpha 채널)
+    float lumaNW = SceneColor.SampleLevel(Sampler, uv + float2(-TexelSize.x, -TexelSize.y), 0).a;
+    float lumaNE = SceneColor.SampleLevel(Sampler, uv + float2(TexelSize.x, -TexelSize.y), 0).a;
+    float lumaSW = SceneColor.SampleLevel(Sampler, uv + float2(-TexelSize.x, TexelSize.y), 0).a;
+    float lumaSE = SceneColor.SampleLevel(Sampler, uv + float2(TexelSize.x, TexelSize.y), 0).a;
 
     // 3-2. 수평 및 수직 변화량(Edge Gradient) 계산
     float edgeVert =
@@ -104,24 +101,29 @@ float4 PS(PS_Input_Tex input) : SV_TARGET
     float lumaEndN = 0.0f;
     bool doneP = false, doneN = false;
 
-    [unroll(10)]
-    for (int i = 0; i < 10; i++)
+    // Step 1~3: 1.0 간격
+    // Step 4~5: 1.5 간격
+    // Step 6: 2.0 간격, Step 7: 4.0 간격 ...
+    float stepSizes[7] = { 1.0, 1.0, 1.0, 1.5, 2.0, 4.0, 8.0 };
+    
+    for (int i = 0; i < 7; i++)
     {
         if (!doneP)
-            lumaEndP = RgbToLuma(SceneColor.SampleLevel(Sampler, posP, 0).rgb) - lumaParent;
+        {
+            lumaEndP = SceneColor.SampleLevel(Sampler, posP, 0).a - lumaParent;
+            doneP = abs(lumaEndP) >= gradientScaled;
+            if (!doneP) posP += stepN * stepSizes[i];
+        }
+            
         if (!doneN)
-            lumaEndN = RgbToLuma(SceneColor.SampleLevel(Sampler, posN_end, 0).rgb) - lumaParent;
-
-        doneP = doneP || (abs(lumaEndP) >= gradientScaled);
-        doneN = doneN || (abs(lumaEndN) >= gradientScaled);
+        {
+            lumaEndN = SceneColor.SampleLevel(Sampler, posN_end, 0).a - lumaParent;
+            doneN = abs(lumaEndN) >= gradientScaled;
+            if (!doneN) posN_end -= stepN * stepSizes[i];
+        }
 
         if (doneP && doneN)
             break;
-
-        if (!doneP)
-            posP += stepN;
-        if (!doneN)
-            posN_end -= stepN;
     }
 
     // 4-3. 거리 계산 및 가중치 도출
