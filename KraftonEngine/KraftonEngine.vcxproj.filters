@@ -141,9 +141,6 @@
     <FxCompile Include="Shaders\OcclusionTest.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\OutlinePostProcess.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\Primitive.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -525,6 +522,7 @@
     <ClCompile Include="Source\Engine\Component\FireBallComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
+    <ClCompile Include="Shaders\OutlinePostProcess.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">

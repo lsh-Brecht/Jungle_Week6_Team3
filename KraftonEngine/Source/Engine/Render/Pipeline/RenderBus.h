@@ -65,6 +65,10 @@ public:
 	const float GetViewportHeight() const { return viewportHeight; }
 	ID3D11RenderTargetView*  GetViewportRTV()        const { return ViewportRTV; }
 	ID3D11DepthStencilView*  GetViewportDSV()        const { return ViewportDSV; }
+	//	뷰포트 SceneColor SRV (post chain 입력)
+	ID3D11ShaderResourceView* GetViewportSRV()       const { return ViewportSRV; }
+	//	뷰포트 Depth SRV (Fog/Decal/DepthDebug 입력)
+	ID3D11ShaderResourceView* GetViewportDepthSRV()  const { return ViewportDepthSRV; }
 	ID3D11ShaderResourceView* GetViewportStencilSRV() const { return ViewportStencilSRV; }
 
 	// GPU Occlusion Culling — set by render pipeline, read by collector
@@ -107,6 +111,10 @@ private:
 	// PostProcess용 뷰포트 D3D 리소스 (프레임 내 유효)
 	ID3D11RenderTargetView*   ViewportRTV        = nullptr;
 	ID3D11DepthStencilView*   ViewportDSV        = nullptr;
+	//	post 체인이 읽는 원본 SceneColor
+	ID3D11ShaderResourceView* ViewportSRV        = nullptr;
+	//	post 체인이 읽는 원본 Depth
+	ID3D11ShaderResourceView* ViewportDepthSRV   = nullptr;
 	ID3D11ShaderResourceView* ViewportStencilSRV = nullptr;
 
 	// GPU Occlusion

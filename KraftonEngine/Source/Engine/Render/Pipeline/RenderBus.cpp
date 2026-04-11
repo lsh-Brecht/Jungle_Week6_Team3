@@ -20,6 +20,8 @@ void FRenderBus::Clear()
 
 	ViewportRTV = nullptr;
 	ViewportDSV = nullptr;
+	ViewportSRV = nullptr;
+	ViewportDepthSRV = nullptr;
 	ViewportStencilSRV = nullptr;
 }
 
@@ -86,6 +88,8 @@ void FRenderBus::SetViewportInfo(const FViewport* VP)
 	viewportHeight = static_cast<float>(VP->GetHeight());
 	ViewportRTV = VP->GetRTV();
 	ViewportDSV = VP->GetDSV();
+	ViewportSRV = VP->GetSRV();
+	ViewportDepthSRV = VP->GetDepthSRV();
 	ViewportStencilSRV = VP->GetStencilSRV();
 }
 
