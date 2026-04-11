@@ -50,6 +50,7 @@ public:
 
 	// Owner의 UUID를 문자열로 반환
 	FString GetOwnerUUIDToString() const;
+	void RefreshOwnerUUIDText();
 
 	// Owner의 FName을 문자열로 반환
 	FString GetOwnerNameToString() const;
@@ -89,6 +90,8 @@ public:
 	void UpdateWorldAABB() const override;
 	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 
+	FVector GetVisualScale() const override;
+	FMatrix ComputeTextBillboardMatrix(const FVector& CameraForward) const;
 	FMatrix CalculateOutlineMatrix() const;
 	FMatrix CalculateOutlineMatrix(const FMatrix& BillboardWorldMatrix) const;
 	int32 GetUTF8Length(const FString& str) const;

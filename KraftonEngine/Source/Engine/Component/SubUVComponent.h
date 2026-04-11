@@ -40,6 +40,7 @@ public:
 
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
 	void UpdateWorldAABB() const override;
+	FVector GetVisualScale() const override;
 
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;

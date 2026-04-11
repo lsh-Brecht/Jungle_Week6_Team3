@@ -62,6 +62,7 @@ struct PS_Input_Full
     float3 normal   : NORMAL;
     float4 color    : COLOR;
     float2 texcoord : TEXTCOORD;
+    float3 worldPos : TEXCOORD1;
 };
 
 // SV_POSITION only (Outline)

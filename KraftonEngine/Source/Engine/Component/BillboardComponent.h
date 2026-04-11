@@ -34,6 +34,8 @@ public:
 	float GetWidth()  const { return Width; }
 	float GetHeight() const { return Height; }
 
+	virtual FVector GetVisualScale() const;
+
 	// 주어진 카메라 방향으로 빌보드 월드 행렬을 계산 (per-view 렌더링용)
 	FMatrix ComputeBillboardMatrix(const FVector& CameraForward) const;
 

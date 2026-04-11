@@ -102,6 +102,12 @@ void USubUVComponent::UpdateWorldAABB() const
 	WorldAABBMaxLocation = WorldCenter + FVector(NewEx, NewEy, NewEz);
 }
 
+FVector USubUVComponent::GetVisualScale() const
+{
+	// 부모 메시 스케일과 무관하게 파티클 스프라이트 크기를 고정한다.
+	return GetRelativeScale();
+}
+
 void USubUVComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UBillboardComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);

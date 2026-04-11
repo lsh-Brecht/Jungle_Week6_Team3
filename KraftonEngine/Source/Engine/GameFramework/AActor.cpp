@@ -2,6 +2,7 @@
 #include "Object/ObjectFactory.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/ActorComponent.h"
+#include "Component/TextRenderComponent.h"
 #include "Math/Rotator.h"
 #include "GameFramework/Level.h"
 #include "GameFramework/World.h"
@@ -348,6 +349,14 @@ UObject* AActor::Duplicate(UObject* NewOuter) const
 	if (UWorld* DestWorld = Dup->GetWorld())
 	{
 		DestWorld->AddActor(Dup);
+	}
+
+	for (UActorComponent* Comp : Dup->OwnedComponents)
+	{
+		if (UTextRenderComponent* TextComp = Cast<UTextRenderComponent>(Comp))
+		{
+			TextComp->RefreshOwnerUUIDText();
+		}
 	}
 
 	return Dup;

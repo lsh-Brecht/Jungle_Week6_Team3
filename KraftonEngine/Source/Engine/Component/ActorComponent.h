@@ -35,7 +35,7 @@ public:
 	}
 	virtual void Serialize(FArchive& Ar) override;
 
-	inline bool IsActive() { return bIsActive; }
+	inline bool IsActive() const { return bIsActive; }
 
 	void SetOwner(AActor* Actor);
 	AActor* GetOwner() const { return Owner; }

@@ -12,6 +12,7 @@ struct FRenderResources
 {
 	FConstantBuffer FrameBuffer;				// b0 — ECBSlot::Frame
 	FConstantBuffer PerObjectConstantBuffer;	// b1 — ECBSlot::PerObject
+	FConstantBuffer SceneEffectBuffer;			// b5 — ECBSlot::SceneEffect
 	ID3D11SamplerState* DefaultSampler = nullptr;	// s0 — Linear/Wrap
 
 	void Create(ID3D11Device* InDevice);

@@ -1,4 +1,5 @@
 ﻿#include "Render/Proxy/FScene.h"
+#include "Component/SceneEffectSource.h"
 #include "Component/PrimitiveComponent.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
@@ -52,6 +53,7 @@ FScene::~FScene()
 	NeverCullProxies.clear();
 	FreeSlots.clear();
 	VisibleProxies.clear();
+	SceneEffectSources.clear();
 }
 
 // ============================================================
@@ -225,6 +227,60 @@ void FScene::MarkAllPerObjectCBDirty()
 			Proxy->MarkPerObjectCBDirty();
 		}
 	}
+}
+
+void FScene::RegisterSceneEffectSource(ISceneEffectSource* Source)
+{
+	if (!Source)
+	{
+		return;
+	}
+
+	if (std::find(SceneEffectSources.begin(), SceneEffectSources.end(), Source) == SceneEffectSources.end())
+	{
+		SceneEffectSources.push_back(Source);
+	}
+}
+
+void FScene::UnregisterSceneEffectSource(ISceneEffectSource* Source)
+{
+	if (!Source)
+	{
+		return;
+	}
+
+	auto It = std::find(SceneEffectSources.begin(), SceneEffectSources.end(), Source);
+	if (It != SceneEffectSources.end())
+	{
+		*It = SceneEffectSources.back();
+		SceneEffectSources.pop_back();
+	}
+}
+
+FSceneEffectConstants FScene::GetSceneEffectConstants() const
+{
+	FSceneEffectConstants Result = {};
+	uint32 LocalTintIndex = 0;
+
+	for (ISceneEffectSource* EffectSource : SceneEffectSources)
+	{
+		if (!EffectSource || !EffectSource->IsSceneEffectActive())
+		{
+			continue;
+		}
+
+		EffectSource->WriteSceneEffectConstants(Result, LocalTintIndex);
+		++LocalTintIndex;
+
+		if (LocalTintIndex >= ECBSlot::MaxLocalTintEffects)
+		{
+			break;
+		}
+	}
+
+	Result.LocalTintCount = LocalTintIndex;
+
+	return Result;
 }
 
 // ============================================================

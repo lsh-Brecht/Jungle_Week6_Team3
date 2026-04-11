@@ -20,4 +20,6 @@ public:
 
 private:
 	FRotator RotationRate = FRotator(0.0f, 90.0f, 0.0f);
+  bool bRotationInlocalSpace = true;
+	FVector PivotTranslation = FVector(0.0f, 0.0f, 0.0f);
 };

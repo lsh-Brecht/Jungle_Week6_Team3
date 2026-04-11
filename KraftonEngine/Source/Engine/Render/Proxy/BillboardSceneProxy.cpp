@@ -77,11 +77,7 @@ void FBillboardSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	if (!bVisible) return;
 
 	// Bus 카메라 벡터로 per-view 빌보드 행렬 계산
-	FVector BillboardForward = Bus.GetCameraForward() * -1.0f;
-	FMatrix RotMatrix;
-	RotMatrix.SetAxes(BillboardForward, Bus.GetCameraRight() * -1.0f, Bus.GetCameraUp());
-	FMatrix BillboardMatrix = FMatrix::MakeScaleMatrix(Comp->GetWorldScale())
-		* RotMatrix * FMatrix::MakeTranslationMatrix(Comp->GetWorldLocation());
+	FMatrix BillboardMatrix = Comp->ComputeBillboardMatrix(Bus.GetCameraForward());
 
 	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(BillboardMatrix);
 	MarkPerObjectCBDirty();

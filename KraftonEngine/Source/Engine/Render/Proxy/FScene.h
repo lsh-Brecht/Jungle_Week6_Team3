@@ -4,6 +4,7 @@
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 
 class UPrimitiveComponent;
+class ISceneEffectSource;
 
 // ============================================================
 // FScene — FPrimitiveSceneProxy의 소유자 겸 변경 추적 컨테이너
@@ -37,6 +38,11 @@ public:
 	// PerObjectCBPool(ProxyId 인덱싱, 월드 간 공유)이 타 월드 값으로 오염된 상태를
 	// 리프레시하기 위해 사용. GPU 업로드는 다음 프레임 Render에서 수행된다.
 	void MarkAllPerObjectCBDirty();
+
+	// --- Scene Effects ---
+	void RegisterSceneEffectSource(ISceneEffectSource* Source);
+	void UnregisterSceneEffectSource(ISceneEffectSource* Source);
+	FSceneEffectConstants GetSceneEffectConstants() const;
 
 	// --- 선택 ---
 	void SetProxySelected(FPrimitiveSceneProxy* Proxy, bool bSelected);
@@ -73,4 +79,7 @@ private:
 	// 매 프레임 frustum culling 결과 캐시 (World::UpdateVisibleProxies가 채움)
 	TArray<FPrimitiveSceneProxy*> VisibleProxies;
 	bool bVisibleSetDirty = true;
+
+	// FScene에 등록된 특수효과 목록. 현재는 고정 개수만큼 활성 효과를 순서대로 채웁니다.
+	TArray<ISceneEffectSource*> SceneEffectSources;
 };
