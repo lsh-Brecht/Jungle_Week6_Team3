@@ -125,8 +125,11 @@ private:
 
 	// PostProcess Outline — StencilSRV 읽어 edge detection 후 fullscreen draw
 	void DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
+ // PostProcess FXAA — SceneColor를 입력으로 받아 fullscreen FXAA 적용
+	void DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
+
 	//	Post 체인(Decal/Fog/Outline/FXAA) 실행
 	void ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 	//	뷰포트 크기에 맞는 post 중간 RT/Mask를 보장
