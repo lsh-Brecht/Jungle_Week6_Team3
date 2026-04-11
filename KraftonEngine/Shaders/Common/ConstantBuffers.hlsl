@@ -60,7 +60,8 @@ cbuffer OutlinePostProcessCB : register(b3)
     float4 OutlineColor; // 아웃라인 색상 + 알파
     float OutlineThickness; // 샘플링 오프셋 (픽셀 단위, 보통 1.0)
     float OutlineFalloff;  // Radius 감쇠 지수
-    float2 _Pad;
+    float bOutputLumaToAlpha;
+    float OutputAlpha;
 };
 
 struct FogUniformParameters
