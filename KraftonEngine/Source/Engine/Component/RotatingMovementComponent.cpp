@@ -3,6 +3,7 @@
 #include "Object/ObjectFactory.h"
 #include "SceneComponent.h"
 #include "Serialization/Archive.h"
+#include "Math/Vector.h"
 
 IMPLEMENT_CLASS(URotatingMovementComponent, UMovementComponent)
 
