@@ -303,8 +303,9 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		const auto& Batcher = PassBatchers[i];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
-		if (!bHasBatcher && !bHasProxies) continue;
-		if (bHasBatcher && !bHasProxies && Batcher.IsEmpty && Batcher.IsEmpty()) continue;
+		const bool bAlwaysExecutePass = (CurPass == ERenderPass::SelectionMask || CurPass == ERenderPass::PostProcess);
+		if (!bAlwaysExecutePass && !bHasBatcher && !bHasProxies) continue;
+		if (!bAlwaysExecutePass && bHasBatcher && !bHasProxies && Batcher.IsEmpty && Batcher.IsEmpty()) continue;
 
 		const char* PassName = GetRenderPassName(CurPass);
 		SCOPE_STAT_CAT(PassName, "4_ExecutePass");
@@ -779,26 +780,31 @@ void FRenderer::ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Cont
 
 void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context)
 {
-	//	선택된 프록시를 전용 마스크 RT로 렌더한다.
+	//	선택 마스크 RT는 매 프레임 비워서 이전 프레임 outline 잔상이 남지 않게 한다.
 	if (!OutlineMaskRTV)
 	{
 		return;
 	}
 
+	ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
+	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
+	const float ClearMask[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	Context->ClearRenderTargetView(OutlineMaskRTV, ClearMask);
+
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
 	if (MaskProxies.empty())
 	{
+		if (ViewportRTV)
+		{
+			Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
+		}
 		return;
 	}
 
-	ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
-	const float ClearMask[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	Context->ClearRenderTargetView(OutlineMaskRTV, ClearMask);
 	Context->OMSetRenderTargets(1, &OutlineMaskRTV, DSV);
 
 	ExecutePass(MaskProxies, Context);
 
-	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
 	if (ViewportRTV)
 	{
 		Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
@@ -807,8 +813,9 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 
 void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceContext* Context)
 {
-	//	Depth ViewMode는 PostProcess 체인을 지나지 않는다.
-	if (Bus.GetViewMode() == EViewMode::Depth)
+	//	Depth 모드는 후처리를 건너뛴다. SceneDepth는 outline만 허용한다.
+	const EViewMode ViewMode = Bus.GetViewMode();
+	if (ViewMode == EViewMode::Depth)
 	{
 		return;
 	}
@@ -838,6 +845,11 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 	for (EPostEffectType Type : Order)
 	{
 		const uint32 Idx = static_cast<uint32>(Type);
+		if (ViewMode == EViewMode::SceneDepth && Type != EPostEffectType::Outline)
+		{
+			continue;
+		}
+
 		if (!PostEffects[Idx].bEnabled)
 		{
 			continue;
@@ -998,6 +1010,8 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 	PPConstants.OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
 	PPConstants.OutlineThickness = 7.0f;
 	PPConstants.OutlineFalloff = 1.6f;
+	PPConstants.bOutputLumaToAlpha = (Bus.GetViewMode() == EViewMode::SceneDepth) ? 0.0f : 1.0f;
+	PPConstants.OutputAlpha = 1.0f;
 	OutlineCB->Update(Context, &PPConstants, sizeof(PPConstants));
 	ID3D11Buffer* cb = OutlineCB->GetBuffer();
 	Context->PSSetConstantBuffers(ECBSlot::PostProcess, 1, &cb);

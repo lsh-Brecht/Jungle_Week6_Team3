@@ -118,5 +118,6 @@ float4 PS(PS_Input input) : SV_TARGET
     float luma = dot(finalColor, float3(0.299f, 0.587f, 0.114f));
 
     // 4. RGB와 Luma(Alpha 채널)를 함께 반환!
-    return float4(finalColor, luma);
+    float outAlpha = (bOutputLumaToAlpha > 0.5f) ? luma : OutputAlpha;
+    return float4(finalColor, outAlpha);
 }

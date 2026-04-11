@@ -101,7 +101,8 @@ struct FOutlinePostProcessConstants
 	FVector4 OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
 	float OutlineThickness = 1.0f;
 	float OutlineFalloff = 1.6f;
-	float Padding[2] = {};
+	float bOutputLumaToAlpha = 1.0f;
+	float OutputAlpha = 1.0f;
 };
 
 struct FFXAAConstants
