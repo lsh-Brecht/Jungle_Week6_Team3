@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <utility>
 #include "Resource/ResourceManager.h"
 #include "Render/Types/RenderTypes.h"
 #include "Render/Resource/ConstantBufferPool.h"
@@ -10,6 +11,18 @@
 #include "Engine/Runtime/Engine.h"
 #include "Profiling/Timer.h"
 
+namespace
+{
+	template <typename T>
+	void SafeRelease(T*& Resource)
+	{
+		if (Resource)
+		{
+			Resource->Release();
+			Resource = nullptr;
+		}
+	}
+}
 
 void FRenderer::Create(HWND hWindow)
 {
@@ -32,6 +45,15 @@ void FRenderer::Create(HWND hWindow)
 
 	InitializePassRenderStates();
 	InitializePassBatchers();
+	
+	//	PostEffect 등록 API를 통해 연결한다.
+	RegisterPostEffect(EPostEffectType::Outline,
+		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+		{
+			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
+		});
+	
+	SetPostEffectEnabled(EPostEffectType::Outline, true);
 
 	// GPU Profiler 초기화
 	FGPUProfiler::Get().Initialize(Device.GetDevice(), Device.GetDeviceContext());
@@ -52,6 +74,12 @@ void FRenderer::Release()
 		CB.Release();
 	}
 	PerObjectCBPool.clear();
+	ReleasePostProcessTargets();
+	for (auto& Effect : PostEffects)
+	{
+		Effect.Callback = nullptr;
+		Effect.bEnabled = false;
+	}
 
 	Resources.Release();
 	FConstantBufferPool::Get().Release();
@@ -205,12 +233,48 @@ void FRenderer::BeginFrame()
 	Context->OMSetRenderTargets(1, &RTV, DSV);
 }
 
+void FRenderer::RegisterPostEffect(EPostEffectType Type, FPostEffectCallback Callback)
+{
+	//	팀원이 개별 post 효과를 주입하는 등록 지점
+	const uint32 Idx = static_cast<uint32>(Type);
+	if (Idx >= static_cast<uint32>(EPostEffectType::MAX))
+	{
+		return;
+	}
+
+	PostEffects[Idx].Callback = std::move(Callback);
+}
+
+void FRenderer::SetPostEffectEnabled(EPostEffectType Type, bool bEnabled)
+{
+	//	효과 활성화/비활성화 토글 (런타임 옵션 연결용)
+	const uint32 Idx = static_cast<uint32>(Type);
+	if (Idx >= static_cast<uint32>(EPostEffectType::MAX))
+	{
+		return;
+	}
+
+	PostEffects[Idx].bEnabled = bEnabled;
+}
+
+bool FRenderer::IsPostEffectEnabled(EPostEffectType Type) const
+{
+	const uint32 Idx = static_cast<uint32>(Type);
+	if (Idx >= static_cast<uint32>(EPostEffectType::MAX))
+	{
+		return false;
+	}
+
+	return PostEffects[Idx].bEnabled;
+}
+
 //	RenderBus에 담긴 모든 RenderCommand에 대해서 Draw Call 수행 (GPU)
 void FRenderer::Render(const FRenderBus& InRenderBus)
 {
 	FDrawCallStats::Reset();
 
 	ID3D11DeviceContext* Context = Device.GetDeviceContext();
+	EnsurePostProcessTargets(InRenderBus);
 	{
 		SCOPE_STAT_CAT("UpdateFrameBuffer", "4_ExecutePass");
 		UpdateFrameBuffer(Context, InRenderBus);
@@ -231,6 +295,17 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		GPU_SCOPE_STAT(PassName);
 
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
+		if (CurPass == ERenderPass::SelectionMask)
+		{
+			ExecuteSelectionMaskPass(InRenderBus, Context);
+			continue;
+		}
+
+		if (CurPass == ERenderPass::PostProcess)
+		{
+			ExecutePostProcessChain(InRenderBus, Context);
+			continue;
+		}
 
 		if (bHasBatcher)
 			PassBatchers[i].DrawBatch(CurPass, InRenderBus, Context);
@@ -250,13 +325,15 @@ void FRenderer::InitializePassRenderStates()
 	//                              DepthStencil                    Blend                Rasterizer                   Topology                                WireframeAware
 	S[(uint32)E::Opaque] = { EDepthStencilState::Default,      EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::Translucent] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::SelectionMask] = { EDepthStencilState::StencilWrite,  EBlendState::NoColor,    ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
+	S[(uint32)E::SelectionMask] = { EDepthStencilState::DepthReadOnly, EBlendState::Opaque,     ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::PostProcess] = { EDepthStencilState::NoDepth,       EBlendState::AlphaBlend, ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::Editor] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     true };
 	S[(uint32)E::Grid] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     false };
 	S[(uint32)E::GizmoOuter] = { EDepthStencilState::GizmoOutside, EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::GizmoInner] = { EDepthStencilState::GizmoInside,  EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	//	Outline에 대한 Masking 방해로 인해 Patch
+	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::Font] = { EDepthStencilState::DepthReadOnly,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::OverlayFont] = { EDepthStencilState::NoDepth,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 	S[(uint32)E::SubUV] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
 	S[(uint32)E::Billboard] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
@@ -312,8 +389,7 @@ void FRenderer::InitializePassBatchers()
 	};
 
 	PassBatchers[(uint32)ERenderPass::PostProcess] = {
-		[this](ERenderPass Pass, const FRenderBus& Bus, ID3D11DeviceContext* Ctx) {
-			DrawPostProcessOutline(Bus, Ctx);
+		[this](ERenderPass, const FRenderBus&, ID3D11DeviceContext*) {
 		},
 		nullptr  // PostProcess는 내부에서 SelectionMask 체크
 	};
@@ -638,50 +714,242 @@ void FRenderer::ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Cont
 	Context->IASetPrimitiveTopology(State.Topology);
 }
 
-// ============================================================
-// PostProcess Outline — DSV unbind → StencilSRV bind → Fullscreen Draw
-// ============================================================
-void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context)
+void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context)
 {
-	ID3D11ShaderResourceView* StencilSRV = Bus.GetViewportStencilSRV();
+	//	선택된 프록시를 전용 마스크 RT로 렌더한다.
+	if (!OutlineMaskRTV)
+	{
+		return;
+	}
+
+	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
+	if (MaskProxies.empty())
+	{
+		return;
+	}
+
 	ID3D11DepthStencilView* DSV = Bus.GetViewportDSV();
-	ID3D11RenderTargetView* RTV = Bus.GetViewportRTV();
-	if (!StencilSRV || !RTV) return;
+	const float ClearMask[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	Context->ClearRenderTargetView(OutlineMaskRTV, ClearMask);
+	Context->OMSetRenderTargets(1, &OutlineMaskRTV, DSV);
 
-	// SelectionMask 큐가 비어 있으면 선택된 오브젝트 없음 → 스킵
-	if (Bus.GetProxies(ERenderPass::SelectionMask).empty()) return;
+	ExecutePass(MaskProxies, Context);
 
-	// 1) DSV 언바인딩 (StencilSRV와 동시 바인딩 불가)
-	Context->OMSetRenderTargets(1, &RTV, nullptr);
+	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
+	if (ViewportRTV)
+	{
+		Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
+	}
+}
 
-	// 2) StencilSRV → PS t0 바인딩
-	Context->PSSetShaderResources(0, 1, &StencilSRV);
+void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceContext* Context)
+{
+	//	Depth ViewMode는 PostProcess 체인을 지나지 않는다.
+	if (Bus.GetViewMode() == EViewMode::Depth)
+	{
+		return;
+	}
 
-	// 3) PostProcess 셰이더 바인딩
+	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
+	ID3D11DepthStencilView* ViewportDSV = Bus.GetViewportDSV();
+	ID3D11ShaderResourceView* SceneColorSRV = Bus.GetViewportSRV();
+	if (!ViewportRTV || !SceneColorSRV || !PostPingRTV[0] || !PostPingSRV[0])
+	{
+		return;
+	}
+
+	Context->OMSetRenderTargets(0, nullptr, nullptr);
+	bool bExecutedAnyPost = false;
+
+	//	기본 체인 순서: Decal -> Fog -> Outline -> FXAA
+	const EPostEffectType Order[] = {
+		EPostEffectType::Decal,
+		EPostEffectType::Fog,
+		EPostEffectType::Outline,
+		EPostEffectType::FXAA
+	};
+
+	uint32 WriteIndex = 0;
+	ID3D11ShaderResourceView* CurrentColor = SceneColorSRV;
+
+	for (EPostEffectType Type : Order)
+	{
+		const uint32 Idx = static_cast<uint32>(Type);
+		if (!PostEffects[Idx].bEnabled)
+		{
+			continue;
+		}
+
+		FPostProcessIO IO = {};
+		IO.ColorInput = CurrentColor;
+		IO.DepthInput = Bus.GetViewportDepthSRV();
+		IO.OutlineMask = OutlineMaskSRV;
+		IO.ColorOutput = PostPingRTV[WriteIndex];
+
+		const auto& Callback = PostEffects[Idx].Callback;
+		if (Callback)
+		{
+			Callback(Bus, Context, IO);
+		}
+		else if (Type == EPostEffectType::Outline)
+		{
+			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
+		}
+		else
+		{
+			BlitSRVToRTV(IO.ColorInput, IO.ColorOutput, Context);
+		}
+
+		CurrentColor = PostPingSRV[WriteIndex];
+		WriteIndex = 1 - WriteIndex;
+		bExecutedAnyPost = true;
+	}
+
+	if (bExecutedAnyPost)
+	{
+		BlitSRVToRTV(CurrentColor, ViewportRTV, Context);
+	}
+
+	Context->OMSetRenderTargets(1, &ViewportRTV, ViewportDSV);
+}
+
+void FRenderer::EnsurePostProcessTargets(const FRenderBus& Bus)
+{
+	//	뷰포트 해상도 기준으로 post 중간 버퍼를 재생성한다.
+	if (!Bus.GetViewportRTV())
+	{
+		ReleasePostProcessTargets();
+		return;
+	}
+
+	const uint32 Width = static_cast<uint32>(Bus.GetViewportWidth());
+	const uint32 Height = static_cast<uint32>(Bus.GetViewportHeight());
+	if (Width == 0 || Height == 0)
+	{
+		ReleasePostProcessTargets();
+		return;
+	}
+
+	if (PostTargetWidth == Width && PostTargetHeight == Height && PostPingRTV[0] && OutlineMaskRTV)
+	{
+		return;
+	}
+
+	ReleasePostProcessTargets();
+
+	ID3D11Device* D3DDevice = Device.GetDevice();
+	if (!D3DDevice)
+	{
+		return;
+	}
+
+	D3D11_TEXTURE2D_DESC ColorDesc = {};
+	ColorDesc.Width = Width;
+	ColorDesc.Height = Height;
+	ColorDesc.MipLevels = 1;
+	ColorDesc.ArraySize = 1;
+	ColorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	ColorDesc.SampleDesc.Count = 1;
+	ColorDesc.Usage = D3D11_USAGE_DEFAULT;
+	ColorDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+	D3D11_TEXTURE2D_DESC MaskDesc = ColorDesc;
+
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (FAILED(D3DDevice->CreateTexture2D(&ColorDesc, nullptr, &PostPingTexture[i]))) return;
+		if (FAILED(D3DDevice->CreateRenderTargetView(PostPingTexture[i], nullptr, &PostPingRTV[i]))) return;
+		if (FAILED(D3DDevice->CreateShaderResourceView(PostPingTexture[i], nullptr, &PostPingSRV[i]))) return;
+	}
+
+	if (FAILED(D3DDevice->CreateTexture2D(&MaskDesc, nullptr, &OutlineMaskTexture))) return;
+	if (FAILED(D3DDevice->CreateRenderTargetView(OutlineMaskTexture, nullptr, &OutlineMaskRTV))) return;
+	if (FAILED(D3DDevice->CreateShaderResourceView(OutlineMaskTexture, nullptr, &OutlineMaskSRV))) return;
+
+	PostTargetWidth = Width;
+	PostTargetHeight = Height;
+}
+
+void FRenderer::ReleasePostProcessTargets()
+{
+	//	post ping-pong/mask 리소스를 모두 해제한다.
+	for (int32 i = 0; i < 2; ++i)
+	{
+		SafeRelease(PostPingSRV[i]);
+		SafeRelease(PostPingRTV[i]);
+		SafeRelease(PostPingTexture[i]);
+	}
+
+	SafeRelease(OutlineMaskSRV);
+	SafeRelease(OutlineMaskRTV);
+	SafeRelease(OutlineMaskTexture);
+
+	PostTargetWidth = 0;
+	PostTargetHeight = 0;
+}
+
+void FRenderer::BlitSRVToRTV(ID3D11ShaderResourceView* SourceSRV, ID3D11RenderTargetView* DestRTV, ID3D11DeviceContext* Context)
+{
+	if (!SourceSRV || !DestRTV || !Context)
+	{
+		return;
+	}
+
+	ID3D11Resource* SrcResource = nullptr;
+	ID3D11Resource* DstResource = nullptr;
+	SourceSRV->GetResource(&SrcResource);
+	DestRTV->GetResource(&DstResource);
+
+	if (SrcResource && DstResource)
+	{
+		Context->CopyResource(DstResource, SrcResource);
+	}
+
+	SafeRelease(SrcResource);
+	SafeRelease(DstResource);
+}
+
+// ============================================================
+// PostProcess Outline — SceneColor + OutlineMask를 결합
+// ============================================================
+void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV)
+{
+	if (!SceneColorSRV || !OutlineMaskSRV || !OutputRTV)
+	{
+		return;
+	}
+
+	// SelectionMask 큐가 비어 있으면 복사만 수행
+	if (Bus.GetProxies(ERenderPass::SelectionMask).empty())
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &OutputRTV, nullptr);
+
+	ID3D11ShaderResourceView* SRVs[2] = { SceneColorSRV, OutlineMaskSRV };
+	Context->PSSetShaderResources(0, 2, SRVs);
+
 	FShader* PPShader = FShaderManager::Get().GetShader(EShaderType::OutlinePostProcess);
 	if (PPShader) PPShader->Bind(Context);
 
-	// 4) Outline CB (b3) 업데이트
 	FConstantBuffer* OutlineCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess, sizeof(FOutlinePostProcessConstants));
 	FOutlinePostProcessConstants PPConstants;
 	PPConstants.OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
-	PPConstants.OutlineThickness = 3.0f;
+	PPConstants.OutlineThickness = 7.0f;
+	PPConstants.OutlineFalloff = 1.6f;
 	OutlineCB->Update(Context, &PPConstants, sizeof(PPConstants));
 	ID3D11Buffer* cb = OutlineCB->GetBuffer();
 	Context->PSSetConstantBuffers(ECBSlot::PostProcess, 1, &cb);
 
-	// 5) Fullscreen Triangle 드로우 (vertex buffer 없이 SV_VertexID 사용)
 	Context->IASetInputLayout(nullptr);
 	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
 	Context->Draw(3, 0);
 	FDrawCallStats::Increment();
 
-	// 6) StencilSRV 언바인딩
-	ID3D11ShaderResourceView* nullSRV = nullptr;
-	Context->PSSetShaderResources(0, 1, &nullSRV);
-
-	// 7) DSV 재바인딩 (후속 패스에서 뎁스 사용)
-	Context->OMSetRenderTargets(1, &RTV, DSV);
+	ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+	Context->PSSetShaderResources(0, 2, NullSRV);
 }
 
 //	Present the rendered frame to the screen. 반드시 Render 이후에 호출되어야 함.
