@@ -42,6 +42,13 @@ public:
 	void ResetViewport();
 	void CloseScene();
 	void NewScene();
+	bool LoadSceneWithDialog();
+	bool LoadSceneFromPath(const FString& InScenePath);
+	bool SaveScene();
+	bool SaveSceneAsWithDialog();
+	bool SaveSceneAs(const FString& InSceneName);
+	bool HasCurrentLevelFilePath() const { return !CurrentLevelFilePath.empty(); }
+	const FString& GetCurrentLevelFilePath() const { return CurrentLevelFilePath; }
 
 	FEditorSettings& GetSettings() { return FEditorSettings::Get(); }
 	const FEditorSettings& GetSettings() const { return FEditorSettings::Get(); }
@@ -121,4 +128,5 @@ private:
 	EPIEControlMode PIEControlMode = EPIEControlMode::Possessed;
 	FLevelEditorViewportClient* PIEEntryViewportClient = nullptr;
 	bool bSavedEntryViewportGizmo = true;
+	FString CurrentLevelFilePath;
 };

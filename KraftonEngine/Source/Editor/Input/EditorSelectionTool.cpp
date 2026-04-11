@@ -1,29 +1,17 @@
 #include "Editor/Input/EditorSelectionTool.h"
 
+#include <algorithm>
+#include <cmath>
+
+#include "Editor/Input/EditorViewportInputMapping.h"
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "Editor/Selection/SelectionManager.h"
-#include "Editor/Settings/EditorSettings.h"
 #include "Component/CameraComponent.h"
 #include "Component/GizmoComponent.h"
-#include "Collision/RayUtils.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
+#include "Math/Matrix.h"
 #include "Viewport/Viewport.h"
-
-namespace
-{
-bool HasKeyEvent(const FViewportInputContext& Context, EInputEventType Type, int32 Key)
-{
-	for (const FInputEvent& Event : Context.Events)
-	{
-		if (Event.Type == Type && Event.Key == Key)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-}
 
 FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 	: Owner(InOwner)
@@ -32,6 +20,7 @@ FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 
 bool FEditorSelectionTool::HandleInput(float DeltaTime)
 {
+	(void)DeltaTime;
 	UWorld* InteractionWorld = Owner ? Owner->ResolveInteractionWorld() : nullptr;
 	if (!Owner || !Owner->GetCamera() || !Owner->GetGizmo() || !InteractionWorld || !Owner->GetSelectionManager())
 	{
@@ -39,55 +28,259 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 	}
 
 	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
-	UCameraComponent* Camera = Owner->GetCamera();
-	UGizmoComponent* Gizmo = Owner->GetGizmo();
-
-	bool bConsumed = false;
-	const FEditorSettings* Settings = Owner->GetSettings();
-	const float ZoomSpeed = Settings ? Settings->CameraZoomSpeed : 300.f;
-	const float ScrollNotches = Context.Frame.WheelNotches;
-	if (ScrollNotches != 0.0f)
+	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
 	{
-		if (Camera->IsOrthogonal())
+		return false;
+	}
+
+	bool bBoxAdditive = false;
+	const bool bBoxSelectDown = IsBoxSelectionChordDown(bBoxAdditive);
+	if (bBoxSelectDown)
+	{
+		const POINT CurrentLocal = Context.MouseLocalPos;
+		if (!bSelectionMarqueeActive)
 		{
-			float NewWidth = Camera->GetOrthoWidth() - ScrollNotches * ZoomSpeed * DeltaTime;
-			Camera->SetOrthoWidth(Clamp(NewWidth, 0.1f, 1000.0f));
+			BeginSelectionMarquee(CurrentLocal, bBoxAdditive);
 		}
 		else
 		{
-			Camera->MoveLocal(FVector(ScrollNotches * ZoomSpeed * 0.015f, 0.0f, 0.0f));
+			UpdateSelectionMarquee(CurrentLocal);
 		}
-		bConsumed = true;
+
+		if (Context.WasPointerDragStarted(EPointerButton::Left))
+		{
+			return true;
+		}
 	}
 
-	if (!HasKeyEvent(Context, EInputEventType::KeyPressed, VK_LBUTTON))
+	if (bSelectionMarqueeActive)
 	{
-		return bConsumed;
+		const bool bBoxReleased =
+			Context.WasPointerDragEnded(EPointerButton::Left) || !bBoxSelectDown;
+		if (bBoxReleased)
+		{
+			ApplySelectionMarquee(bSelectionMarqueeAdditive);
+			EndSelectionMarquee();
+			return true;
+		}
+		return true;
+	}
+
+	const bool bSelectionClickTriggered =
+		EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::SelectPrimaryReleased)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::SelectToggleReleased)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::SelectAddReleased);
+	if (!bSelectionClickTriggered)
+	{
+		return false;
+	}
+	if (Context.WasPointerDragEnded(EPointerButton::Left))
+	{
+		return true;
 	}
 
 	float LocalMouseX = static_cast<float>(Context.MouseLocalPos.x);
 	float LocalMouseY = static_cast<float>(Context.MouseLocalPos.y);
 	float VPWidth = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetWidth()) : Owner->GetWindowWidth();
 	float VPHeight = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetHeight()) : Owner->GetWindowHeight();
-	FRay Ray = Camera->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
+	const FRay Ray = Owner->GetCamera()->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
+	HandleSelectionClick(Ray);
+	return true;
+}
 
-	FHitResult HitResult{};
-	if (FRayUtils::RaycastComponent(Gizmo, Ray, HitResult))
+bool FEditorSelectionTool::IsBoxSelectionChordDown(bool& bOutAdditive) const
+{
+	bOutAdditive = false;
+	if (!Owner)
 	{
+		return false;
+	}
+
+	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
+	if (EditorViewportInputMapping::IsTriggered(
+		Context,
+		EditorViewportInputMapping::EEditorViewportAction::BoxSelectAdditiveDown))
+	{
+		bOutAdditive = true;
 		return true;
 	}
 
+	return EditorViewportInputMapping::IsTriggered(
+		Context,
+		EditorViewportInputMapping::EEditorViewportAction::BoxSelectReplaceDown);
+}
+
+void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray)
+{
+	if (!Owner || !Owner->GetSelectionManager())
+	{
+		return;
+	}
+
+	UWorld* InteractionWorld = Owner->ResolveInteractionWorld();
+	if (!InteractionWorld)
+	{
+		return;
+	}
+
+	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
+	const bool bCtrlHeld = Context.Frame.IsCtrlDown();
+	const bool bShiftHeld = Context.Frame.IsShiftDown();
+
+	FHitResult HitResult{};
 	AActor* BestActor = nullptr;
 	InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
 	if (!BestActor)
 	{
-		Owner->GetSelectionManager()->ClearSelection();
+		if (!bCtrlHeld && !bShiftHeld)
+		{
+			Owner->GetSelectionManager()->ClearSelection();
+		}
+		return;
+	}
+
+	if (bCtrlHeld)
+	{
+		Owner->GetSelectionManager()->ToggleSelect(BestActor);
+	}
+	else if (bShiftHeld)
+	{
+		Owner->GetSelectionManager()->AddSelect(BestActor);
 	}
 	else
 	{
 		Owner->GetSelectionManager()->Select(BestActor);
 	}
+}
 
+bool FEditorSelectionTool::TryProjectActorToViewportLocal(AActor* Actor, float& OutX, float& OutY) const
+{
+	if (!Owner || !Owner->GetCamera() || !Owner->GetViewport() || !Actor)
+	{
+		return false;
+	}
+
+	const FVector WorldPos = Actor->GetActorLocation();
+	const FMatrix ViewProjection = Owner->GetCamera()->GetViewMatrix() * Owner->GetCamera()->GetProjectionMatrix();
+
+	const float ClipX = WorldPos.X * ViewProjection.M[0][0] + WorldPos.Y * ViewProjection.M[1][0] + WorldPos.Z * ViewProjection.M[2][0] + ViewProjection.M[3][0];
+	const float ClipY = WorldPos.X * ViewProjection.M[0][1] + WorldPos.Y * ViewProjection.M[1][1] + WorldPos.Z * ViewProjection.M[2][1] + ViewProjection.M[3][1];
+	const float ClipZ = WorldPos.X * ViewProjection.M[0][2] + WorldPos.Y * ViewProjection.M[1][2] + WorldPos.Z * ViewProjection.M[2][2] + ViewProjection.M[3][2];
+	const float ClipW = WorldPos.X * ViewProjection.M[0][3] + WorldPos.Y * ViewProjection.M[1][3] + WorldPos.Z * ViewProjection.M[2][3] + ViewProjection.M[3][3];
+	if (std::abs(ClipW) < 1e-6f)
+	{
+		return false;
+	}
+
+	const float InvW = 1.0f / ClipW;
+	const float NdcX = ClipX * InvW;
+	const float NdcY = ClipY * InvW;
+	const float NdcZ = ClipZ * InvW;
+	if (NdcX < -1.0f || NdcX > 1.0f || NdcY < -1.0f || NdcY > 1.0f || NdcZ < 0.0f || NdcZ > 1.0f)
+	{
+		return false;
+	}
+
+	const float Width = static_cast<float>(Owner->GetViewport()->GetWidth());
+	const float Height = static_cast<float>(Owner->GetViewport()->GetHeight());
+	if (Width <= 0.0f || Height <= 0.0f)
+	{
+		return false;
+	}
+
+	OutX = (NdcX * 0.5f + 0.5f) * Width;
+	OutY = (1.0f - (NdcY * 0.5f + 0.5f)) * Height;
 	return true;
+}
+
+void FEditorSelectionTool::ApplySelectionMarquee(bool bAdditive)
+{
+	if (!Owner || !Owner->GetSelectionManager() || !Owner->ResolveInteractionWorld() || !bSelectionMarqueeActive)
+	{
+		return;
+	}
+
+	const POINT& Start = SelectionMarqueeStartLocal;
+	const POINT& Current = SelectionMarqueeCurrentLocal;
+	const float Left = static_cast<float>((std::min)(Start.x, Current.x));
+	const float Right = static_cast<float>((std::max)(Start.x, Current.x));
+	const float Top = static_cast<float>((std::min)(Start.y, Current.y));
+	const float Bottom = static_cast<float>((std::max)(Start.y, Current.y));
+	if ((Right - Left) < 2.0f || (Bottom - Top) < 2.0f)
+	{
+		return;
+	}
+
+	TArray<AActor*> Hits;
+	const TArray<AActor*>& Actors = Owner->ResolveInteractionWorld()->GetActors();
+	for (AActor* Actor : Actors)
+	{
+		if (!Actor || !Actor->IsVisible())
+		{
+			continue;
+		}
+
+		float ScreenX = 0.0f;
+		float ScreenY = 0.0f;
+		if (!TryProjectActorToViewportLocal(Actor, ScreenX, ScreenY))
+		{
+			continue;
+		}
+
+		if (ScreenX >= Left && ScreenX <= Right && ScreenY >= Top && ScreenY <= Bottom)
+		{
+			Hits.push_back(Actor);
+		}
+	}
+
+	if (!bAdditive)
+	{
+		Owner->GetSelectionManager()->ClearSelection();
+	}
+
+	for (AActor* HitActor : Hits)
+	{
+		Owner->GetSelectionManager()->AddSelect(HitActor);
+	}
+}
+
+bool FEditorSelectionTool::GetSelectionMarquee(POINT& OutStart, POINT& OutCurrent, bool& bOutAdditive) const
+{
+	if (!bSelectionMarqueeActive)
+	{
+		OutStart = { 0, 0 };
+		OutCurrent = { 0, 0 };
+		bOutAdditive = false;
+		return false;
+	}
+
+	OutStart = SelectionMarqueeStartLocal;
+	OutCurrent = SelectionMarqueeCurrentLocal;
+	bOutAdditive = bSelectionMarqueeAdditive;
+	return true;
+}
+
+void FEditorSelectionTool::BeginSelectionMarquee(const POINT& InLocalStart, bool bInAdditive)
+{
+	bSelectionMarqueeActive = true;
+	bSelectionMarqueeAdditive = bInAdditive;
+	SelectionMarqueeStartLocal = InLocalStart;
+	SelectionMarqueeCurrentLocal = InLocalStart;
+}
+
+void FEditorSelectionTool::UpdateSelectionMarquee(const POINT& InLocalCurrent)
+{
+	if (!bSelectionMarqueeActive)
+	{
+		return;
+	}
+
+	SelectionMarqueeCurrentLocal = InLocalCurrent;
+}
+
+void FEditorSelectionTool::EndSelectionMarquee()
+{
+	bSelectionMarqueeActive = false;
+	bSelectionMarqueeAdditive = false;
 }
 

@@ -59,6 +59,11 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 	{
 		bPIEInputArmed = false;
 	}
+	if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_F1) && Context.Frame.IsDown(VK_SHIFT))
+	{
+		bPIEInputArmed = false;
+		return true;
+	}
 
 	const bool bInputOwnership = Context.bFocused && (Context.bCaptured || Context.bRelativeMouseMode);
 	if (!bInputOwnership)

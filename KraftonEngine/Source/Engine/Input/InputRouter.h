@@ -37,7 +37,11 @@ private:
 	};
 
 	static bool IsPointInRect(const POINT& Point, const FRect& Rect);
+	RECT GetTargetRectScreenRect(const FRect& TargetRect) const;
 	FTargetEntry* FindEntryByViewport(FViewport* InViewport, FRect& OutRect);
+	POINT GetTargetRectScreenCenter(const FRect& TargetRect) const;
+	void ActivateRelativeMouseMode(FViewport* InViewport, const POINT& RestoreScreenPos, const RECT& ClipScreenRect);
+	void DeactivateRelativeMouseMode();
 
 private:
 	TArray<FTargetEntry> Targets;
@@ -50,4 +54,8 @@ private:
 	bool bImGuiCaptureMouse = false;
 	bool bImGuiCaptureKeyboard = false;
 	uint64 InputFrameCounter = 0;
+	bool bRelativeMouseModeActive = false;
+	FViewport* RelativeMouseModeViewport = nullptr;
+	POINT RelativeMouseRestorePos = { 0, 0 };
+	RECT RelativeMouseClipRect = { 0, 0, 0, 0 };
 };

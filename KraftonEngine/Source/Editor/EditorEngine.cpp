@@ -11,8 +11,51 @@
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
 #include "Viewport/GameViewportClient.h"
+#include "Platform/Paths.h"
+
+#include <Windows.h>
+#include <commdlg.h>
+#include <filesystem>
 
 IMPLEMENT_CLASS(UEditorEngine, UEngine)
+
+namespace
+{
+UCameraComponent* FindPerspectiveViewportCamera(const UEditorEngine* InEditor)
+{
+	if (!InEditor)
+	{
+		return nullptr;
+	}
+
+	for (FLevelEditorViewportClient* VC : InEditor->GetLevelViewportClients())
+	{
+		if (!VC)
+		{
+			continue;
+		}
+		if (VC->GetRenderOptions().ViewportType == ELevelViewportType::Perspective
+			|| VC->GetRenderOptions().ViewportType == ELevelViewportType::FreeOrthographic)
+		{
+			return VC->GetCamera();
+		}
+	}
+	return nullptr;
+}
+
+FString BuildScenePathFromStem(const FString& InStem)
+{
+	std::filesystem::path ScenePath = std::filesystem::path(FSceneSaveManager::GetSceneDirectory())
+		/ (FPaths::ToWide(InStem) + FSceneSaveManager::SceneExtension);
+	return FPaths::ToUtf8(ScenePath.wstring());
+}
+
+FString GetFileStem(const FString& InPath)
+{
+	const std::filesystem::path P = std::filesystem::path(FPaths::ToWide(InPath));
+	return FPaths::ToUtf8(P.stem().wstring());
+}
+}
 
 void UEditorEngine::Init(FWindowsWindow* InWindow)
 {
@@ -503,6 +546,131 @@ void UEditorEngine::NewScene()
 	SelectionManager.SetWorld(GetWorld());
 
 	ResetViewport();
+	CurrentLevelFilePath.clear();
+}
+
+bool UEditorEngine::SaveSceneAs(const FString& InSceneName)
+{
+	if (InSceneName.empty())
+	{
+		return false;
+	}
+
+	StopPlayInEditorImmediate();
+	FWorldContext* Ctx = GetWorldContextFromHandle(GetActiveWorldHandle());
+	if (!Ctx || !Ctx->World)
+	{
+		return false;
+	}
+
+	UCameraComponent* PerspectiveCam = FindPerspectiveViewportCamera(this);
+	FSceneSaveManager::SaveSceneAsJSON(InSceneName, *Ctx, PerspectiveCam);
+	CurrentLevelFilePath = BuildScenePathFromStem(InSceneName);
+	return true;
+}
+
+bool UEditorEngine::SaveScene()
+{
+	if (HasCurrentLevelFilePath())
+	{
+		return SaveSceneAs(GetFileStem(CurrentLevelFilePath));
+	}
+
+	return SaveSceneAsWithDialog();
+}
+
+bool UEditorEngine::SaveSceneAsWithDialog()
+{
+	wchar_t FilePath[MAX_PATH] = {};
+	const std::wstring InitialDir = FSceneSaveManager::GetSceneDirectory();
+	const std::wstring DefaultFile = HasCurrentLevelFilePath()
+		? std::filesystem::path(FPaths::ToWide(CurrentLevelFilePath)).filename().wstring()
+		: std::wstring(L"Untitled.Scene");
+
+	wcsncpy_s(FilePath, DefaultFile.c_str(), _TRUNCATE);
+
+	OPENFILENAMEW Ofn = {};
+	Ofn.lStructSize = sizeof(Ofn);
+	Ofn.hwndOwner = Window ? Window->GetHWND() : nullptr;
+	Ofn.lpstrFilter = L"Scene Files (*.Scene)\0*.Scene\0All Files (*.*)\0*.*\0";
+	Ofn.lpstrFile = FilePath;
+	Ofn.nMaxFile = MAX_PATH;
+	Ofn.lpstrInitialDir = InitialDir.c_str();
+	Ofn.lpstrTitle = L"Save Scene As";
+	Ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetSaveFileNameW(&Ofn))
+	{
+		return false;
+	}
+
+	const FString SelectedPath = FPaths::ToUtf8(std::wstring(FilePath));
+	return SaveSceneAs(GetFileStem(SelectedPath));
+}
+
+bool UEditorEngine::LoadSceneFromPath(const FString& InScenePath)
+{
+	if (InScenePath.empty())
+	{
+		return false;
+	}
+
+	StopPlayInEditorImmediate();
+	ClearScene();
+
+	FWorldContext LoadCtx;
+	FPerspectiveCameraData CamData;
+	FSceneSaveManager::LoadSceneFromJSON(InScenePath, LoadCtx, CamData);
+	if (!LoadCtx.World)
+	{
+		return false;
+	}
+
+	GetWorldList().push_back(LoadCtx);
+	SetActiveWorld(LoadCtx.ContextHandle);
+	GetSelectionManager().SetWorld(LoadCtx.World);
+	LoadCtx.World->WarmupPickingData();
+	ResetViewport();
+
+	if (CamData.bValid)
+	{
+		if (UCameraComponent* Cam = FindPerspectiveViewportCamera(this))
+		{
+			Cam->SetWorldLocation(CamData.Location);
+			Cam->SetRelativeRotation(CamData.Rotation);
+			FCameraState CS = Cam->GetCameraState();
+			CS.FOV = CamData.FOV;
+			CS.NearZ = CamData.NearClip;
+			CS.FarZ = CamData.FarClip;
+			Cam->SetCameraState(CS);
+		}
+	}
+
+	CurrentLevelFilePath = InScenePath;
+	return true;
+}
+
+bool UEditorEngine::LoadSceneWithDialog()
+{
+	wchar_t FilePath[MAX_PATH] = {};
+	const std::wstring InitialDir = FSceneSaveManager::GetSceneDirectory();
+
+	OPENFILENAMEW Ofn = {};
+	Ofn.lStructSize = sizeof(Ofn);
+	Ofn.hwndOwner = Window ? Window->GetHWND() : nullptr;
+	Ofn.lpstrFilter = L"Scene Files (*.Scene)\0*.Scene\0All Files (*.*)\0*.*\0";
+	Ofn.lpstrFile = FilePath;
+	Ofn.nMaxFile = MAX_PATH;
+	Ofn.lpstrInitialDir = InitialDir.c_str();
+	Ofn.lpstrTitle = L"Load Scene";
+	Ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetOpenFileNameW(&Ofn))
+	{
+		return false;
+	}
+
+	return LoadSceneFromPath(FPaths::ToUtf8(std::wstring(FilePath)));
 }
 
 void UEditorEngine::ClearScene()
@@ -523,6 +691,7 @@ void UEditorEngine::ClearScene()
 
 	WorldList.clear();
 	ActiveWorldHandle = FName::None;
+	CurrentLevelFilePath.clear();
 
 	ViewportLayout.DestroyAllCameras();
 }

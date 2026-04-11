@@ -1,21 +1,7 @@
 #pragma once
 
 #include "Engine/Input/InputTypes.h"
-
-struct FInputChord
-{
-	int32 Key = 0;
-	bool bCtrl = false;
-	bool bAlt = false;
-	bool bShift = false;
-
-	bool MatchesState(const FInputFrame& Frame) const
-	{
-		return Frame.IsDown(VK_CONTROL) == bCtrl
-			&& Frame.IsDown(VK_MENU) == bAlt
-			&& Frame.IsDown(VK_SHIFT) == bShift;
-	}
-};
+#include <limits>
 
 enum class EInputBindingTrigger : uint8
 {
@@ -98,5 +84,44 @@ namespace InputBindingUtils
 			}
 		}
 		return false;
+	}
+
+	inline bool TryGetHighestPriorityTriggeredAction(
+		const FViewportInputContext& Context,
+		const TArray<FInputBinding>& Bindings,
+		const TArray<int32>& CandidateActionIds,
+		int32& OutActionId)
+	{
+		bool bFound = false;
+		int32 BestPriority = std::numeric_limits<int32>::min();
+		int32 BestActionId = 0;
+
+		for (const int32 CandidateActionId : CandidateActionIds)
+		{
+			for (const FInputBinding& Binding : Bindings)
+			{
+				if (Binding.ActionId != CandidateActionId)
+				{
+					continue;
+				}
+				if (!IsBindingTriggered(Context, Binding))
+				{
+					continue;
+				}
+
+				if (!bFound || Binding.Priority > BestPriority)
+				{
+					bFound = true;
+					BestPriority = Binding.Priority;
+					BestActionId = CandidateActionId;
+				}
+			}
+		}
+
+		if (bFound)
+		{
+			OutActionId = BestActionId;
+		}
+		return bFound;
 	}
 }

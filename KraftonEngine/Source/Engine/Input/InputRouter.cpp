@@ -1,5 +1,6 @@
 #include "Engine/Input/InputRouter.h"
 
+#include "Engine/Input/CursorControl.h"
 #include "Engine/Input/InputSystem.h"
 #include "UI/SWindow.h"
 #include "Viewport/ViewportClient.h"
@@ -8,6 +9,8 @@
 
 namespace
 {
+constexpr float ViewportInputDeadZonePixels = 4.0f;
+
 bool IsMouseButtonKey(int32 VK)
 {
 	return (VK == VK_LBUTTON) || (VK == VK_RBUTTON) || (VK == VK_MBUTTON)
@@ -23,6 +26,16 @@ EPointerButton ToPointerButton(int32 VK)
 	case VK_MBUTTON: return EPointerButton::Middle;
 	default: return EPointerButton::None;
 	}
+}
+
+FRect GetInsetRect(const FRect& Rect, float Inset)
+{
+	FRect Out = Rect;
+	Out.X += Inset;
+	Out.Y += Inset;
+	Out.Width -= Inset * 2.0f;
+	Out.Height -= Inset * 2.0f;
+	return Out;
 }
 }
 
@@ -69,6 +82,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		HoveredViewport = nullptr;
 		FocusedViewport = nullptr;
 		CapturedViewport = nullptr;
+		if (bRelativeMouseModeActive)
+		{
+			DeactivateRelativeMouseMode();
+		}
+		FCursorControl::Clear();
 		return false;
 	}
 
@@ -77,6 +95,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		HoveredViewport = nullptr;
 		FocusedViewport = nullptr;
 		CapturedViewport = nullptr;
+		if (bRelativeMouseModeActive)
+		{
+			DeactivateRelativeMouseMode();
+		}
+		FCursorControl::Clear();
 		return false;
 	}
 
@@ -93,7 +116,13 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		{
 			continue;
 		}
-		if (IsPointInRect(MouseClientPos, Rect))
+
+		const FRect HitRect = GetInsetRect(Rect, ViewportInputDeadZonePixels);
+		if (HitRect.Width <= 0.0f || HitRect.Height <= 0.0f)
+		{
+			continue;
+		}
+		if (IsPointInRect(MouseClientPos, HitRect))
 		{
 			HoveredEntry = &Entry;
 			HoveredRect = Rect;
@@ -166,6 +195,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 	}
 	if (!TargetEntry)
 	{
+		if (bRelativeMouseModeActive)
+		{
+			DeactivateRelativeMouseMode();
+		}
+		FCursorControl::Clear();
 		return false;
 	}
 
@@ -217,6 +251,46 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 	OutContext.bCaptured = (CapturedViewport == TargetEntry->Viewport);
 	OutContext.bImGuiCapturedMouse = bImGuiCaptureMouse;
 	OutContext.bImGuiCapturedKeyboard = bImGuiCaptureKeyboard;
+	OutContext.bRelativeMouseMode = bRelativeMouseModeActive && (RelativeMouseModeViewport == TargetEntry->Viewport);
+
+	POINT RestoreScreenPos = OutContext.Frame.MouseScreenPos;
+	const bool bWantsRelativeMouseMode = TargetEntry->Client->WantsRelativeMouseMode(OutContext, RestoreScreenPos);
+	const bool bRelativeViewportMismatch = bRelativeMouseModeActive && (RelativeMouseModeViewport != TargetEntry->Viewport);
+	if (bRelativeMouseModeActive && (!bWantsRelativeMouseMode || bRelativeViewportMismatch))
+	{
+		DeactivateRelativeMouseMode();
+		OutContext.bRelativeMouseMode = false;
+	}
+	if (!bRelativeMouseModeActive && bWantsRelativeMouseMode)
+	{
+		const RECT ClipRect = GetTargetRectScreenRect(TargetRect);
+		ActivateRelativeMouseMode(TargetEntry->Viewport, RestoreScreenPos, ClipRect);
+		OutContext.bRelativeMouseMode = true;
+	}
+	else if (bRelativeMouseModeActive)
+	{
+		OutContext.bRelativeMouseMode = (RelativeMouseModeViewport == TargetEntry->Viewport);
+	}
+
+	if (OutContext.bRelativeMouseMode)
+	{
+		const POINT CenterScreenPos = GetTargetRectScreenCenter(TargetRect);
+		OutContext.Frame.MouseInputMode = EMouseInputMode::Relative;
+		if (!Input.IsUsingRawMouse())
+		{
+			OutContext.Frame.MouseDelta.x = MouseScreenPos.x - CenterScreenPos.x;
+			OutContext.Frame.MouseDelta.y = MouseScreenPos.y - CenterScreenPos.y;
+			OutContext.MouseLocalDelta = OutContext.Frame.MouseDelta;
+		}
+
+		OutContext.Frame.MouseScreenPos = CenterScreenPos;
+		POINT CenterClientPos = CenterScreenPos;
+		ScreenToClient(OwnerWindow, &CenterClientPos);
+		OutContext.MouseClientPos = CenterClientPos;
+		OutContext.MouseLocalPos.x = CenterClientPos.x - static_cast<LONG>(TargetRect.X);
+		OutContext.MouseLocalPos.y = CenterClientPos.y - static_cast<LONG>(TargetRect.Y);
+		FCursorControl::Apply();
+	}
 
 	for (int32 VK = 0; VK < 256; ++VK)
 	{
@@ -314,6 +388,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 	OutBinding.Domain = OutContext.Domain;
 
 	OutContext.bConsumed = TargetEntry->Client->ProcessInput(OutContext);
+	if (OutContext.bRelativeMouseMode)
+	{
+		POINT CenterScreenPos = GetTargetRectScreenCenter(TargetRect);
+		SetCursorPos(CenterScreenPos.x, CenterScreenPos.y);
+	}
 	return true;
 }
 
@@ -340,4 +419,80 @@ FInputRouter::FTargetEntry* FInputRouter::FindEntryByViewport(FViewport* InViewp
 		return nullptr;
 	}
 	return nullptr;
+}
+
+POINT FInputRouter::GetTargetRectScreenCenter(const FRect& TargetRect) const
+{
+	POINT CenterClientPos =
+	{
+		static_cast<LONG>(TargetRect.X + TargetRect.Width * 0.5f),
+		static_cast<LONG>(TargetRect.Y + TargetRect.Height * 0.5f)
+	};
+	if (OwnerWindow)
+	{
+		ClientToScreen(OwnerWindow, &CenterClientPos);
+	}
+	return CenterClientPos;
+}
+
+RECT FInputRouter::GetTargetRectScreenRect(const FRect& TargetRect) const
+{
+	POINT TopLeft =
+	{
+		static_cast<LONG>(TargetRect.X),
+		static_cast<LONG>(TargetRect.Y)
+	};
+	POINT BottomRight =
+	{
+		static_cast<LONG>(TargetRect.X + TargetRect.Width),
+		static_cast<LONG>(TargetRect.Y + TargetRect.Height)
+	};
+
+	if (OwnerWindow)
+	{
+		ClientToScreen(OwnerWindow, &TopLeft);
+		ClientToScreen(OwnerWindow, &BottomRight);
+	}
+
+	RECT ClipRect = {};
+	ClipRect.left = TopLeft.x;
+	ClipRect.top = TopLeft.y;
+	ClipRect.right = BottomRight.x;
+	ClipRect.bottom = BottomRight.y;
+	return ClipRect;
+}
+
+void FInputRouter::ActivateRelativeMouseMode(FViewport* InViewport, const POINT& RestoreScreenPos, const RECT& ClipScreenRect)
+{
+	RelativeMouseModeViewport = InViewport;
+	RelativeMouseRestorePos = RestoreScreenPos;
+	RelativeMouseClipRect = ClipScreenRect;
+	bRelativeMouseModeActive = true;
+	InputSystem::Get().SetUseRawMouse(true);
+	FCursorControlState CursorState{};
+	CursorState.OwnerWindow = OwnerWindow;
+	CursorState.bHideInClient = true;
+	CursorState.bLockToScreenPos = true;
+	CursorState.LockScreenPos.x = (ClipScreenRect.left + ClipScreenRect.right) / 2;
+	CursorState.LockScreenPos.y = (ClipScreenRect.top + ClipScreenRect.bottom) / 2;
+	FCursorControl::SetState(CursorState);
+
+	if (OwnerWindow)
+	{
+		SetCapture(OwnerWindow);
+	}
+}
+
+void FInputRouter::DeactivateRelativeMouseMode()
+{
+	bRelativeMouseModeActive = false;
+	RelativeMouseModeViewport = nullptr;
+	InputSystem::Get().SetUseRawMouse(false);
+	FCursorControl::Clear();
+
+	if (OwnerWindow && GetCapture() == OwnerWindow)
+	{
+		ReleaseCapture();
+	}
+	SetCursorPos(RelativeMouseRestorePos.x, RelativeMouseRestorePos.y);
 }

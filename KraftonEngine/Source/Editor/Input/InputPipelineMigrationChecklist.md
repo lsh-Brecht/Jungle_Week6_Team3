@@ -4,57 +4,73 @@ Last Updated: 2026-04-11
 
 ## 1) Core Routing / Binding
 
-- [x] `InteractionBinding` 도입 (`ReceiverVC`, `TargetWorld`, `Domain`)
-- [x] `InputRouter` 기반 단일 VC 라우팅
-- [x] 캡처 우선 라우팅(드래그 중 동일 VC 유지)
-- [x] 글로벌 단축키(ESC/F8) 우선 처리 경로
+- [x] Added `InteractionBinding` (`ReceiverVC`, `TargetWorld`, `Domain`)
+- [x] Single-target VC routing with `InputRouter`
+- [x] Capture-first routing during drag
+- [x] Global shortcuts pre-handle path (ESC/F8)
 
-## 2) VC 내부 Dispatcher / Context
+## 2) VC Internal Dispatcher / Context
 
-- [x] VC 내부 컨텍스트 우선순위 소모 체인(First-consume)
-- [x] `Command / Gizmo / Selection / Navigation` 분리
-- [x] 기존 InputChord 매핑 유지/재사용
-- [ ] 컨텍스트별 상세 consume 정책 미세 조정
+- [x] Priority-based context chain with first-consume
+- [x] Context split: `Command / Gizmo / Selection / Navigation`
+- [x] Chord mapping kept and expanded
+- [ ] Fine-tune consume precedence among overlapping contexts
 
-## 3) Tool / Mode / Controller 구조
+## 3) Tool / Mode / Controller
 
-- [x] `Tool` 인터페이스 계층 추가
-- [x] `Mode` 인터페이스 계층 추가
-- [x] `Controller` 도입 및 VC 오케스트레이션 분리
-- [x] 기본 툴 이관:
-  - [x] Command
-  - [x] Gizmo
-  - [x] Selection
-  - [x] Navigation(기본)
-- [ ] Navigation 고급 동작(Orbit/Pan/Dolly 세부 UX) Week5 동등화
-- [ ] Tool Global/공용 명령 라우팅 확장
+- [x] Tool interface and concrete tools added
+- [x] Mode interface and Select mode added
+- [x] Mode expanded: `Select / Translate / Rotate / Scale`
+- [x] Controller orchestration split from VC
+- [x] Navigation tool upgraded (Orbit/Pan/Dolly/Wheel/Speed adjust)
+- [x] Command tool upgraded (Focus/Delete/SelectAll/NewScene/Duplicate)
+- [x] Viewport pane toolbar mode popup wired to VC mode API
+- [x] Gizmo mode <-> interaction mode synchronization (toolbar + shortcut cycle)
+- [ ] Add domain-specific modes (e.g., dedicated PIE editor tool mode)
 
-## 4) PIE / EditorOnPIE 동작
+## 4) PIE / EditorOnPIE Behavior
 
-- [x] PIE 진입 시 플레이어 액터/카메라 생성 및 초기화
-- [x] PIE 종료 시 정리/복원 훅(`OnBeginPIE` / `OnEndPIE`)
-- [x] F8 토글( Possessed <-> Ejected )
-- [x] `EditorVC -> PIEWorld` (EditorOnPIE) 경로 유지
-- [x] PIE 시작 기본 모드: `Possessed` (즉시 플레이)
-- [ ] PIE 카메라/입력 체감(감도, 캡처 해제 타이밍) 미세 조정
+- [x] PIE player actor/camera lifecycle (`OnBeginPIE` / `OnEndPIE`)
+- [x] F8 possess/eject toggle path
+- [x] `EditorVC -> PIEWorld` interaction path
+- [x] PIE starts in `Possessed` by default
+- [x] Relative mouse mode state in router (activate/maintain/restore)
+- [x] Cursor lock/hide while relative mouse mode is active
+- [x] Raw mouse delta ingest (`WM_INPUT`) wired to input system
+- [x] PIE quick release shortcut (`Shift+F1`) path
+- [ ] PIE input ownership and capture UX tuning
 
-## 5) Selection / Picking / Gizmo 정합성
+## 5) Selection / Picking / Gizmo
 
-- [x] PIE 진입/종료 시 Selection world 리바인딩
-- [x] 엔트리 뷰포트 Gizmo 표시 상태 저장/복원
-- [ ] ID 버퍼 기반 선택/아웃라인 경계 사례 회귀 점검
+- [x] Selection world rebind on PIE enter/exit
+- [x] Entry viewport gizmo visibility restore
+- [x] Selection tool no longer pre-consumes wheel zoom (wheel now routed to navigation)
+- [ ] ID-buffer edge-case regression pass
 
-## 6) 검증 체크
+## 6) Validation
 
-- [x] Debug x64 빌드 통과
-- [x] Release x64 빌드 통과
-- [ ] 멀티 뷰포트 시나리오 수동 점검
-- [ ] PIE 도중 뷰포트 포커스 전환 점검
-- [ ] F8 반복 토글 스트레스 점검
-- [ ] 드래그 캡처 중 월드/도메인 일관성 점검
+- [x] Previous Debug x64 build passed
+- [x] Previous Release x64 build passed
+- [ ] Rebuild after current batch edits (deferred by request)
+- [ ] Multi-viewport manual validation
+- [ ] PIE focus switching validation
+- [ ] F8 rapid toggle stress pass
 
-## 7) 다음 소형 패치 우선순위
+## 7) Next Patch Batch
 
-1. Navigation Orbit/Pan/Dolly 세부 바인딩 정리
-2. Global Tool Command 최소 세트 이관(프레임 포커스/카메라 북마크 등)
-3. PIE 포커스/캡처 UX 튜닝
+1. Add additional editor modes and connect mode cycle UI hooks.
+2. Expand global command set needed by upcoming UI migration.
+   Note: `UEditorEngine` currently has no public `Load/Save` command entrypoints, so load/save bindings are blocked until API is exposed.
+3. Tune PIE capture/focus transitions and camera feel.
+
+## 8) Current Working Notes
+
+- [x] Selection click trigger moved to `LButton Released` to reduce navigation pre-consume collisions.
+- [x] Selection now ignores click-select on drag release (`PointerDragEnded`) and `Alt` chord.
+- [x] Selection click behavior updated with `Ctrl+Click` toggle and non-modifier empty-click clear only.
+- [x] Added `InputTrace` logs at VC context-dispatch stage (which context consumed, or none).
+- [x] Added `EditorViewportInputUtils::IsLeftNavigationDragActive` (threshold-based LMB navigation drag split).
+- [x] Selection tool upgraded with marquee box selection (`Ctrl+Alt+LMB` replace / `Ctrl+Alt+Shift+LMB` additive).
+- [x] Cursor hide/lock behavior moved into dedicated `CursorControl` state utility and wired to router relative mode.
+- [x] ImGui mouse-capture now blocks editor-side LMB navigation acquire (prevents splitter-drag + camera-rotate dual consume).
+- [x] Marquee state ownership moved to `SelectionTool` (VC renders overlay by querying controller/mode tool state).

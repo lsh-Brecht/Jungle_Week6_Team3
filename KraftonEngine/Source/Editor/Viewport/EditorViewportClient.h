@@ -82,7 +82,11 @@ public:
 	// ImDrawList에 자신의 SRV를 SWindow Rect 위치에 렌더 (활성 테두리 포함)
 	void RenderViewportImage(bool bIsActiveViewport);
 	bool ProcessInput(FViewportInputContext& Context) override;
+	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
 	FEditorViewportController* GetInputController();
+	bool SetInteractionMode(EEditorViewportModeType InModeType);
+	EEditorViewportModeType GetInteractionMode() const;
+	bool CycleInteractionMode();
 	const FViewportInputContext& GetRoutedInputContext() const { return RoutedInputContext; }
 	FSelectionManager* GetSelectionManager() const { return SelectionManager; }
 	const FEditorSettings* GetSettings() const { return Settings; }

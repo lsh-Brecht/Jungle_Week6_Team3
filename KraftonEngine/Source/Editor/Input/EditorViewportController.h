@@ -4,6 +4,7 @@
 #include "Editor/Input/EditorViewportCommandTool.h"
 #include "Editor/Input/EditorViewportModes.h"
 
+#include <windows.h>
 #include <memory>
 
 class FEditorViewportClient;
@@ -21,6 +22,8 @@ public:
 	bool HandleGizmoInput(float DeltaTime);
 	bool HandleSelectionInput(float DeltaTime);
 	bool HandleNavigationInput(float DeltaTime);
+	bool GetSelectionMarquee(POINT& OutStart, POINT& OutCurrent, bool& bOutAdditive) const;
+	FEditorNavigationTool* GetNavigationTool() const { return NavigationTool.get(); }
 
 private:
 	FEditorViewportClient* Owner = nullptr;

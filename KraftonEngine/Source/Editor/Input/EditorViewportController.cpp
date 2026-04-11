@@ -11,8 +11,15 @@ std::unique_ptr<IEditorViewportMode> CreateMode(EEditorViewportModeType InModeTy
 	switch (InModeType)
 	{
 	case EEditorViewportModeType::Select:
+		return std::make_unique<FEditorTransformMode>(InOwner, EEditorViewportModeType::Select);
+	case EEditorViewportModeType::Translate:
+		return std::make_unique<FEditorTransformMode>(InOwner, EEditorViewportModeType::Translate);
+	case EEditorViewportModeType::Rotate:
+		return std::make_unique<FEditorTransformMode>(InOwner, EEditorViewportModeType::Rotate);
+	case EEditorViewportModeType::Scale:
+		return std::make_unique<FEditorTransformMode>(InOwner, EEditorViewportModeType::Scale);
 	default:
-		return std::make_unique<FEditorSelectMode>(InOwner);
+		return std::make_unique<FEditorTransformMode>(InOwner, EEditorViewportModeType::Select);
 	}
 }
 
@@ -21,8 +28,15 @@ EEditorViewportModeType GetNextModeType(EEditorViewportModeType InCurrentModeTyp
 	switch (InCurrentModeType)
 	{
 	case EEditorViewportModeType::Select:
-	default:
+		return EEditorViewportModeType::Translate;
+	case EEditorViewportModeType::Translate:
+		return EEditorViewportModeType::Rotate;
+	case EEditorViewportModeType::Rotate:
+		return EEditorViewportModeType::Scale;
+	case EEditorViewportModeType::Scale:
 		return EEditorViewportModeType::Select;
+	default:
+		return EEditorViewportModeType::Translate;
 	}
 }
 }
@@ -33,6 +47,10 @@ FEditorViewportController::FEditorViewportController(FEditorViewportClient* InOw
 	if (Owner)
 	{
 		ActiveMode = CreateMode(EEditorViewportModeType::Select, Owner);
+		if (ActiveMode)
+		{
+			ActiveMode->OnActivated();
+		}
 		ViewportCommandTool = std::make_unique<FEditorViewportCommandTool>(Owner, this);
 		NavigationTool = std::make_unique<FEditorNavigationTool>(Owner);
 	}
@@ -49,6 +67,10 @@ bool FEditorViewportController::SetMode(EEditorViewportModeType InModeType)
 		return true;
 	}
 	ActiveMode = CreateMode(InModeType, Owner);
+	if (ActiveMode)
+	{
+		ActiveMode->OnActivated();
+	}
 	return ActiveMode != nullptr;
 }
 
@@ -85,5 +107,17 @@ bool FEditorViewportController::HandleSelectionInput(float DeltaTime)
 bool FEditorViewportController::HandleNavigationInput(float DeltaTime)
 {
 	return NavigationTool ? NavigationTool->HandleInput(DeltaTime) : false;
+}
+
+bool FEditorViewportController::GetSelectionMarquee(POINT& OutStart, POINT& OutCurrent, bool& bOutAdditive) const
+{
+	if (!ActiveMode)
+	{
+		OutStart = { 0, 0 };
+		OutCurrent = { 0, 0 };
+		bOutAdditive = false;
+		return false;
+	}
+	return ActiveMode->GetSelectionMarquee(OutStart, OutCurrent, bOutAdditive);
 }
 

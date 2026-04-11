@@ -5,6 +5,7 @@
 #include "Editor/UI/EditorConsoleWidget.h"
 #include "Editor/Input/EditorViewportController.h"
 #include "Editor/Input/EditorViewportInputMapping.h"
+#include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Subsystem/OverlayStatSystem.h"
 #include "Editor/Settings/EditorSettings.h"
 #include "Engine/Profiling/PlatformTime.h"
@@ -151,12 +152,48 @@ void FEditorViewportClient::Tick(float DeltaTime)
 
 	GetInputController();
 	EnsureInputContextStack();
+	const bool bHasEvents = !RoutedInputContext.Events.empty();
+	bool bConsumedByContext = false;
 	for (IEditorViewportInputContext* Context : InputContextStack)
 	{
 		if (Context && Context->HandleInput(DeltaTime))
 		{
+			bConsumedByContext = true;
+			if (bHasEvents)
+			{
+				const char* ContextName = "Unknown";
+				if (Context == CommandInputContext.get()) { ContextName = "Command"; }
+				else if (Context == GizmoInputContext.get()) { ContextName = "Gizmo"; }
+				else if (Context == SelectionInputContext.get()) { ContextName = "Selection"; }
+				else if (Context == NavigationInputContext.get()) { ContextName = "Navigation"; }
+
+				UE_LOG(
+					"[InputTrace] Domain=%d Context=%s Consumed=1 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
+					static_cast<int32>(RoutedInputContext.Domain),
+					ContextName,
+					static_cast<int32>(RoutedInputContext.Events.size()),
+					RoutedInputContext.bHovered ? 1 : 0,
+					RoutedInputContext.bFocused ? 1 : 0,
+					RoutedInputContext.bCaptured ? 1 : 0,
+					RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
+					RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
+					RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
+			}
 			break;
 		}
+	}
+	if (bHasEvents && !bConsumedByContext)
+	{
+		UE_LOG(
+			"[InputTrace] Domain=%d Context=None Consumed=0 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
+			static_cast<int32>(RoutedInputContext.Domain),
+			static_cast<int32>(RoutedInputContext.Events.size()),
+			RoutedInputContext.bHovered ? 1 : 0,
+			RoutedInputContext.bFocused ? 1 : 0,
+			RoutedInputContext.bCaptured ? 1 : 0,
+			RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
+			RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
+			RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
 	}
 
 	bHasRoutedInputContext = false;
@@ -169,6 +206,27 @@ FEditorViewportController* FEditorViewportClient::GetInputController()
 		InputController = std::make_unique<FEditorViewportController>(this);
 	}
 	return InputController.get();
+}
+
+bool FEditorViewportClient::SetInteractionMode(EEditorViewportModeType InModeType)
+{
+	FEditorViewportController* Controller = GetInputController();
+	return Controller ? Controller->SetMode(InModeType) : false;
+}
+
+EEditorViewportModeType FEditorViewportClient::GetInteractionMode() const
+{
+	if (!InputController)
+	{
+		return EEditorViewportModeType::Select;
+	}
+	return InputController->GetMode();
+}
+
+bool FEditorViewportClient::CycleInteractionMode()
+{
+	FEditorViewportController* Controller = GetInputController();
+	return Controller ? Controller->CycleMode() : false;
 }
 
 void FEditorViewportClient::EnsureInputContextStack()
@@ -235,6 +293,50 @@ bool FEditorViewportClient::ProcessInput(FViewportInputContext& Context)
 	return false;
 }
 
+bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
+{
+	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
+	if (!Camera || !Viewport)
+	{
+		return false;
+	}
+
+	bool bGizmoBlocksLeftRelativeDrag = Gizmo && (Gizmo->IsHolding() || Gizmo->IsPressedOnHandle());
+	if (!bGizmoBlocksLeftRelativeDrag
+		&& Gizmo
+		&& Context.Frame.IsDown(VK_LBUTTON))
+	{
+		const float LocalMouseX = static_cast<float>(Context.MouseLocalPos.x);
+		const float LocalMouseY = static_cast<float>(Context.MouseLocalPos.y);
+		const float VPWidth = static_cast<float>(Viewport->GetWidth());
+		const float VPHeight = static_cast<float>(Viewport->GetHeight());
+		const FRay MouseRay = Camera->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
+		FHitResult GizmoHit{};
+		bGizmoBlocksLeftRelativeDrag = Gizmo->LineTraceComponent(MouseRay, GizmoHit);
+	}
+
+	const bool bLeftRelativeDrag = EditorViewportInputUtils::IsLeftNavigationDragActive(Context) && !bGizmoBlocksLeftRelativeDrag;
+	const bool bMouseOwnedByViewport = Context.bCaptured || Context.bHovered || Context.bRelativeMouseMode;
+	if (!bMouseOwnedByViewport)
+	{
+		return false;
+	}
+
+	// ImGui가 마우스를 캡처 중이면 상대 마우스 신규 진입을 허용하지 않는다.
+	// 이미 relative 모드로 들어간 상태에서만 유지를 허용.
+	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
+	{
+		return false;
+	}
+
+	return EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookRightDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookMiddleDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavOrbitAltLeftDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavDollyAltRightDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavPanAltMiddleDown)
+		|| bLeftRelativeDrag;
+}
+
 void FEditorViewportClient::UpdateLayoutRect()
 {
 	if (!LayoutWindow) return;
@@ -271,5 +373,23 @@ void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport)
 	if (bIsActiveViewport)
 	{
 		DrawList->AddRect(Min, Max, IM_COL32(255, 200, 0, 200), 0.0f, 0, 2.0f);
+	}
+
+	POINT MarqueeStart = { 0, 0 };
+	POINT MarqueeCurrent = { 0, 0 };
+	bool bMarqueeAdditive = false;
+	const bool bHasMarquee = InputController && InputController->GetSelectionMarquee(MarqueeStart, MarqueeCurrent, bMarqueeAdditive);
+	if (bHasMarquee)
+	{
+		const float StartX = R.X + static_cast<float>(MarqueeStart.x);
+		const float StartY = R.Y + static_cast<float>(MarqueeStart.y);
+		const float CurrentX = R.X + static_cast<float>(MarqueeCurrent.x);
+		const float CurrentY = R.Y + static_cast<float>(MarqueeCurrent.y);
+		const float Left = (std::min)(StartX, CurrentX);
+		const float Top = (std::min)(StartY, CurrentY);
+		const float Right = (std::max)(StartX, CurrentX);
+		const float Bottom = (std::max)(StartY, CurrentY);
+		DrawList->AddRectFilled(ImVec2(Left, Top), ImVec2(Right, Bottom), IM_COL32(255, 255, 255, 48));
+		DrawList->AddRect(ImVec2(Left, Top), ImVec2(Right, Bottom), IM_COL32(255, 255, 255, 210), 0.0f, 0, 1.5f);
 	}
 }

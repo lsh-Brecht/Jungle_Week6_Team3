@@ -13,6 +13,7 @@ public:
 	void Shutdown();
 
 	void Select(AActor* Actor);
+	void AddSelect(AActor* Actor);
 	void SelectRange(AActor* ClickedActor, const TArray<AActor*>& ActorList);
 	void ToggleSelect(AActor* Actor);
 	void Deselect(AActor* Actor);
