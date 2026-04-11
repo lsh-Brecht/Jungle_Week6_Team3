@@ -74,6 +74,17 @@ struct FOutlinePostProcessConstants
 	float Padding[3] = {};
 };
 
+// UExponentialHeightFogComponent 용 CB 구조체 — HLSL ExponentialFogCB와 1:1 대응
+struct FFogUniformParameters
+{
+    FVector4 ExponentialFogParameters;      // x: 밀도 계수, y: Falloff, z: 관찰자 최대 높이, w: StartDistance
+	FVector4 ExponentialFogParameters2;     // 두 번째 안개 데이터
+	FVector4 ExponentialFogColorParameter;  // rgb: Inscattering Color, a: 1.0 - MaxOpacity
+	FVector4 ExponentialFogParameters3;     // x: 밀도, y: 안개 높이, z: 큐브맵 유무, w: CutoffDistance
+	FVector4 InscatteringLightDirection;    // w: DirectionalInscatteringStartDistance
+	FVector4 DirectionalInscatteringColor;  // rgb: 컬러, a: DirectionalInscatteringExponent
+};
+
 struct FAABBConstants
 {
 	FVector Min;
