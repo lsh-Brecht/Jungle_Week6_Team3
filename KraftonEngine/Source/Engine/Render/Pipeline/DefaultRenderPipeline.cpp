@@ -1,6 +1,7 @@
 #include "DefaultRenderPipeline.h"
 
 #include "Renderer.h"
+#include "SceneRenderSetup.h"
 #include "Engine/Runtime/Engine.h"
 #include "Component/CameraComponent.h"
 #include "GameFramework/World.h"
@@ -27,8 +28,7 @@ void FDefaultRenderPipeline::Execute(float DeltaTime, FRenderer& Renderer)
 
 		Bus.SetCameraInfo(Camera);
 		Bus.SetRenderSettings(ViewMode, ShowFlags);
-		Bus.SetSceneEffectConstants(World->GetScene().GetSceneEffectConstants());
-		Bus.SetFogPostProcessConstants(World->GetScene().GetFogPostProcessConstants());
+		PopulateScenePostProcessConstants(World, Bus);
 
 		Collector.CollectWorld(World, Bus);
 		Collector.CollectDebugDraw(World->GetDebugDrawQueue(), Bus);

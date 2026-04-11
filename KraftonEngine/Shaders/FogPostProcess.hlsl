@@ -1,4 +1,5 @@
 #include "Common/ConstantBuffers.hlsl"
+#include "Common/FogCommon.hlsl"
 
 Texture2D<float4> SceneColorTex : register(t0);
 Texture2D<float> DepthTex : register(t1);
@@ -25,40 +26,18 @@ float3 ReconstructWorldPosition(float2 uv, float depth)
     return worldPos.xyz / max(worldPos.w, 0.0001f);
 }
 
-float LinearizeViewDepth(float depth)
+float ComputeSceneFogWeight(FogUniformParameters fog, float depth, float3 worldPos)
 {
-    const float proj33 = Projection[2][2];
-    const float proj43 = Projection[3][2];
-    return proj43 / min(depth - proj33, -0.0001f);
+    const float sampleHeight = min(worldPos.z, CameraPosition.z);
+    const float heightAttenuation = ComputeFogHeightAttenuation(fog, sampleHeight);
+    const float distanceToCamera = max(LinearizeFogViewDepth(depth, Projection), 0.0f);
+    return ComputeFogWeightFromDistance(fog, distanceToCamera, heightAttenuation);
 }
 
-float ComputeFogWeight(FogUniformParameters fog, float depth, float3 worldPos)
+float ComputeFarDepthFogWeight(FogUniformParameters fog)
 {
-    const float fogDensity = max(fog.ExponentialFogParameters.x, 0.0f);
-    const float scaledFogDensity = fogDensity * 0.1f;
-    const float fogHeightFalloff = max(fog.ExponentialFogParameters.y, 0.0001f);
-    const float startDistance = max(fog.ExponentialFogParameters.w, 0.0f);
-    const float fogHeight = fog.ExponentialFogParameters3.y;
-    const float cutoffDistance = max(fog.ExponentialFogParameters3.w, 0.0f);
-    const float maxOpacity = saturate(1.0f - fog.ExponentialFogColorParameter.a);
-
-    const float distanceToCamera = max(LinearizeViewDepth(depth), 0.0f);
-    if (distanceToCamera <= startDistance)
-    {
-        return 0.0f;
-    }
-
-    if (cutoffDistance > 0.0f && distanceToCamera >= cutoffDistance)
-    {
-        return 0.0f;
-    }
-
-    const float effectiveDistance = distanceToCamera - startDistance;
-    const float sampleHeight = min(worldPos.z, CameraPosition.z);
-    const float relativeHeight = max(sampleHeight - fogHeight, 0.0f);
-    const float heightAttenuation = exp(-relativeHeight * fogHeightFalloff);
-    const float fogIntegral = effectiveDistance * scaledFogDensity * heightAttenuation;
-    return min(saturate(1.0f - exp(-fogIntegral)), maxOpacity);
+    const float heightAttenuation = ComputeFogHeightAttenuation(fog, CameraPosition.z);
+    return ComputeFogWeightFromDistance(fog, FOG_FAR_DEPTH_DISTANCE, heightAttenuation);
 }
 
 float4 PS(PS_Input input) : SV_TARGET
@@ -79,17 +58,7 @@ float4 PS(PS_Input input) : SV_TARGET
         [loop]
         for (uint i = 0; i < FogCount; ++i)
         {
-            const float fogDensity = max(Fogs[i].ExponentialFogParameters.x, 0.0f) * 0.1f;
-            const float fogHeightFalloff = max(Fogs[i].ExponentialFogParameters.y, 0.0001f);
-            const float fogHeight = Fogs[i].ExponentialFogParameters3.y;
-            const float maxOpacity = saturate(1.0f - Fogs[i].ExponentialFogColorParameter.a);
-
-            const float fakeDistance = 1000.0f;
-            const float cameraRelativeHeight = max(CameraPosition.z - fogHeight, 0.0f);
-            const float cameraHeightAttenuation = exp(-cameraRelativeHeight * fogHeightFalloff);
-            const float transmittance = saturate(exp(-fogDensity * cameraHeightAttenuation * fakeDistance));
-            const float fogWeight = min(1.0f - transmittance, maxOpacity);
-
+            const float fogWeight = ComputeFarDepthFogWeight(Fogs[i]);
             finalColor = lerp(finalColor, Fogs[i].ExponentialFogColorParameter.rgb, fogWeight);
         }
 
@@ -102,7 +71,7 @@ float4 PS(PS_Input input) : SV_TARGET
     [loop]
     for (uint i = 0; i < FogCount; ++i)
     {
-        const float fogWeight = ComputeFogWeight(Fogs[i], depth, worldPos);
+        const float fogWeight = ComputeSceneFogWeight(Fogs[i], depth, worldPos);
         finalColor = lerp(finalColor, Fogs[i].ExponentialFogColorParameter.rgb, fogWeight);
     }
 

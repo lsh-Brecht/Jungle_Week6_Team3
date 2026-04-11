@@ -2,6 +2,7 @@
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Render/Pipeline/Renderer.h"
+#include "Render/Pipeline/SceneRenderSetup.h"
 #include "Viewport/Viewport.h"
 #include "Component/CameraComponent.h"
 #include "Component/GizmoComponent.h"
@@ -95,8 +96,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	Bus.SetCameraInfo(Camera);
 	Bus.SetRenderSettings(ViewMode, ShowFlags);
-	Bus.SetSceneEffectConstants(World->GetScene().GetSceneEffectConstants());
-	Bus.SetFogPostProcessConstants(World->GetScene().GetFogPostProcessConstants());
+	PopulateScenePostProcessConstants(World, Bus);
 	Bus.SetViewportInfo(VP);
 	Bus.SetViewportType(Opts.ViewportType);
 	Bus.SetOcclusionCulling(&GPUOcclusion);

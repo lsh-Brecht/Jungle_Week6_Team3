@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "PrimitiveComponent.h"
-#include "Render/Pipeline/RenderConstants.h"
+#include "Render/Fog/FogRenderTypes.h"
 
 // UE5에서는 두 번째 안개 레이어를 위한 구조체를 별도로 사용합니다.
 struct FExponentialHeightFogData
@@ -53,9 +53,9 @@ private:
 	void UnregisterFromScene();
 	void SanitizeProperties();
 
-	float FogDensity;			// 기본 밀도
-	float FogHeightFalloff;		// 안개 감쇠 계수(0이면 높이에 따른 감쇠 없음, 1이면 완전 지수 감쇠)
-	float FogHeight;			// 안개 기준 높이(이 높이보다 낮은 곳은 더 짙은 안개)
+	float FogDensity;			// 참고 프로젝트 기준 기본 밀도
+	float FogHeightFalloff;		// 높이에 따른 감쇠율
+	float FogHeight;			// 안개 기준 높이
 	float StartDistance;		// 안개 시작 거리
 	float FogCutoffDistance;	// 이 거리 너머로는 안개 미적용
 	float FogMaxOpacity;		// 최대 불투명도

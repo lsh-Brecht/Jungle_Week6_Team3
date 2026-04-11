@@ -8,6 +8,20 @@
 
 #include <cstring>
 
+namespace
+{
+	bool IsFogPropertyName(const char* PropertyName)
+	{
+		return std::strcmp(PropertyName, "Fog Density") == 0 ||
+			std::strcmp(PropertyName, "Fog Height Falloff") == 0 ||
+			std::strcmp(PropertyName, "Fog Height") == 0 ||
+			std::strcmp(PropertyName, "Fog Color") == 0 ||
+			std::strcmp(PropertyName, "Start Distance") == 0 ||
+			std::strcmp(PropertyName, "Fog Cutoff Distance") == 0 ||
+			std::strcmp(PropertyName, "Fog Max Opacity") == 0;
+	}
+}
+
 IMPLEMENT_CLASS(UExponentialHeightFogComponent, UPrimitiveComponent)
 
 UExponentialHeightFogComponent::UExponentialHeightFogComponent()
@@ -52,7 +66,7 @@ FFogUniformParameters UExponentialHeightFogComponent::BuildFogUniformParameters(
 	FFogUniformParameters Result = {};
 	Result.ExponentialFogParameters = FVector4(FogDensity, FogHeightFalloff, 0.0f, StartDistance);
 	Result.ExponentialFogColorParameter = FVector4(FogInscatteringColor.R, FogInscatteringColor.G, FogInscatteringColor.B, 1.0f - FogMaxOpacity);
-	Result.ExponentialFogParameters3 = FVector4(FogDensity, FogHeight, 0.0f, FogCutoffDistance);
+	Result.ExponentialFogParameters3 = FVector4(0.0f, FogHeight, 0.0f, FogCutoffDistance);
 	return Result;
 }
 
@@ -91,13 +105,7 @@ void UExponentialHeightFogComponent::PostEditProperty(const char* PropertyName)
 {
 	UPrimitiveComponent::PostEditProperty(PropertyName);
 
-	if (std::strcmp(PropertyName, "Fog Density") == 0 ||
-		std::strcmp(PropertyName, "Fog Height Falloff") == 0 ||
-		std::strcmp(PropertyName, "Fog Height") == 0 ||
-		std::strcmp(PropertyName, "Fog Color") == 0 ||
-		std::strcmp(PropertyName, "Start Distance") == 0 ||
-		std::strcmp(PropertyName, "Fog Cutoff Distance") == 0 ||
-		std::strcmp(PropertyName, "Fog Max Opacity") == 0)
+	if (IsFogPropertyName(PropertyName))
 	{
 		SanitizeProperties();
 	}

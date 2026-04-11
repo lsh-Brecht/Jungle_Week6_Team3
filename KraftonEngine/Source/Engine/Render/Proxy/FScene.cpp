@@ -37,6 +37,59 @@ namespace
 		SelectedList.pop_back();
 		Proxy->SelectedListIndex = UINT32_MAX;
 	}
+
+	void AddUniqueFogComponent(TArray<UExponentialHeightFogComponent*>& FogList, UExponentialHeightFogComponent* Component)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		if (std::find(FogList.begin(), FogList.end(), Component) == FogList.end())
+		{
+			FogList.push_back(Component);
+		}
+	}
+
+	void RemoveFogComponentFast(TArray<UExponentialHeightFogComponent*>& FogList, UExponentialHeightFogComponent* Component)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		auto It = std::find(FogList.begin(), FogList.end(), Component);
+		if (It != FogList.end())
+		{
+			*It = FogList.back();
+			FogList.pop_back();
+		}
+	}
+
+	FFogPostProcessConstants BuildFogPostProcessConstants(const TArray<UExponentialHeightFogComponent*>& FogList)
+	{
+		FFogPostProcessConstants Result = {};
+		uint32 FogIndex = 0;
+
+		for (UExponentialHeightFogComponent* FogComponent : FogList)
+		{
+			if (!FogComponent || !FogComponent->IsFogActive())
+			{
+				continue;
+			}
+
+			if (FogIndex >= FogRendering::MaxFogComponents)
+			{
+				break;
+			}
+
+			Result.Fogs[FogIndex] = FogComponent->BuildFogUniformParameters();
+			++FogIndex;
+		}
+
+		Result.FogCount = FogIndex;
+		return Result;
+	}
 }
 
 // ============================================================
@@ -287,55 +340,17 @@ FSceneEffectConstants FScene::GetSceneEffectConstants() const
 
 void FScene::RegisterFogComponent(UExponentialHeightFogComponent* Component)
 {
-	if (!Component)
-	{
-		return;
-	}
-
-	if (std::find(FogComponents.begin(), FogComponents.end(), Component) == FogComponents.end())
-	{
-		FogComponents.push_back(Component);
-	}
+	AddUniqueFogComponent(FogComponents, Component);
 }
 
 void FScene::UnregisterFogComponent(UExponentialHeightFogComponent* Component)
 {
-	if (!Component)
-	{
-		return;
-	}
-
-	auto It = std::find(FogComponents.begin(), FogComponents.end(), Component);
-	if (It != FogComponents.end())
-	{
-		*It = FogComponents.back();
-		FogComponents.pop_back();
-	}
+	RemoveFogComponentFast(FogComponents, Component);
 }
 
 FFogPostProcessConstants FScene::GetFogPostProcessConstants() const
 {
-	FFogPostProcessConstants Result = {};
-	uint32 FogIndex = 0;
-
-	for (UExponentialHeightFogComponent* FogComponent : FogComponents)
-	{
-		if (!FogComponent || !FogComponent->IsFogActive())
-		{
-			continue;
-		}
-
-		if (FogIndex >= ECBSlot::MaxFogComponents)
-		{
-			break;
-		}
-
-		Result.Fogs[FogIndex] = FogComponent->BuildFogUniformParameters();
-		++FogIndex;
-	}
-
-	Result.FogCount = FogIndex;
-	return Result;
+	return BuildFogPostProcessConstants(FogComponents);
 }
 
 // ============================================================

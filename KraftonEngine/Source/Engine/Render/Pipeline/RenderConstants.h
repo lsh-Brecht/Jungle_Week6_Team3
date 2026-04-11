@@ -7,6 +7,7 @@
 
 #include "Math/Matrix.h"
 #include "Math/Vector.h"
+#include "Render/Fog/FogRenderTypes.h"
 
 class FShader;
 
@@ -27,7 +28,7 @@ namespace ECBSlot
 	constexpr uint32 Fog = 6;			// b6: fog post-process params
 
 	constexpr uint32 MaxLocalTintEffects = 8;
-	constexpr uint32 MaxFogComponents = 8;
+	constexpr uint32 MaxFogComponents = FogRendering::MaxFogComponents;
 }
 
 //PerObject
@@ -97,21 +98,6 @@ struct FOutlinePostProcessConstants
 	float OutlineThickness = 1.0f;
 	float OutlineFalloff = 1.6f;
 	float Padding[2] = {};
-};
-
-// UExponentialHeightFogComponent 용 CB 구조체 — HLSL ExponentialFogCB와 1:1 대응
-struct FFogUniformParameters
-{
-    FVector4 ExponentialFogParameters;      // x: 밀도 계수, y: Falloff, z: 관찰자 최대 높이, w: StartDistance
-	FVector4 ExponentialFogColorParameter;  // rgb: Inscattering Color, a: 1.0 - MaxOpacity
-	FVector4 ExponentialFogParameters3;     // x: 밀도, y: 안개 높이, z: 큐브맵 유무, w: CutoffDistance
-};
-
-struct FFogPostProcessConstants
-{
-	FFogUniformParameters Fogs[ECBSlot::MaxFogComponents];
-	uint32 FogCount = 0;
-	float _pad[3] = {};
 };
 
 struct FAABBConstants
