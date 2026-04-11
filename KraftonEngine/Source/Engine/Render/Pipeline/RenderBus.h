@@ -29,6 +29,7 @@ public:
 	void AddGridEntry(FGridEntry&& Entry);
 	void AddDebugLineEntry(FDebugLineEntry&& Entry);
 	void SetSceneEffectConstants(const FSceneEffectConstants& InConstants) { SceneEffectConstants = InConstants; }
+	void SetFogPostProcessConstants(const FFogPostProcessConstants& InConstants) { FogPostProcessConstants = InConstants; }
 
 	const TArray<FFontEntry>& GetFontEntries() const { return FontEntries; }
 	const TArray<FFontEntry>& GetOverlayFontEntries() const { return OverlayFontEntries; }
@@ -38,6 +39,7 @@ public:
 	const TArray<FGridEntry>& GetGridEntries() const { return GridEntries; }
 	const TArray<FDebugLineEntry>& GetDebugLineEntries() const { return DebugLineEntries; }
 	const FSceneEffectConstants& GetSceneEffectConstants() const { return SceneEffectConstants; }
+	const FFogPostProcessConstants& GetFogPostProcessConstants() const { return FogPostProcessConstants; }
 
 	// Getter,Setter
 	void SetCameraInfo(const UCameraComponent* Camera);
@@ -95,6 +97,7 @@ private:
 	TArray<FGridEntry>  GridEntries;
 	TArray<FDebugLineEntry> DebugLineEntries;
 	FSceneEffectConstants SceneEffectConstants = {};
+	FFogPostProcessConstants FogPostProcessConstants = {};
 
 	FMatrix View;
 	FMatrix Proj;

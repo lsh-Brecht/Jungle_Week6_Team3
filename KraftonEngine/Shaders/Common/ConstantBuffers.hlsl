@@ -13,7 +13,12 @@ cbuffer FrameBuffer : register(b0)
     float Time;
     float NearPlane;
     float FarPlane;
-    float _framePad;
+    float _framePad0;
+    float3 CameraPosition;
+    float _framePad1;
+    float4x4 InverseView;
+    float4x4 InverseProjection;
+    float4x4 InverseViewProjection;
 }
 
 struct LocalTintEffectData
@@ -57,6 +62,20 @@ cbuffer OutlinePostProcessCB : register(b3)
     float OutlineFalloff;  // Radius 감쇠 지수
     float2 _Pad;
 };
+
+struct FogUniformParameters
+{
+    float4 ExponentialFogParameters;
+    float4 ExponentialFogColorParameter;
+    float4 ExponentialFogParameters3;
+};
+
+cbuffer FogPostProcessCB : register(b6)
+{
+    FogUniformParameters Fogs[8];
+    uint FogCount;
+    float3 _FogPad;
+}
 
 // b4: Material properties
 cbuffer MaterialBuffer : register(b4)

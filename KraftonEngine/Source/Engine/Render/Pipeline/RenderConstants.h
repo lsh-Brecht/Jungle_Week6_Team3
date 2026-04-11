@@ -7,6 +7,7 @@
 
 #include "Math/Matrix.h"
 #include "Math/Vector.h"
+#include "Render/Fog/FogRenderTypes.h"
 
 class FShader;
 
@@ -24,10 +25,12 @@ namespace ECBSlot
 	constexpr uint32 PostProcess = 3;	// b3: PostProcess effect params
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
+	constexpr uint32 Fog = 6;			// b6: fog post-process params
 
 
 	constexpr uint32 PostProcess_FXAA = 9;    // b9: FXAA effect params
-	constexpr uint32 MaxLocalTintEffects = 10;
+	constexpr uint32 MaxLocalTintEffects = 8;
+	constexpr uint32 MaxFogComponents = FogRendering::MaxFogComponents;
 }
 
 //PerObject
@@ -52,7 +55,12 @@ struct FFrameConstants
 	float Time;
 	float NearPlane;
 	float FarPlane;
-	float _pad[1];
+	float _pad0;
+	FVector CameraPosition;
+	float _pad1;
+	FMatrix InverseView;
+	FMatrix InverseProjection;
+	FMatrix InverseViewProjection;
 };
 
 struct FLocalTintEffectConstants

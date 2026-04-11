@@ -5,6 +5,7 @@
 
 class UPrimitiveComponent;
 class ISceneEffectSource;
+class UExponentialHeightFogComponent;
 
 // ============================================================
 // FScene — FPrimitiveSceneProxy의 소유자 겸 변경 추적 컨테이너
@@ -43,6 +44,9 @@ public:
 	void RegisterSceneEffectSource(ISceneEffectSource* Source);
 	void UnregisterSceneEffectSource(ISceneEffectSource* Source);
 	FSceneEffectConstants GetSceneEffectConstants() const;
+	void RegisterFogComponent(UExponentialHeightFogComponent* Component);
+	void UnregisterFogComponent(UExponentialHeightFogComponent* Component);
+	FFogPostProcessConstants GetFogPostProcessConstants() const;
 
 	// --- 선택 ---
 	void SetProxySelected(FPrimitiveSceneProxy* Proxy, bool bSelected);
@@ -82,4 +86,5 @@ private:
 
 	// FScene에 등록된 특수효과 목록. 현재는 고정 개수만큼 활성 효과를 순서대로 채웁니다.
 	TArray<ISceneEffectSource*> SceneEffectSources;
+	TArray<UExponentialHeightFogComponent*> FogComponents;
 };

@@ -123,6 +123,7 @@ private:
 	// LineBatcher DrawBatch 공통 — EditorShader 바인딩 + DrawBatch
 	void DrawLineBatcher(FLineBatcher& Batcher, ID3D11DeviceContext* Context);
 
+	void DrawPostProcessFog(const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO);
 	// PostProcess Outline — StencilSRV 읽어 edge detection 후 fullscreen draw
 	void DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
  // PostProcess FXAA — SceneColor를 입력으로 받아 fullscreen FXAA 적용
