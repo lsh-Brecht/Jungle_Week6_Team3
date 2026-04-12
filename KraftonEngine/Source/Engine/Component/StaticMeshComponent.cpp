@@ -7,7 +7,6 @@
 #include "Mesh/StaticMeshAsset.h"
 #include "Engine/Runtime/Engine.h"
 #include "Render/Resource/ShaderManager.h"
-#include "Texture/Texture2D.h"
 #include "Render/Proxy/StaticMeshSceneProxy.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Serialization/Archive.h"
@@ -75,7 +74,7 @@ UStaticMesh* UStaticMeshComponent::GetStaticMesh() const
 	return StaticMesh;
 }
 
-void UStaticMeshComponent::SetMaterial(int32 ElementIndex, UMaterial* InMaterial)
+void UStaticMeshComponent::SetMaterial(int32 ElementIndex, UMaterialInterface* InMaterial)
 {
 	// 인덱스가 배열 범위를 벗어나지 않는지 안전 검사 (IsValidIndex 등 사용)
 	if (ElementIndex >= 0 && ElementIndex < OverrideMaterials.size())
@@ -87,7 +86,7 @@ void UStaticMeshComponent::SetMaterial(int32 ElementIndex, UMaterial* InMaterial
 	}
 }
 
-UMaterial* UStaticMeshComponent::GetMaterial(int32 ElementIndex) const
+UMaterialInterface* UStaticMeshComponent::GetMaterial(int32 ElementIndex) const
 {
 	if (ElementIndex >= 0 && ElementIndex < OverrideMaterials.size())
 	{
@@ -226,14 +225,7 @@ void UStaticMeshComponent::PostDuplicate()
 				}
 				else
 				{
-					UMaterial* LoadedMat = FObjManager::GetOrLoadMaterial(MatPath);
-					if (LoadedMat)
-					{
-						if (!LoadedMat->DiffuseTexture && !LoadedMat->DiffuseTextureFilePath.empty())
-						{
-							LoadedMat->DiffuseTexture = UTexture2D::LoadFromFile(LoadedMat->DiffuseTextureFilePath, Device);
-						}
-					}
+					UMaterialInterface* LoadedMat = FObjManager::GetOrLoadMaterial(MatPath);
 					OverrideMaterials[i] = LoadedMat;
 				}
 			}
@@ -296,17 +288,10 @@ void UStaticMeshComponent::PostEditProperty(const char* PropertyName)
 			}
 			else
 			{
-				UMaterial* LoadedMat = FObjManager::GetOrLoadMaterial(NewMatPath);
+				UMaterialInterface* LoadedMat = FObjManager::GetOrLoadMaterial(NewMatPath);
 
 				if (LoadedMat)
 				{
-					if (!LoadedMat->DiffuseTexture && !LoadedMat->DiffuseTextureFilePath.empty())
-					{
-						// GEngine을 통해 전역 Device를 가져와서 텍스처를 생성합니다.
-						ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-						LoadedMat->DiffuseTexture = UTexture2D::LoadFromFile(LoadedMat->DiffuseTextureFilePath, Device);
-					}
-
 					// 로드되거나 찾아진 머티리얼을 슬롯에 적용
 					SetMaterial(Index, LoadedMat);
 				}

@@ -1,4 +1,4 @@
-#include "Render/Proxy/StaticMeshSceneProxy.h"
+﻿#include "Render/Proxy/StaticMeshSceneProxy.h"
 #include "Component/StaticMeshComponent.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Mesh/StaticMesh.h"
@@ -137,9 +137,9 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 			Draw.IndexCount = Section.NumTriangles * 3;
 
 			int32 i = Section.MaterialIndex;
-			if (i >= 0 && i < static_cast<int32>(Slots.size()))
+         if (i >= 0 && i < static_cast<int32>(Slots.size()))
 			{
-				UMaterial* Mat = nullptr;
+               UMaterialInterface* Mat = nullptr;
 
 				if (i < static_cast<int32>(Overrides.size()) && Overrides[i])
 					Mat = Overrides[i];
@@ -148,9 +148,9 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 
 				if (Mat)
 				{
-					if (Mat->DiffuseTexture)
-						Draw.DiffuseSRV = Mat->DiffuseTexture->GetSRV();
-					Draw.DiffuseColor = Mat->DiffuseColor;
+                    if (UTexture2D* DiffuseTexture = Mat->GetDiffuseTexture())
+						Draw.DiffuseSRV = DiffuseTexture->GetSRV();
+					Draw.DiffuseColor = Mat->GetDiffuseColor();
 				}
 			}
 

@@ -39,7 +39,7 @@ struct FStaticMeshSection
 struct FStaticMaterial
 {
 	// std::shared_ptr<class UMaterialInterface> MaterialInterface;
-	UMaterial* MaterialInterface;
+   UMaterialInterface* MaterialInterface;
 	FString MaterialSlotName = "None"; // "None"은 특별한 슬롯 이름으로, OBJ 파일에서 머티리얼이 지정되지 않은 섹션에 할당됩니다.
 	bool bIsUVScroll = false;
 
@@ -64,8 +64,20 @@ struct FStaticMaterial
 		if (Ar.IsSaving() && Mat.MaterialInterface)
 		{
 			InlinePathFileName = Mat.MaterialInterface->PathFileName;
-			InlineTexturePath = Mat.MaterialInterface->DiffuseTextureFilePath;
-			InlineDiffuseColor = Mat.MaterialInterface->DiffuseColor;
+			if (Mat.MaterialInterface)
+			{
+				// 1. 색상은 인스턴스든 마스터든 다형성으로 안전하게 최종 값을 가져옵니다.
+				InlineDiffuseColor = Mat.MaterialInterface->GetDiffuseColor();
+
+				// 2. 텍스처 경로는 런타임 폴백용이므로, 마스터 머티리얼일 경우에만 저장하도록 정책을 정합니다.
+				if (Mat.MaterialInterface->GetMaterialType() == EMaterialType::Master)
+				{
+					UMaterial* MasterMat = static_cast<UMaterial*>(Mat.MaterialInterface);
+					InlineTexturePath = MasterMat->DiffuseTextureFilePath;
+				}
+				// 인스턴스일 경우 인라인 텍스처 경로는 저장하지 않거나(부모를 참조하므로), 
+				// 필요하다면 오버라이드된 경로를 가져오도록 처리합니다.
+			}
 		}
 
 		Ar << InlinePathFileName;
@@ -88,8 +100,11 @@ struct FStaticMaterial
 			if (Mat.MaterialInterface && Mat.MaterialInterface->PathFileName.empty())
 			{
 				Mat.MaterialInterface->PathFileName = InlinePathFileName;
-				Mat.MaterialInterface->DiffuseTextureFilePath = InlineTexturePath;
-				Mat.MaterialInterface->DiffuseColor = InlineDiffuseColor;
+              if (UMaterial* ConcreteMaterial = Cast<UMaterial>(Mat.MaterialInterface))
+				{
+					ConcreteMaterial->DiffuseTextureFilePath = InlineTexturePath;
+					ConcreteMaterial->DiffuseColor = InlineDiffuseColor;
+				}
 			}
 		}
 
