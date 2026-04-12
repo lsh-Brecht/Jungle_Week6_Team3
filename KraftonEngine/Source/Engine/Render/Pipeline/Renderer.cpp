@@ -1132,6 +1132,13 @@ void FRenderer::UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus
 	frameConstantData.InverseProjection = InRenderBus.GetProj().GetInverse();
 	frameConstantData.InverseViewProjection = (InRenderBus.GetView() * InRenderBus.GetProj()).GetInverse();
 
+	const auto& Projection = frameConstantData.Projection;
+	if (std::abs(Projection.M[3][2]) > 1e-6f)
+	{
+		frameConstantData.InvDeviceZToWorldZTransform2 = 1.0f / Projection.M[3][2];
+		frameConstantData.InvDeviceZToWorldZTransform3 = Projection.M[2][2] / Projection.M[3][2];
+	}
+
 	if (GEngine && GEngine->GetTimer())
 	{
 		frameConstantData.Time = static_cast<float>(GEngine->GetTimer()->GetTotalTime());

@@ -16,9 +16,14 @@ cbuffer FrameBuffer : register(b0)
     float _framePad0;
     float3 CameraPosition;
     float _framePad1;
+    
     float4x4 InverseView;
     float4x4 InverseProjection;
     float4x4 InverseViewProjection;
+    
+    float InvDeviceZToWorldZTransform2;
+    float InvDeviceZToWorldZTransform3;
+    float _framePad2[2];
 }
 
 struct LocalTintEffectData
