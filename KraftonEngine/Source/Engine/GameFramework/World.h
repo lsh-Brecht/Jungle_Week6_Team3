@@ -75,6 +75,7 @@ public:
 	void UpdateActorInOctree(AActor* actor);
 
 private:
+	void DestroyActorImmediate(AActor* Actor);
 	bool NeedsVisibleProxyRebuild() const;
 	void CacheVisibleCameraState();
 
@@ -98,6 +99,8 @@ private:
 	FScene Scene;
 	FDebugDrawQueue DebugDrawQueue;
 	FTickManager TickManager;
+	TArray<AActor*> PendingDestroyActors;
+	bool bIsTickingActors = false;
 
 	FSpatialPartition Partition;
 };

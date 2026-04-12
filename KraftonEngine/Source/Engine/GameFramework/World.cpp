@@ -56,18 +56,28 @@ UObject* UWorld::Duplicate(UObject* NewOuter) const
 
 void UWorld::DestroyActor(AActor* Actor)
 {
-	// remove and clean up
-	if (!Actor) return;
-	Actor->EndPlay();
-	// Remove from actor list
-	PersistentLevel->RemoveActor(Actor);
+	if (!Actor)
+	{
+		return;
+	}
 
-	MarkWorldPrimitivePickingBVHDirty();
-	InvalidateVisibleSet();
-	Partition.RemoveActor(Actor);
+	if (bIsTickingActors)
+	{
+		auto It = std::find(PendingDestroyActors.begin(), PendingDestroyActors.end(), Actor);
+		if (It != PendingDestroyActors.end())
+		{
+			return;
+		}
 
-	// Mark for garbage collection
-	UObjectManager::Get().DestroyObject(Actor);
+		// 틱 순회 중 즉시 제거하면 Gather된 TickFunction 포인터가 무효화될 수 있으므로,
+		// 우선 비가시/종료 상태로만 전환하고 프레임 끝에서 실제 삭제한다.
+		Actor->SetVisible(false);
+		Actor->EndPlay();
+		PendingDestroyActors.push_back(Actor);
+		return;
+	}
+
+	DestroyActorImmediate(Actor);
 }
 
 void UWorld::AddActor(AActor* Actor)
@@ -407,7 +417,20 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 	DebugDrawQueue.Tick(DeltaTime);
 #endif
 
+	bIsTickingActors = true;
 	TickManager.Tick(this, DeltaTime, TickType);
+	bIsTickingActors = false;
+
+	if (!PendingDestroyActors.empty())
+	{
+		TArray<AActor*> ActorsToDestroy = PendingDestroyActors;
+		PendingDestroyActors.clear();
+
+		for (AActor* Actor : ActorsToDestroy)
+		{
+			DestroyActorImmediate(Actor);
+		}
+	}
 }
 
 void UWorld::EndPlay()
@@ -428,4 +451,21 @@ void UWorld::EndPlay()
 
 	PersistentLevel->Clear();
 	MarkWorldPrimitivePickingBVHDirty();
+}
+
+void UWorld::DestroyActorImmediate(AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+
+	Actor->EndPlay();
+	PersistentLevel->RemoveActor(Actor);
+
+	MarkWorldPrimitivePickingBVHDirty();
+	InvalidateVisibleSet();
+	Partition.RemoveActor(Actor);
+
+	UObjectManager::Get().DestroyObject(Actor);
 }

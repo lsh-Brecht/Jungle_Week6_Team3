@@ -1,12 +1,18 @@
 ﻿#include "ProjectileMovementComponent.h"
 
+#include "Collision/RayUtils.h"
+#include "Component/FireBallComponent.h"
+#include "Component/PrimitiveComponent.h"
 #include "Component/SceneComponent.h"
+#include "Component/SubUVComponent.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Math/MathUtils.h"
 #include "Object/ObjectFactory.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Serialization/Archive.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -61,6 +67,121 @@ namespace
 		HeadB.Color = ArrowColor;
 		RenderBus.AddDebugLineEntry(std::move(HeadB));
 	}
+
+	UFireBallComponent* FindFireBallComponent(const AActor* Actor)
+	{
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		for (UActorComponent* Component : Actor->GetComponents())
+		{
+			if (UFireBallComponent* FireBallComponent = Cast<UFireBallComponent>(Component))
+			{
+				return FireBallComponent;
+			}
+		}
+
+		return nullptr;
+	}
+
+	bool FindBlockingHit(UWorld* World, const AActor* IgnoredActor, const FRay& Ray, float MaxDistance, FHitResult& OutHitResult)
+	{
+		if (!World || MaxDistance <= FMath::Epsilon)
+		{
+			return false;
+		}
+
+		OutHitResult = {};
+		OutHitResult.Distance = 3.402823466e+38F;
+
+		for (AActor* Actor : World->GetActors())
+		{
+			if (!Actor || Actor == IgnoredActor || !Actor->IsVisible())
+			{
+				continue;
+			}
+
+			for (UPrimitiveComponent* Primitive : Actor->GetPrimitiveComponents())
+			{
+				if (!Primitive || !Primitive->IsVisible())
+				{
+					continue;
+				}
+
+				const FBoundingBox Bounds = Primitive->GetWorldBoundingBox();
+				float BoxTMin = 0.0f;
+				float BoxTMax = 0.0f;
+				if (!FRayUtils::IntersectRayAABB(Ray, Bounds.Min, Bounds.Max, BoxTMin, BoxTMax))
+				{
+					continue;
+				}
+
+				if (BoxTMin > MaxDistance || BoxTMax < 0.0f)
+				{
+					continue;
+				}
+
+				FHitResult CandidateHit = {};
+				if (!FRayUtils::RaycastComponent(Primitive, Ray, CandidateHit) || !CandidateHit.bHit)
+				{
+					continue;
+				}
+
+				if (CandidateHit.Distance < 0.0f || CandidateHit.Distance > MaxDistance)
+				{
+					continue;
+				}
+
+				if (CandidateHit.Distance < OutHitResult.Distance)
+				{
+					OutHitResult = CandidateHit;
+				}
+			}
+		}
+
+		return OutHitResult.bHit;
+	}
+
+	void SpawnExplosionEffect(UWorld* World, const FVector& ImpactLocation, float SourceRadius)
+	{
+		if (!World)
+		{
+			return;
+		}
+
+		AActor* ExplosionActor = World->SpawnActor<AActor>();
+		if (!ExplosionActor)
+		{
+			return;
+		}
+
+		USubUVComponent* ExplosionComponent = ExplosionActor->AddComponent<USubUVComponent>();
+		if (!ExplosionComponent)
+		{
+			World->DestroyActor(ExplosionActor);
+			return;
+		}
+
+		ExplosionActor->SetRootComponent(ExplosionComponent);
+		ExplosionActor->SetActorLocation(ImpactLocation);
+
+		const float ExplosionSize = std::max(SourceRadius * 6.0f, 12.0f);
+		ExplosionComponent->SetVisibility(true);
+		ExplosionComponent->SetParticle(FName("Explosion"));
+		ExplosionComponent->SetSpriteSize(ExplosionSize, ExplosionSize);
+		ExplosionComponent->SetFrameRate(30.0f);
+		ExplosionComponent->SetLoop(false);
+		ExplosionComponent->SetAutoDestroyOwnerWhenFinished(true);
+		ExplosionComponent->Play();
+
+		// SpawnActor 이후 컴포넌트를 추가한 경로라 BeginPlay는 수동으로 한 번 보장한다.
+		if (ExplosionActor->HasActorBegunPlay())
+		{
+			ExplosionComponent->BeginPlay();
+		}
+	}
 }
 
 IMPLEMENT_CLASS(UProjectileMovementComponent, UMovementComponent)
@@ -88,12 +209,31 @@ void UProjectileMovementComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	}
 
 	const FVector MoveDelta = EffectiveVelocity * DeltaTime;
-	if (MoveDelta.Length() <= FMath::Epsilon)
+	const float MoveDistance = MoveDelta.Length();
+	if (MoveDistance <= FMath::Epsilon)
 	{
 		return;
 	}
 
-	UpdatedSceneComponent->SetWorldLocation(UpdatedSceneComponent->GetWorldLocation() + MoveDelta);
+	const FVector CurrentLocation = UpdatedSceneComponent->GetWorldLocation();
+	const FVector MoveDirection = MoveDelta / MoveDistance;
+	const FRay MovementRay{ CurrentLocation, MoveDirection };
+
+	if (UWorld* World = GetWorld())
+	{
+		FHitResult HitResult = {};
+		if (FindBlockingHit(World, GetOwner(), MovementRay, MoveDistance, HitResult))
+		{
+			const float SafeMoveDistance = std::max(HitResult.Distance - 0.05f, 0.0f);
+			UpdatedSceneComponent->SetWorldLocation(CurrentLocation + MoveDirection * SafeMoveDistance);
+			if (HandleBlockingHit(UpdatedSceneComponent, CurrentLocation, MoveDelta, HitResult))
+			{
+				return;
+			}
+		}
+	}
+
+	UpdatedSceneComponent->SetWorldLocation(CurrentLocation + MoveDelta);
 }
 
 void UProjectileMovementComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
@@ -178,9 +318,42 @@ FVector UProjectileMovementComponent::ComputeEffectiveVelocity() const
 
 bool UProjectileMovementComponent::HandleBlockingHit(USceneComponent* UpdatedSceneComponent, const FVector& CurrentLocation, const FVector& MoveDelta, const FHitResult& HitResult)
 {
-	(void)UpdatedSceneComponent;
 	(void)CurrentLocation;
 	(void)MoveDelta;
-	(void)HitResult;
-	return true;
+
+	AActor* OwnerActor = GetOwner();
+	UWorld* World = OwnerActor ? OwnerActor->GetWorld() : nullptr;
+	if (!OwnerActor || !World)
+	{
+		return true;
+	}
+
+	if (UFireBallComponent* FireBallComponent = FindFireBallComponent(OwnerActor))
+	{
+		// FireBall이 다른 오브젝트에 닿으면 즉시 큰 폭발 SubUV를 한 번 재생시키고,
+		// 발사체 actor는 제거한다.
+		SpawnExplosionEffect(World, HitResult.WorldHitLocation, FireBallComponent->GetRadius());
+		World->DestroyActor(OwnerActor);
+		return true;
+	}
+
+	switch (GetHitBehavior())
+	{
+	case EProjectileHitBehavior::Destroy:
+		World->DestroyActor(OwnerActor);
+		return true;
+
+	case EProjectileHitBehavior::Bounce:
+		// 현재 Bounce는 별도 반사 계산을 지원하지 않으므로 정지 동작으로 폴백한다.
+		[[fallthrough]];
+
+	case EProjectileHitBehavior::Stop:
+	default:
+		if (UpdatedSceneComponent)
+		{
+			UpdatedSceneComponent->SetWorldLocation(HitResult.WorldHitLocation);
+		}
+		StopSimulating();
+		return true;
+	}
 }

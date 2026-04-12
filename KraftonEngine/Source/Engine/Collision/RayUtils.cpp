@@ -128,6 +128,7 @@ bool FRayUtils::RaycastTriangles(
 		FVector localHitPoint = localOrigin + localDir * closestT;
 		FVector worldHitPoint = WorldMatrix.TransformPositionWithW(localHitPoint);
 		OutHitResult.Distance = FVector::Distance(WorldRay.Origin, worldHitPoint);
+		OutHitResult.WorldHitLocation = worldHitPoint;
 	}
 
 	return bHit;

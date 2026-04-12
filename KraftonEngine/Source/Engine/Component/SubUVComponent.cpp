@@ -28,6 +28,7 @@ void USubUVComponent::Serialize(FArchive& Ar)
 	Ar << FrameIndex;
 	Ar << PlayRate;
 	Ar << bLoop;
+	Ar << bAutoDestroyOwnerWhenFinished;
 }
 
 void USubUVComponent::PostDuplicate()
@@ -139,6 +140,20 @@ void USubUVComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			{
 				bIsExecute = true;    // 마지막 프레임 도달 → 완료
 				TimeAccumulator = 0.0f;
+
+				// 폭발처럼 단발성 이펙트는 애니메이션이 끝나는 즉시 owner actor를 정리한다.
+				// World::DestroyActor는 틱 중 호출되면 deferred destroy로 처리되어 현재 프레임 순회가 깨지지 않는다.
+				if (bAutoDestroyOwnerWhenFinished)
+				{
+					if (AActor* OwnerActor = GetOwner())
+					{
+						if (UWorld* World = OwnerActor->GetWorld())
+						{
+							World->DestroyActor(OwnerActor);
+						}
+					}
+				}
+
 				break;
 			}
 		}

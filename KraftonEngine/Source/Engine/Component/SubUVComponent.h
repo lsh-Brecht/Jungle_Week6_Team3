@@ -25,6 +25,7 @@ public:
 	// --- Playback ---
 	void SetFrameRate(float InFPS) { PlayRate = InFPS; }
 	void SetLoop(bool bInLoop) { bLoop = bInLoop; }
+	void SetAutoDestroyOwnerWhenFinished(bool bInAutoDestroy) { bAutoDestroyOwnerWhenFinished = bInAutoDestroy; }
 	bool IsLoop()     const { return bLoop; }
 	bool IsFinished() const { return !bLoop && bIsExecute; }
 	void Play() { FrameIndex = 0; TimeAccumulator = 0.0f; bIsExecute = false; } // 처음부터 다시 재생
@@ -54,4 +55,5 @@ private:
 
 	bool bLoop = true;
 	bool bIsExecute = false;
+	bool bAutoDestroyOwnerWhenFinished = false;
 };
