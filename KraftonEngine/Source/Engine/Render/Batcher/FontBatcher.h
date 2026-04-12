@@ -39,7 +39,8 @@ public:
 		const FVector& CamRight,
 		const FVector& CamUp,
 		const FVector& WorldScale,
-		float Scale = 1.0f);
+		float Scale = 1.0f,
+		bool bSelected = false);
 
 	// 오버레이 스탯 렌더링용
 	void AddScreenText(const FString& Text,
@@ -55,6 +56,9 @@ public:
 	// Dynamic VB 업로드 + 드로우콜 1회
 	void DrawBatch(ID3D11DeviceContext* Context, const FFontResource* Resource);
 	void DrawScreenBatch(ID3D11DeviceContext* Context, const FFontResource* Resource);
+
+	void DrawSelectionMaskBatch(ID3D11DeviceContext* Context, const FFontResource* Resource);
+	uint32 GetSelectedQuadCount() const { return static_cast<uint32>(SelectedVertices.size() / 4); }
 
 	uint32 GetQuadCount() const { return static_cast<uint32>(Vertices.size() / 4); }
 
@@ -73,6 +77,9 @@ private:
 	TMap<uint32, FCharacterInfo> CharInfoMap;
 	uint32 CachedColumns = 0;
 	uint32 CachedRows    = 0;
+
+	TArray<FTextureVertex> SelectedVertices;
+	TArray<uint32>         SelectedIndices;
 
 	void BuildCharInfoMap(uint32 Columns, uint32 Rows);
 	void GetCharUV(uint32 Codepoint, FVector2& OutUVMin, FVector2& OutUVMax) const;

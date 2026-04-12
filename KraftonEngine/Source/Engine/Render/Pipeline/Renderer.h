@@ -40,8 +40,8 @@ struct FPassRenderState
 
 enum class EPostEffectType : uint32
 {
-	Decal = 0,
-	Fog,
+	//Decal,
+	Fog = 0,
 	Outline,
 	FXAA,
 	MAX

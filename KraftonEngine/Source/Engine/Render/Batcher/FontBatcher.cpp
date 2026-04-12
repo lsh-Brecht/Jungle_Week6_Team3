@@ -70,7 +70,8 @@ void FFontBatcher::AddText(const FString& Text,
 	const FVector& CamRight,
 	const FVector& CamUp,
 	const FVector& WorldScale,
-	float Scale)
+	float Scale,
+	bool bSelected)
 {
 	if (Text.empty()) return;
 
@@ -132,6 +133,22 @@ void FFontBatcher::AddText(const FString& Text,
 	// 실제 출력된 문자 수에 맞게 배열 크기 조정 (멀티바이트 문자 처리 후 잉여 슬롯 제거)
 	Vertices.resize(Base + CharIdx * 4);
 	Indices.resize(IdxBase + CharIdx * 6);
+
+	if (bSelected && CharIdx > 0)
+	{
+		uint32 SelBase = static_cast<uint32>(SelectedVertices.size());
+
+		// 버텍스 복사
+		SelectedVertices.insert(SelectedVertices.end(),
+			Vertices.begin() + Base,
+			Vertices.begin() + Base + CharIdx * 4);
+
+		// 인덱스 보정 복사 (오프셋을 새 배열에 맞게 조정)
+		for (uint32 i = 0; i < CharIdx * 6; ++i)
+		{
+			SelectedIndices.push_back(Indices[IdxBase + i] - Base + SelBase);
+		}
+	}
 }
 
 
@@ -226,6 +243,8 @@ void FFontBatcher::Clear()
 {
 	Vertices.clear();
 	Indices.clear();
+	SelectedVertices.clear();
+	SelectedIndices.clear();
 }
 
 void FFontBatcher::ClearScreen()
@@ -283,6 +302,33 @@ void FFontBatcher::DrawScreenBatch(ID3D11DeviceContext* Context, const FFontReso
 	if (!IB.Update(Context, ScreenIndices.data(), IndexCount)) return;
 
 	FShaderManager::Get().GetShader(EShaderType::OverlayFont)->Bind(Context);
+	VB.Bind(Context);
+	IB.Bind(Context);
+
+	ID3D11ShaderResourceView* SRV = Resource->SRV;
+	Context->PSSetShaderResources(0, 1, &SRV);
+	Context->PSSetSamplers(0, 1, &SamplerState);
+
+	Context->DrawIndexed(IndexCount, 0, 0);
+	FDrawCallStats::Increment();
+}
+
+void FFontBatcher::DrawSelectionMaskBatch(ID3D11DeviceContext* Context, const FFontResource* Resource)
+{
+	if (!Resource || !Resource->IsLoaded()) return;
+	if (SelectedVertices.empty()) return;
+
+	const uint32 VertexCount = static_cast<uint32>(SelectedVertices.size());
+	const uint32 IndexCount = static_cast<uint32>(SelectedIndices.size());
+
+	VB.EnsureCapacity(Device, VertexCount);
+	IB.EnsureCapacity(Device, IndexCount);
+	if (!VB.Update(Context, SelectedVertices.data(), VertexCount)) return;
+	if (!IB.Update(Context, SelectedIndices.data(), IndexCount)) return;
+
+	// 💡 핵심: 반드시 ShaderFont를 바인딩해야 셰이더 안의 discard(알파 클리핑)가 작동하여 네모가 아닌 글자 모양 마스크가 나옵니다.
+	FShaderManager::Get().GetShader(EShaderType::Font)->Bind(Context);
+
 	VB.Bind(Context);
 	IB.Bind(Context);
 

@@ -1,4 +1,4 @@
-#include "BillboardBatcher.h"
+﻿#include "BillboardBatcher.h"
 
 #include "Core/CoreTypes.h"
 #include "Profiling/Stats.h"
@@ -30,7 +30,8 @@ void FBillboardBatcher::AddSprite(ID3D11ShaderResourceView* SRV,
 								  const FVector& CamUp,
 								  const FVector& WorldScale,
 								  float Width,
-								  float Height)
+                               float Height,
+								  bool bSelected)
 {
 	if (Batches.empty() || Batches.back().SRV != SRV)
 	{
@@ -63,6 +64,32 @@ void FBillboardBatcher::AddSprite(ID3D11ShaderResourceView* SRV,
 	Indices.push_back(LocalBase + 1); Indices.push_back(LocalBase + 3); Indices.push_back(LocalBase + 2);
 
 	Batches.back().IndexCount += 6;
+
+	if (bSelected)
+	{
+		if (SelectedBatches.empty() || SelectedBatches.back().SRV != SRV)
+		{
+			FSRVBatch SelectedBatch;
+			SelectedBatch.SRV = SRV;
+			SelectedBatch.IndexStart = static_cast<uint32>(SelectedIndices.size());
+			SelectedBatch.IndexCount = 0;
+			SelectedBatch.BaseVertex = static_cast<int32>(SelectedVertices.size());
+			SelectedBatches.push_back(SelectedBatch);
+		}
+
+		uint32 SelectedLocalBase = static_cast<uint32>(SelectedVertices.size())
+			- static_cast<uint32>(SelectedBatches.back().BaseVertex);
+
+		SelectedVertices.push_back({ v0, { 0.0f, 0.0f } });
+		SelectedVertices.push_back({ v1, { 1.0f, 0.0f } });
+		SelectedVertices.push_back({ v2, { 0.0f, 1.0f } });
+		SelectedVertices.push_back({ v3, { 1.0f, 1.0f } });
+
+		SelectedIndices.push_back(SelectedLocalBase + 0); SelectedIndices.push_back(SelectedLocalBase + 1); SelectedIndices.push_back(SelectedLocalBase + 2);
+		SelectedIndices.push_back(SelectedLocalBase + 1); SelectedIndices.push_back(SelectedLocalBase + 3); SelectedIndices.push_back(SelectedLocalBase + 2);
+
+		SelectedBatches.back().IndexCount += 6;
+	}
 }
 
 void FBillboardBatcher::Clear()
@@ -70,6 +97,9 @@ void FBillboardBatcher::Clear()
 	Vertices.clear();
 	Indices.clear();
 	Batches.clear();
+   SelectedVertices.clear();
+	SelectedIndices.clear();
+	SelectedBatches.clear();
 }
 
 void FBillboardBatcher::DrawBatch(ID3D11DeviceContext* Context)
@@ -90,6 +120,32 @@ void FBillboardBatcher::DrawBatch(ID3D11DeviceContext* Context)
 	Context->PSSetSamplers(0, 1, &SamplerState);
 
 	for (const FSRVBatch& Batch : Batches)
+	{
+		if (!Batch.SRV || Batch.IndexCount == 0) continue;
+		Context->PSSetShaderResources(0, 1, &Batch.SRV);
+		Context->DrawIndexed(Batch.IndexCount, Batch.IndexStart, Batch.BaseVertex);
+		FDrawCallStats::Increment();
+	}
+}
+
+void FBillboardBatcher::DrawSelectionMaskBatch(ID3D11DeviceContext* Context)
+{
+	if (SelectedVertices.empty()) return;
+
+	const uint32 VertexCount = static_cast<uint32>(SelectedVertices.size());
+	const uint32 IndexCount = static_cast<uint32>(SelectedIndices.size());
+
+	VB.EnsureCapacity(Device, VertexCount);
+	IB.EnsureCapacity(Device, IndexCount);
+	if (!VB.Update(Context, SelectedVertices.data(), VertexCount)) return;
+	if (!IB.Update(Context, SelectedIndices.data(), IndexCount)) return;
+
+	FShaderManager::Get().GetShader(EShaderType::Billboard)->Bind(Context);
+	VB.Bind(Context);
+	IB.Bind(Context);
+	Context->PSSetSamplers(0, 1, &SamplerState);
+
+	for (const FSRVBatch& Batch : SelectedBatches)
 	{
 		if (!Batch.SRV || Batch.IndexCount == 0) continue;
 		Context->PSSetShaderResources(0, 1, &Batch.SRV);
