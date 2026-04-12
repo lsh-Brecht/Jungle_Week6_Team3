@@ -371,7 +371,7 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::Font] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 
 	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
-	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::DepthReadOnly,	EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
 	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
