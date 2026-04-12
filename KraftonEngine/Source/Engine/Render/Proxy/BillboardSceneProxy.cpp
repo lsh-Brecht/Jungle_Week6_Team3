@@ -1,4 +1,4 @@
-#include "Render/Proxy/BillboardSceneProxy.h"
+﻿#include "Render/Proxy/BillboardSceneProxy.h"
 #include "Component/BillboardComponent.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Render/Pipeline/RenderBus.h"
@@ -64,6 +64,7 @@ void FBillboardSceneProxy::CollectEntries(FRenderBus& Bus)
 	Entry.Billboard.Texture = Texture;
 	Entry.Billboard.Width   = Comp->GetWidth();
 	Entry.Billboard.Height  = Comp->GetHeight();
+    Entry.bSelected = bSelected;
 	Bus.AddBillboardEntry(std::move(Entry));
 }
 

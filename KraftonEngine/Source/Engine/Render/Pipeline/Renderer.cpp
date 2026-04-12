@@ -53,20 +53,20 @@ void FRenderer::Create(HWND hWindow)
 			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
 		});
 
-	RegisterPostEffect(EPostEffectType::FXAA,
-		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
-		{
-			DrawPostProcessFXAA(Bus, Context, IO.ColorInput, IO.ColorOutput);
-		});
-
 	RegisterPostEffect(EPostEffectType::Fog,
 		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
 		{
 			DrawPostProcessFog(Bus, Context, IO);
 		});
+
+	RegisterPostEffect(EPostEffectType::FXAA,
+		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+		{
+			DrawPostProcessFXAA(Bus, Context, IO.ColorInput, IO.ColorOutput);
+		});
 	
 
-	SetPostEffectEnabled(EPostEffectType::Decal, false);
+	//SetPostEffectEnabled(EPostEffectType::Decal, true);
 	SetPostEffectEnabled(EPostEffectType::Fog, true);
 	SetPostEffectEnabled(EPostEffectType::Outline, true);
 	SetPostEffectEnabled(EPostEffectType::FXAA, true);
@@ -144,7 +144,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 				Bus.GetCameraRight(),
 				Bus.GetCameraUp(),
 				Entry.PerObject.Model.GetScale(),
-				Entry.Font.Scale
+				Entry.Font.Scale,
+				Entry.bSelected
 			);
 		}
 	}
@@ -195,7 +196,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Entry.SubUV.Particle->Columns,
 					Entry.SubUV.Particle->Rows,
 					Entry.SubUV.Width,
-					Entry.SubUV.Height
+                  Entry.SubUV.Height,
+					Entry.bSelected
 				);
 			}
 		}
@@ -227,7 +229,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Bus.GetCameraUp(),
 					Entry.PerObject.Model.GetScale(),
 					Entry.Billboard.Width,
-					Entry.Billboard.Height
+                  Entry.Billboard.Height,
+					Entry.bSelected
 				);
 			}
 		}
@@ -300,6 +303,11 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
 	{
 		ERenderPass CurPass = static_cast<ERenderPass>(i);
+      if (CurPass == ERenderPass::SelectionMask)
+		{
+			continue;
+		}
+
 		const auto& Batcher = PassBatchers[i];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
@@ -312,14 +320,12 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		GPU_SCOPE_STAT(PassName);
 
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
-		if (CurPass == ERenderPass::SelectionMask)
-		{
-			ExecuteSelectionMaskPass(InRenderBus, Context);
-			continue;
-		}
-
 		if (CurPass == ERenderPass::PostProcess)
 		{
+         ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
+			ExecuteSelectionMaskPass(InRenderBus, Context);
+			ApplyPassRenderState(ERenderPass::PostProcess, Context, InRenderBus.GetViewMode());
+
 			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
 			{
 				DrawScenenDepthVisualize(InRenderBus, Context);
@@ -353,21 +359,25 @@ void FRenderer::InitializePassRenderStates()
 	using E = ERenderPass;
 	auto& S = PassRenderStates;
 
-	//                              DepthStencil                    Blend                Rasterizer                   Topology                                WireframeAware
-	S[(uint32)E::Opaque] = { EDepthStencilState::Default,      EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Translucent] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::SelectionMask] = { EDepthStencilState::DepthReadOnly, EBlendState::Opaque,     ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::PostProcess] = { EDepthStencilState::NoDepth,       EBlendState::AlphaBlend, ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::Editor] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     true };
-	S[(uint32)E::Grid] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     false };
-	S[(uint32)E::GizmoOuter] = { EDepthStencilState::GizmoOutside, EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::GizmoInner] = { EDepthStencilState::GizmoInside,  EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
+	//								DepthStencil							Blend						Rasterizer							Topology								WireframeAware
+	S[(uint32)E::Opaque] =			{ EDepthStencilState::Default,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Decal] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	//	Outline에 대한 Masking 방해로 인해 Patch
+	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Font] = { EDepthStencilState::DepthReadOnly,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::OverlayFont] = { EDepthStencilState::NoDepth,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::SubUV] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Billboard] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::Translucent] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::SubUV] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Font] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+
+	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::DepthReadOnly,	EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
+	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
+	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
+
 }
 
 // ============================================================
@@ -815,6 +825,22 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 
 	ExecutePass(MaskProxies, Context);
 
+	if (FontBatcher.GetSelectedQuadCount() > 0)
+	{
+		const FFontResource* FontRes = FResourceManager::Get().FindFont(FName("Default"));
+		FontBatcher.DrawSelectionMaskBatch(Context, FontRes);
+	}
+
+	if (SubUVBatcher.GetSelectedSpriteCount() > 0)
+	{
+		SubUVBatcher.DrawSelectionMaskBatch(Context);
+	}
+
+	if (BillboardBatcher.GetSelectedSpriteCount() > 0)
+	{
+		BillboardBatcher.DrawSelectionMaskBatch(Context);
+	}
+
 	if (ViewportRTV)
 	{
 		Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
@@ -843,7 +869,7 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 
 	//	기본 체인 순서: Decal -> Fog -> Outline -> FXAA
 	const EPostEffectType Order[] = {
-		EPostEffectType::Decal,
+		//EPostEffectType::Decal,
 		EPostEffectType::Fog,
 		EPostEffectType::Outline,
 		EPostEffectType::FXAA

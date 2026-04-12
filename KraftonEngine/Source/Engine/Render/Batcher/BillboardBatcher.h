@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "BatcherBase.h"
 #include "Core/CoreTypes.h"
@@ -25,17 +25,23 @@ public:
 		const FVector& CamUp,
 		const FVector& WorldScale,
 		float Width  = 1.0f,
-		float Height = 1.0f);
+       float Height = 1.0f,
+		bool bSelected = false);
 
 	void Clear();
 	void DrawBatch(ID3D11DeviceContext* Context);
+	void DrawSelectionMaskBatch(ID3D11DeviceContext* Context);
 
 	uint32 GetSpriteCount() const { return static_cast<uint32>(Vertices.size() / 4); }
+	uint32 GetSelectedSpriteCount() const { return static_cast<uint32>(SelectedVertices.size() / 4); }
 
 private:
 	TArray<FTextureVertex> Vertices;
 	TArray<uint32>         Indices;
 	TArray<FSRVBatch>      Batches;
+	TArray<FTextureVertex> SelectedVertices;
+	TArray<uint32>         SelectedIndices;
+	TArray<FSRVBatch>      SelectedBatches;
 
 	ID3D11SamplerState* SamplerState = nullptr;
 };

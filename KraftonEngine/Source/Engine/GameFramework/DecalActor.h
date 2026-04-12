@@ -5,7 +5,6 @@
 class UDecalComponent;
 class UMaterialInterface;
 
-
 class ADecalActor : public AActor
 {
 public:
