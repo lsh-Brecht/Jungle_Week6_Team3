@@ -144,7 +144,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 				Bus.GetCameraRight(),
 				Bus.GetCameraUp(),
 				Entry.PerObject.Model.GetScale(),
-				Entry.Font.Scale
+				Entry.Font.Scale,
+				Entry.bSelected
 			);
 		}
 	}
@@ -195,7 +196,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Entry.SubUV.Particle->Columns,
 					Entry.SubUV.Particle->Rows,
 					Entry.SubUV.Width,
-					Entry.SubUV.Height
+                  Entry.SubUV.Height,
+					Entry.bSelected
 				);
 			}
 		}
@@ -227,7 +229,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Bus.GetCameraUp(),
 					Entry.PerObject.Model.GetScale(),
 					Entry.Billboard.Width,
-					Entry.Billboard.Height
+                  Entry.Billboard.Height,
+					Entry.bSelected
 				);
 			}
 		}
@@ -300,6 +303,11 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
 	{
 		ERenderPass CurPass = static_cast<ERenderPass>(i);
+      if (CurPass == ERenderPass::SelectionMask)
+		{
+			continue;
+		}
+
 		const auto& Batcher = PassBatchers[i];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
@@ -312,14 +320,12 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		GPU_SCOPE_STAT(PassName);
 
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
-		if (CurPass == ERenderPass::SelectionMask)
-		{
-			ExecuteSelectionMaskPass(InRenderBus, Context);
-			continue;
-		}
-
 		if (CurPass == ERenderPass::PostProcess)
 		{
+         ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
+			ExecuteSelectionMaskPass(InRenderBus, Context);
+			ApplyPassRenderState(ERenderPass::PostProcess, Context, InRenderBus.GetViewMode());
+
 			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
 			{
 				DrawScenenDepthVisualize(InRenderBus, Context);
@@ -370,7 +376,7 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
 	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
-	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 
 }
 
@@ -818,6 +824,22 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	Context->OMSetRenderTargets(1, &OutlineMaskRTV, DSV);
 
 	ExecutePass(MaskProxies, Context);
+
+	if (FontBatcher.GetSelectedQuadCount() > 0)
+	{
+		const FFontResource* FontRes = FResourceManager::Get().FindFont(FName("Default"));
+		FontBatcher.DrawSelectionMaskBatch(Context, FontRes);
+	}
+
+	if (SubUVBatcher.GetSelectedSpriteCount() > 0)
+	{
+		SubUVBatcher.DrawSelectionMaskBatch(Context);
+	}
+
+	if (BillboardBatcher.GetSelectedSpriteCount() > 0)
+	{
+		BillboardBatcher.DrawSelectionMaskBatch(Context);
+	}
 
 	if (ViewportRTV)
 	{

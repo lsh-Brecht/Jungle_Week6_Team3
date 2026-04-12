@@ -1,4 +1,4 @@
-#include "Render/Proxy/SubUVSceneProxy.h"
+﻿#include "Render/Proxy/SubUVSceneProxy.h"
 #include "Component/SubUVComponent.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ShaderManager.h"
@@ -47,5 +47,6 @@ void FSubUVSceneProxy::CollectEntries(FRenderBus& Bus)
 	Entry.SubUV.FrameIndex = Comp->GetFrameIndex();
 	Entry.SubUV.Width = Comp->GetWidth();
 	Entry.SubUV.Height = Comp->GetHeight();
+    Entry.bSelected = bSelected;
 	Bus.AddSubUVEntry(std::move(Entry));
 }
