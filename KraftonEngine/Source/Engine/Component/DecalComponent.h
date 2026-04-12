@@ -45,6 +45,4 @@ public:
 protected:
 
 	UMaterialInterface* DecalMaterial;
-
-
 };

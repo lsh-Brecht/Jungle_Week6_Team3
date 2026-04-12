@@ -53,20 +53,20 @@ void FRenderer::Create(HWND hWindow)
 			DrawPostProcessOutline(Bus, Context, IO.ColorInput, IO.ColorOutput);
 		});
 
-	RegisterPostEffect(EPostEffectType::FXAA,
-		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
-		{
-			DrawPostProcessFXAA(Bus, Context, IO.ColorInput, IO.ColorOutput);
-		});
-
 	RegisterPostEffect(EPostEffectType::Fog,
 		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
 		{
 			DrawPostProcessFog(Bus, Context, IO);
 		});
+
+	RegisterPostEffect(EPostEffectType::FXAA,
+		[this](const FRenderBus& Bus, ID3D11DeviceContext* Context, FPostProcessIO& IO)
+		{
+			DrawPostProcessFXAA(Bus, Context, IO.ColorInput, IO.ColorOutput);
+		});
 	
 
-	SetPostEffectEnabled(EPostEffectType::Decal, false);
+	//SetPostEffectEnabled(EPostEffectType::Decal, true);
 	SetPostEffectEnabled(EPostEffectType::Fog, true);
 	SetPostEffectEnabled(EPostEffectType::Outline, true);
 	SetPostEffectEnabled(EPostEffectType::FXAA, true);
@@ -353,21 +353,25 @@ void FRenderer::InitializePassRenderStates()
 	using E = ERenderPass;
 	auto& S = PassRenderStates;
 
-	//                              DepthStencil                    Blend                Rasterizer                   Topology                                WireframeAware
-	S[(uint32)E::Opaque] = { EDepthStencilState::Default,      EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Translucent] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::SelectionMask] = { EDepthStencilState::DepthReadOnly, EBlendState::Opaque,     ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::PostProcess] = { EDepthStencilState::NoDepth,       EBlendState::AlphaBlend, ERasterizerState::SolidNoCull,    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::Editor] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     true };
-	S[(uint32)E::Grid] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_LINELIST,     false };
-	S[(uint32)E::GizmoOuter] = { EDepthStencilState::GizmoOutside, EBlendState::Opaque,     ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::GizmoInner] = { EDepthStencilState::GizmoInside,  EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
+	//								DepthStencil							Blend						Rasterizer							Topology								WireframeAware
+	S[(uint32)E::Opaque] =			{ EDepthStencilState::Default,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Decal] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	//	Outline에 대한 Masking 방해로 인해 Patch
+	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Font] = { EDepthStencilState::DepthReadOnly,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::OverlayFont] = { EDepthStencilState::NoDepth,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
-	S[(uint32)E::SubUV] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::Billboard] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::Translucent] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::SubUV] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Font] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+
+	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::DepthReadOnly,	EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
+	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
+	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+
 }
 
 // ============================================================
@@ -843,7 +847,7 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 
 	//	기본 체인 순서: Decal -> Fog -> Outline -> FXAA
 	const EPostEffectType Order[] = {
-		EPostEffectType::Decal,
+		//EPostEffectType::Decal,
 		EPostEffectType::Fog,
 		EPostEffectType::Outline,
 		EPostEffectType::FXAA
