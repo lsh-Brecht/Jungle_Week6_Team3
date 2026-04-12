@@ -3,15 +3,7 @@
 #include "PrimitiveComponent.h"
 #include "Render/Fog/FogRenderTypes.h"
 
-// UE5에서는 두 번째 안개 레이어를 위한 구조체를 별도로 사용합니다.
-struct FExponentialHeightFogData
-{
-	float FogDensity = 0.0f;
-	float FogHeightFalloff = 0.2f;
-	float FogHeightOffset = 0.0f;
-};
-
-// 메시 프록시를 만들지 않지만 컴포넌트 수명주기/직렬화를 위해 PrimitiveComponent를 상속합니다.
+// 일단 과제 명세에 맞게 PrimitiveComponent를 상속합니다.
 class UExponentialHeightFogComponent : public UPrimitiveComponent
 {
 public:

@@ -124,6 +124,9 @@
     <Filter Include="ThirdParty\SimpleJSON">
       <UniqueIdentifier>{b5b63371-405e-e009-4e4e-e3b5a25ee7bd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Render\Fog">
+      <UniqueIdentifier>{7a1eb051-2479-4ca0-8ad2-6a8c73aeb24a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Editor.hlsl">
@@ -168,6 +171,9 @@
     <None Include="Shaders\Common\VertexLayouts.hlsl">
       <Filter>Shaders\Common</Filter>
     </None>
+    <FxCompile Include="Shaders\FogPostProcess.hlsl">
+      <Filter>Shaders\Common</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Editor\EditorEngine.cpp">
@@ -529,6 +535,7 @@
     <ClCompile Include="Source\Engine\Materials\MaterialInterface.cpp">
       <Filter>Source\Engine\Materials</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Materials\MaterialInstance.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -986,6 +993,10 @@
     <ClInclude Include="Source\Engine\Materials\MaterialInterface.h">
       <Filter>Source\Engine\Materials</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Materials\MaterialInstance.h" />
+    <ClInclude Include="Source\Engine\Render\Fog\FogRenderTypes.h">
+      <Filter>Source\Engine\Render\Fog</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
@@ -994,5 +1005,3 @@
     <None Include="Shaders\SceneDepthVisualize.hlsl" />
   </ItemGroup>
 </Project>
-
-
