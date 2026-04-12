@@ -4,6 +4,7 @@
 
 #include "ImGui/imgui.h"
 #include "Component/GizmoComponent.h"
+#include "Component/MovementComponent.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/StaticMeshComponent.h"
 #include "Component/SceneComponent.h"
@@ -38,6 +39,46 @@ static FString GetStemFromPath(const FString& Path)
 	size_t SlashPos = Path.find_last_of("/\\");
 	FString FileName = (SlashPos == FString::npos) ? Path : Path.substr(SlashPos + 1);
 	return RemoveExtension(FileName);
+}
+
+static FString GetComponentDisplayLabel(UActorComponent* Comp)
+{
+	if (!Comp)
+	{
+		return FString();
+	}
+
+	FString Name = Comp->GetFName().ToString();
+	const FString TypeName = Comp->GetTypeInfo()->name;
+	const FString DefaultNamePrefix = TypeName + "_";
+	const bool bUseTypeAsLabel = Name.empty()
+		|| Name == TypeName
+		|| Name.rfind(DefaultNamePrefix, 0) == 0;
+
+	FString Label = bUseTypeAsLabel ? TypeName : Name;
+
+	if (UMovementComponent* MovementComp = Cast<UMovementComponent>(Comp))
+	{
+		FString TargetName = "Root";
+		if (USceneComponent* UpdatedComp = MovementComp->GetUpdatedComponent())
+		{
+			TargetName = UpdatedComp->GetFName().ToString();
+			if (TargetName.empty())
+			{
+				TargetName = UpdatedComp->GetTypeInfo()->name;
+			}
+		}
+		else if (!MovementComp->GetUpdatedComponentPath().empty())
+		{
+			TargetName = MovementComp->GetUpdatedComponentPath();
+		}
+
+		Label += " [-> ";
+		Label += TargetName;
+		Label += "]";
+	}
+
+	return Label;
 }
 
 FString FEditorPropertyWidget::OpenObjFileDialog()
@@ -354,19 +395,13 @@ void FEditorPropertyWidget::RenderComponentTree(AActor* Actor)
 		if (!Comp) continue;
 		if (Comp->IsA<USceneComponent>()) continue;
 
-		FString Name = Comp->GetFName().ToString();
-		const FString TypeName = Comp->GetTypeInfo()->name;
-		const FString DefaultNamePrefix = TypeName + "_";
-		const bool bUseTypeAsLabel = Name.empty()
-			|| Name == TypeName
-			|| Name.rfind(DefaultNamePrefix, 0) == 0;
-		const char* Label = bUseTypeAsLabel ? TypeName.c_str() : Name.c_str();
+		const FString Label = GetComponentDisplayLabel(Comp);
 
 		ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 		if (!bActorSelected && SelectedComponent == Comp)
 			Flags |= ImGuiTreeNodeFlags_Selected;
 
-		ImGui::TreeNodeEx(Comp, Flags, "%s", Label);
+		ImGui::TreeNodeEx(Comp, Flags, "%s", Label.c_str());
 		if (ImGui::IsItemClicked())
 		{
 			SelectedComponent = Comp;
@@ -379,8 +414,7 @@ void FEditorPropertyWidget::RenderSceneComponentNode(USceneComponent* Comp)
 {
 	if (!Comp) return;
 
-	FString Name = Comp->GetFName().ToString();
-	if (Name.empty()) Name = Comp->GetTypeInfo()->name;
+	FString Name = GetComponentDisplayLabel(Comp);
 
 	const auto& Children = Comp->GetChildren();
 	bool bHasChildren = !Children.empty();
@@ -556,6 +590,62 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		{
 			*Val = Buf;
 			bChanged = true;
+		}
+		break;
+	}
+	case EPropertyType::SceneComponentRef:
+	{
+		FString* Val = static_cast<FString*>(Prop.ValuePtr);
+		UMovementComponent* MovementComp = SelectedComponent ? Cast<UMovementComponent>(SelectedComponent) : nullptr;
+		FString Preview = MovementComp ? MovementComp->GetUpdatedComponentDisplayName() : FString("None");
+
+		if (ImGui::BeginCombo(Prop.Name.c_str(), Preview.c_str()))
+		{
+			bool bSelectedAuto = Val->empty();
+			if (ImGui::Selectable("Auto (Root)", bSelectedAuto))
+			{
+				Val->clear();
+				bChanged = true;
+			}
+			if (bSelectedAuto)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+
+			if (MovementComp)
+			{
+				for (USceneComponent* Candidate : MovementComp->GetOwnerSceneComponents())
+				{
+					if (!Candidate)
+					{
+						continue;
+					}
+
+					FString CandidatePath = MovementComp->BuildUpdatedComponentPath(Candidate);
+					FString CandidateName = Candidate->GetFName().ToString();
+					if (CandidateName.empty())
+					{
+						CandidateName = Candidate->GetTypeInfo()->name;
+					}
+					if (!CandidatePath.empty())
+					{
+						CandidateName += " (" + CandidatePath + ")";
+					}
+
+					bool bSelected = (*Val == CandidatePath);
+					if (ImGui::Selectable(CandidateName.c_str(), bSelected))
+					{
+						*Val = CandidatePath;
+						bChanged = true;
+					}
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+			}
+
+			ImGui::EndCombo();
 		}
 		break;
 	}
