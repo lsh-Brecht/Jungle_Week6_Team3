@@ -86,11 +86,7 @@ void UStaticMesh::InitResources(ID3D11Device* InDevice)
 	// 머티리얼 텍스처 프리로드
 	for (auto& Mat : StaticMaterials)
 	{
-		if (Mat.MaterialInterface && !Mat.MaterialInterface->DiffuseTextureFilePath.empty())
-		{
-			Mat.MaterialInterface->DiffuseTexture = UTexture2D::LoadFromFile(
-				Mat.MaterialInterface->DiffuseTextureFilePath, InDevice);
-		}
+        FObjManager::EnsureMaterialTextureLoaded(Mat.MaterialInterface, InDevice);
 	}
 
 	// ── LOD 생성 (LOD1: 90%, LOD2: 55%, LOD3: 15%) ──

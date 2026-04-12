@@ -525,6 +525,10 @@
     <ClCompile Include="Source\Engine\Component\ExponentialHeightFogComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\GameFramework\DecalActor.cpp" />
+    <ClCompile Include="Source\Engine\Materials\MaterialInterface.cpp">
+      <Filter>Source\Engine\Materials</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -977,8 +981,18 @@
     <ClInclude Include="Source\Engine\Component\ExponentialHeightFogComponent.h">
       <Filter>Source\Engine\Component</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\GameFramework\DecalActor.h" />
+    <ClInclude Include="Source\Engine\Component\DecalComponent.h" />
+    <ClInclude Include="Source\Engine\Materials\MaterialInterface.h">
+      <Filter>Source\Engine\Materials</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SceneDepthVisualize.hlsl" />
+  </ItemGroup>
 </Project>
+
+
