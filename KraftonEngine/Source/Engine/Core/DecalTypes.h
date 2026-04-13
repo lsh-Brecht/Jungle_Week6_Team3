@@ -214,3 +214,53 @@ struct FDecalUVStats
 	int32 InputTriangleCount = 0;
 	int32 OutputTriangleCount = 0;
 };
+
+struct FDecalRenderableVertex
+{
+	FVector Position;
+	FVector Normal;
+	FVector4 Color;
+	FVector2 UV;
+};
+
+struct FDecalRenderableSection
+{
+	uint32 FirstIndex = 0;
+	uint32 IndexCount = 0;
+};
+
+struct FDecalRenderableMesh
+{
+	/*
+		Position은 decal local 기준입니다.
+		나중에 렌더 시 DecalLocalToWorld를 model matrix로 넘기면 됩니다.
+	*/
+	TArray<FDecalRenderableVertex> Vertices;
+	TArray<uint32> Indices;
+
+	/*
+		처음에는 단일 머티리얼, 단일 section이면 충분합니다.
+		나중에 SortOrder/Material 분할이 필요해지면 section을 늘리면 됩니다.
+	*/
+	TArray<FDecalRenderableSection> Sections;
+
+	void Clear()
+	{
+		Vertices.clear();
+		Indices.clear();
+		Sections.clear();
+	}
+
+	bool IsEmpty() const
+	{
+		return Vertices.empty() || Indices.empty();
+	}
+};
+
+struct FDecalRenderableMeshStats
+{
+	int32 InputTriangleCount = 0;
+	int32 OutputVertexCount = 0;
+	int32 OutputIndexCount = 0;
+	int32 OutputTriangleCount = 0;
+};

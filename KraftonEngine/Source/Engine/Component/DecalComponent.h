@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Component/PrimitiveComponent.h"
+#include "Core/DecalTypes.h"
 
 class UMaterialInterface;
 class FArchive;
@@ -91,6 +92,9 @@ public:
 	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
 
 	void DebugRunBroadPhase() const;
+
+	const FDecalRenderableMesh& GetRenderableMesh() const { return RenderableMesh; }
+
 private:
 	/*
 	* - 저장/복제는 경로 기반
@@ -107,6 +111,8 @@ private:
 	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
 	UMaterialInterface* DecalMaterial = nullptr;
 	FString DecalMaterialPath = "None";
+
+	FDecalRenderableMesh RenderableMesh;
 
 	int32 SortOrder = 0;
 

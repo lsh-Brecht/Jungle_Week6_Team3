@@ -52,6 +52,11 @@ public:
 		TArray<FDecalUVTriangle>& OutUVTriangles,
 		FDecalUVStats* OutStats = nullptr);
 
+	static void BuildRenderableMesh(
+		const TArray<FDecalUVTriangle>& UVTriangles,
+		FDecalRenderableMesh& OutMesh,
+		FDecalRenderableMeshStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,

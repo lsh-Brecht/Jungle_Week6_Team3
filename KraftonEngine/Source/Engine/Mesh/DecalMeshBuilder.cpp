@@ -876,3 +876,69 @@ void FDecalMeshBuilder::ComputeTriangleUVs(
 		*OutStats = LocalStats;
 	}
 }
+
+void FDecalMeshBuilder::BuildRenderableMesh(
+	const TArray<FDecalUVTriangle>& UVTriangles,
+	FDecalRenderableMesh& OutMesh,
+	FDecalRenderableMeshStats* OutStats)
+{
+	OutMesh.Clear();
+
+	FDecalRenderableMeshStats LocalStats;
+	LocalStats.InputTriangleCount = static_cast<int32>(UVTriangles.size());
+
+	if (UVTriangles.empty())
+	{
+		if (OutStats)
+		{
+			*OutStats = LocalStats;
+		}
+		return;
+	}
+
+	/*
+		지금 단계에서는 triangle마다 정점을 공유하지 않고 그대로 밀어넣습니다.
+
+		왜 인덱스 최적화를 지금 안 하나?
+		- decal clipping 결과는 정점 공유율이 높지 않을 수 있음
+		- 디버깅 단계에서는 "단순하고 확실한 구조"가 더 중요
+		- 나중에 필요하면 vertex welding 최적화 가능
+	*/
+	OutMesh.Vertices.reserve(UVTriangles.size() * 3);
+	OutMesh.Indices.reserve(UVTriangles.size() * 3);
+
+	FDecalRenderableSection Section;
+	Section.FirstIndex = 0;
+
+	for (const FDecalUVTriangle& UVTriangle : UVTriangles)
+	{
+		const uint32 BaseVertexIndex = static_cast<uint32>(OutMesh.Vertices.size());
+
+		for (int32 i = 0; i < 3; ++i)
+		{
+			FDecalRenderableVertex Vertex;
+			Vertex.Position = UVTriangle.Vertices[i].Position;
+			Vertex.Normal = UVTriangle.DecalFaceNormal;
+			Vertex.Color = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+			Vertex.UV = UVTriangle.Vertices[i].UV;
+
+			OutMesh.Vertices.push_back(Vertex);
+		}
+
+		OutMesh.Indices.push_back(BaseVertexIndex + 0);
+		OutMesh.Indices.push_back(BaseVertexIndex + 1);
+		OutMesh.Indices.push_back(BaseVertexIndex + 2);
+	}
+
+	Section.IndexCount = static_cast<uint32>(OutMesh.Indices.size());
+	OutMesh.Sections.push_back(Section);
+
+	LocalStats.OutputVertexCount = static_cast<int32>(OutMesh.Vertices.size());
+	LocalStats.OutputIndexCount = static_cast<int32>(OutMesh.Indices.size());
+	LocalStats.OutputTriangleCount = static_cast<int32>(OutMesh.Indices.size() / 3);
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
