@@ -139,3 +139,29 @@ struct FDecalSATStats
 
 	int32 PassedSATCount = 0;
 };
+
+struct FDecalClippedPolygon
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	// decal local 기준으로 clip된 convex polygon 정점들
+	TArray<FVector> DecalPositions;
+
+	FVector DecalFaceNormal;
+};
+
+struct FDecalClipStats
+{
+	int32 InputTriangleCount = 0;
+	int32 EmittedPolygonCount = 0;
+	int32 RejectedEmptyPolygonCount = 0;
+	int32 RejectedDegeneratePolygonCount = 0;
+	int32 TotalOutputVertexCount = 0;
+};

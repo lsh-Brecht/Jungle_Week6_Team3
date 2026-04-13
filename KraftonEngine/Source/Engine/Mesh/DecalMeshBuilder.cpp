@@ -176,6 +176,153 @@ namespace
 
 		return true;
 	}
+
+	bool NearlyEqualFloat(float A, float B, float Epsilon = 0.00001f)
+	{
+		return std::abs(A - B) <= Epsilon;
+	}
+
+	void SetAxisComponent(FVector& V, int32 Axis, float Value)
+	{
+		if (Axis == 0) V.X = Value;
+		else if (Axis == 1) V.Y = Value;
+		else V.Z = Value;
+	}
+
+	bool IsInsidePlane(const FVector& P, int32 Axis, float PlaneValue, bool bKeepLessEqual)
+	{
+		const float Value = GetAxisComponent(P, Axis);
+		return bKeepLessEqual ? (Value <= PlaneValue) : (Value >= PlaneValue);
+	}
+
+	FVector IntersectSegmentWithAxisPlane(
+		const FVector& A,
+		const FVector& B,
+		int32 Axis,
+		float PlaneValue)
+	{
+		const float AV = GetAxisComponent(A, Axis);
+		const float BV = GetAxisComponent(B, Axis);
+		const float Denom = (BV - AV);
+
+		// 거의 평행한 경우는 A를 기반으로 plane 위로 보정
+		if (std::abs(Denom) <= 0.000001f)
+		{
+			FVector Result = A;
+			SetAxisComponent(Result, Axis, PlaneValue);
+			return Result;
+		}
+
+		const float T = (PlaneValue - AV) / Denom;
+		return A + (B - A) * T;
+	}
+
+	void ClipPolygonAgainstAxisPlane(
+		const TArray<FVector>& InVertices,
+		TArray<FVector>& OutVertices,
+		int32 Axis,
+		float PlaneValue,
+		bool bKeepLessEqual)
+	{
+		OutVertices.clear();
+
+		if (InVertices.empty())
+		{
+			return;
+		}
+
+		const size_t VertexCount = InVertices.size();
+
+		for (size_t i = 0; i < VertexCount; ++i)
+		{
+			const FVector& Current = InVertices[i];
+			const FVector& Prev = InVertices[(i + VertexCount - 1) % VertexCount];
+
+			const bool bCurrentInside = IsInsidePlane(Current, Axis, PlaneValue, bKeepLessEqual);
+			const bool bPrevInside = IsInsidePlane(Prev, Axis, PlaneValue, bKeepLessEqual);
+
+			if (bPrevInside && bCurrentInside)
+			{
+				// inside -> inside
+				OutVertices.push_back(Current);
+			}
+			else if (bPrevInside && !bCurrentInside)
+			{
+				// inside -> outside
+				OutVertices.push_back(IntersectSegmentWithAxisPlane(Prev, Current, Axis, PlaneValue));
+			}
+			else if (!bPrevInside && bCurrentInside)
+			{
+				// outside -> inside
+				OutVertices.push_back(IntersectSegmentWithAxisPlane(Prev, Current, Axis, PlaneValue));
+				OutVertices.push_back(Current);
+			}
+			else
+			{
+				// outside -> outside
+			}
+		}
+	}
+
+	float ComputePolygonAreaEstimate(const TArray<FVector>& Vertices, const FVector& FaceNormal)
+	{
+		if (Vertices.size() < 3)
+		{
+			return 0.0f;
+		}
+
+		FVector Accum(0.0f, 0.0f, 0.0f);
+		for (size_t i = 0; i < Vertices.size(); ++i)
+		{
+			const FVector& A = Vertices[i];
+			const FVector& B = Vertices[(i + 1) % Vertices.size()];
+			Accum += A.Cross(B);
+		}
+
+		return std::abs(Accum.Dot(FaceNormal)) * 0.5f;
+	}
+
+	void RemoveNearDuplicateVertices(TArray<FVector>& Vertices, float Epsilon = 0.00001f)
+	{
+		if (Vertices.size() <= 1)
+		{
+			return;
+		}
+
+		TArray<FVector> Cleaned;
+		Cleaned.reserve(Vertices.size());
+
+		for (const FVector& V : Vertices)
+		{
+			bool bDuplicate = false;
+			for (const FVector& Existing : Cleaned)
+			{
+				const FVector Delta = V - Existing;
+				if (Delta.Dot(Delta) <= (Epsilon * Epsilon))
+				{
+					bDuplicate = true;
+					break;
+				}
+			}
+
+			if (!bDuplicate)
+			{
+				Cleaned.push_back(V);
+			}
+		}
+
+		// 첫/끝 정점이 사실상 같은 경우도 제거
+		if (Cleaned.size() >= 2)
+		{
+			const FVector Delta = Cleaned.front() - Cleaned.back();
+			if (Delta.Dot(Delta) <= (Epsilon * Epsilon))
+			{
+				Cleaned.pop_back();
+			}
+		}
+
+		Vertices = std::move(Cleaned);
+	}
 }
 
 bool FDecalMeshBuilder::PassTargetFilter(
@@ -526,6 +673,91 @@ void FDecalMeshBuilder::GatherSATOverlapTriangles(
 
 		OutSATTriangles.push_back(SATTriangle);
 		++LocalStats.PassedSATCount;
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::ClipSATTrianglesAgainstDecalBox(
+	const TArray<FDecalSATTriangle>& SATTriangles,
+	TArray<FDecalClippedPolygon>& OutPolygons,
+	FDecalClipStats* OutStats)
+{
+	OutPolygons.clear();
+
+	FDecalClipStats LocalStats;
+	LocalStats.InputTriangleCount = static_cast<int32>(SATTriangles.size());
+
+	for (const FDecalSATTriangle& SATTriangle : SATTriangles)
+	{
+		TArray<FVector> WorkingA;
+		TArray<FVector> WorkingB;
+
+		WorkingA.reserve(12);
+		WorkingB.reserve(12);
+
+		// triangle을 polygon으로 시작
+		WorkingA.push_back(SATTriangle.DecalPositions[0]);
+		WorkingA.push_back(SATTriangle.DecalPositions[1]);
+		WorkingA.push_back(SATTriangle.DecalPositions[2]);
+
+		// 6개 평면에 대해 순차 clip
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 0, -0.5f, false); // X >= -0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 0, 0.5f, true);  // X <= 0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 1, -0.5f, false); // Y >= -0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 1, 0.5f, true);  // Y <= 0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 2, -0.5f, false); // Z >= -0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		ClipPolygonAgainstAxisPlane(WorkingA, WorkingB, 2, 0.5f, true);  // Z <= 0.5
+		if (WorkingB.empty()) { ++LocalStats.RejectedEmptyPolygonCount; continue; }
+		WorkingA.swap(WorkingB);
+
+		RemoveNearDuplicateVertices(WorkingA);
+
+		if (WorkingA.size() < 3)
+		{
+			++LocalStats.RejectedDegeneratePolygonCount;
+			continue;
+		}
+
+		const float Area = ComputePolygonAreaEstimate(WorkingA, SATTriangle.DecalFaceNormal);
+		if (Area <= 0.000001f)
+		{
+			++LocalStats.RejectedDegeneratePolygonCount;
+			continue;
+		}
+
+		FDecalClippedPolygon Polygon;
+		Polygon.OwnerActor = SATTriangle.OwnerActor;
+		Polygon.StaticMeshComponent = SATTriangle.StaticMeshComponent;
+		Polygon.TriangleStartIndex = SATTriangle.TriangleStartIndex;
+		Polygon.MeshToWorld = SATTriangle.MeshToWorld;
+		Polygon.WorldToMesh = SATTriangle.WorldToMesh;
+		Polygon.MeshToDecal = SATTriangle.MeshToDecal;
+		Polygon.DecalFaceNormal = SATTriangle.DecalFaceNormal;
+		Polygon.DecalPositions = std::move(WorkingA);
+
+		LocalStats.TotalOutputVertexCount += static_cast<int32>(Polygon.DecalPositions.size());
+		++LocalStats.EmittedPolygonCount;
+
+		OutPolygons.push_back(std::move(Polygon));
 	}
 
 	if (OutStats)

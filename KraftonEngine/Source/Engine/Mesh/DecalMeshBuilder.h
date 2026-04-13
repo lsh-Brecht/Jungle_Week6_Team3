@@ -37,6 +37,11 @@ public:
 		TArray<FDecalSATTriangle>& OutSATTriangles,
 		FDecalSATStats* OutStats = nullptr);
 
+	static void ClipSATTrianglesAgainstDecalBox(
+		const TArray<FDecalSATTriangle>& SATTriangles,
+		TArray<FDecalClippedPolygon>& OutPolygons,
+		FDecalClipStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,
