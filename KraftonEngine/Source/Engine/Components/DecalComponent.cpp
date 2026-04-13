@@ -8,10 +8,6 @@ void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyO
 {
 }
 
-void UDecalComponent::SetSortOrder(int32 Value)
-{
-}
-
 void UDecalComponent::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
 {
     DecalMaterial = NewDecalMaterial;

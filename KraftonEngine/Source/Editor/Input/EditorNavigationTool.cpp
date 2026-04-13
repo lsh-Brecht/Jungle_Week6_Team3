@@ -1,6 +1,6 @@
-#include "Editor/Input/EditorNavigationTool.h"
+﻿#include "Editor/Input/EditorNavigationTool.h"
 
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Editor/Input/EditorViewportInputMapping.h"
 #include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Selection/SelectionManager.h"
@@ -8,7 +8,7 @@
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "GameFramework/AActor.h"
 #include "Math/MathUtils.h"
-#include "Component/GizmoComponent.h"
+#include "Components/GizmoComponent.h"
 
 #include <cmath>
 

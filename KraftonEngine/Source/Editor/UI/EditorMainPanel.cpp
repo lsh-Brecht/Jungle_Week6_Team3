@@ -4,7 +4,7 @@
 #include "Editor/PIE/PIETypes.h"
 #include "Editor/Settings/EditorSettings.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
-#include "Engine/Component/CameraComponent.h"
+#include "Engine/Components/CameraComponent.h"
 #include "Engine/Platform/Paths.h"
 #include "Engine/Runtime/WindowsWindow.h"
 
