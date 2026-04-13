@@ -1115,9 +1115,10 @@ void FEditorMainPanel::Update()
 	else if (EditorEngine && bReleaseMouseToViewport)
 	{
 		bWantMouse = false;
-		// 키보드는 ImGui가 원할 때(IO.WantCaptureKeyboard) 절대 내려주지 않는다.
-		// viewport 본문에서만 별도 키보드 캡처가 없을 때 입력을 허용한다.
-		bWantKeyboard = IO.WantCaptureKeyboard || IO.WantTextInput;
+		// Viewport 본문 위에서는 키보드도 viewport에 넘겨야 Ctrl/Alt marquee,
+		// LMB+WASDQE 같은 에디터 입력이 동작한다.
+		// 텍스트 입력이 필요한 경우는 상단의 non-viewport ImGui interaction에서 이미 차단된다.
+		bWantKeyboard = false;
 	}
 	InputSystem::Get().GetGuiInputState().bUsingMouse = bWantMouse;
 	InputSystem::Get().GetGuiInputState().bUsingKeyboard = bWantKeyboard;
