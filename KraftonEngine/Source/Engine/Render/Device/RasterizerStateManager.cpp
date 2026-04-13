@@ -9,6 +9,14 @@ void FRasterizerStateManager::Create(ID3D11Device* InDevice)
 	Desc.CullMode = D3D11_CULL_BACK;
 	InDevice->CreateRasterizerState(&Desc, &BackCull);
 
+	Desc.DepthBias = -8;
+	Desc.SlopeScaledDepthBias = -1.0f;
+	Desc.DepthBiasClamp = 0.0f;
+	InDevice->CreateRasterizerState(&Desc, &BackCullDepthBias);
+
+	Desc.DepthBias = 0;
+	Desc.SlopeScaledDepthBias = 0.0f;
+	Desc.DepthBiasClamp = 0.0f;
 	Desc.CullMode = D3D11_CULL_FRONT;
 	InDevice->CreateRasterizerState(&Desc, &FrontCull);
 
@@ -25,6 +33,7 @@ void FRasterizerStateManager::Create(ID3D11Device* InDevice)
 void FRasterizerStateManager::Release()
 {
 	SAFE_RELEASE(BackCull);
+	SAFE_RELEASE(BackCullDepthBias);
 	SAFE_RELEASE(FrontCull);
 	SAFE_RELEASE(NoCull);
 	SAFE_RELEASE(WireFrame);
@@ -37,6 +46,7 @@ void FRasterizerStateManager::Set(ID3D11DeviceContext* InContext, ERasterizerSta
 	switch (InState)
 	{
 	case ERasterizerState::SolidBackCull:  InContext->RSSetState(BackCull);  break;
+	case ERasterizerState::SolidBackCullDepthBias: InContext->RSSetState(BackCullDepthBias); break;
 	case ERasterizerState::SolidFrontCull: InContext->RSSetState(FrontCull); break;
 	case ERasterizerState::SolidNoCull:    InContext->RSSetState(NoCull);    break;
 	case ERasterizerState::WireFrame:      InContext->RSSetState(WireFrame); break;

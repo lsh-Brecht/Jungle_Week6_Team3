@@ -2,6 +2,7 @@
 
 #include "Materials/MaterialInterface.h"
 #include "Mesh/ObjManager.h"
+#include "GameFramework/AActor.h"
 #include "Object/ObjectFactory.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Pipeline/RenderConstants.h"
@@ -124,6 +125,21 @@ void UDecalComponent::RebuildDecalMeshNow()
 	BuildDecalMesh();
 	ClearDecalDirty();
 	MarkRenderStateDirty();
+}
+
+void UDecalComponent::OnTransformDirty()
+{
+	UPrimitiveComponent::OnTransformDirty();
+
+	// 데칼은 "자기 로컬 공간 기준으로 clip된 geometry"를 캐시하므로
+	// 위치/회전/스케일이 바뀌면 broad phase부터 다시 계산해야 합니다.
+	// 그렇지 않으면 예전에 겹쳤던 결과가 현재 transform에서도 그대로 따라다니게 됩니다.
+	MarkDecalDirty();
+
+	if (Owner && Owner->GetWorld())
+	{
+		RebuildDecalMeshNow();
+	}
 }
 
 void UDecalComponent::UpdateWorldAABB() const

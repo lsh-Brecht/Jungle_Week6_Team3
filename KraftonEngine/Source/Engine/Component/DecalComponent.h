@@ -49,6 +49,7 @@ public:
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
 
 	void RebuildDecalMeshNow();
+	void OnTransformDirty() override;
 
 	/*
 	* Decal OBB를 감싸는 월드 AABB

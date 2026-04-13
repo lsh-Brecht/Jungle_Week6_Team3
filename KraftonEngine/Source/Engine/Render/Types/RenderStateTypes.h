@@ -27,6 +27,7 @@ enum class EBlendState
 enum class ERasterizerState
 {
 	SolidBackCull,
+	SolidBackCullDepthBias,
 	SolidFrontCull,
 	SolidNoCull,
 	WireFrame,
