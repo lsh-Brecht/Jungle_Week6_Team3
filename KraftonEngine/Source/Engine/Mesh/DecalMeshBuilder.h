@@ -16,6 +16,11 @@ public:
 		TArray<FDecalPrimitiveCandidate>& OutCandidates,
 		FDecalBroadPhaseStats* OutStats = nullptr);
 
+	static void GatherBruteForceTriangles(
+		const TArray<FDecalPrimitiveCandidate>& Candidates,
+		TArray<FDecalSourceTriangle>& OutTriangles,
+		FDecalTriangleGatherStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,
