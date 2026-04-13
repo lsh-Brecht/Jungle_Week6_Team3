@@ -198,6 +198,10 @@ bool UWorld::NeedsVisibleProxyRebuild() const
 	{
 		return true;
 	}
+	if (ActiveCamera != LastVisibleCamera)
+	{
+		return true;
+	}
 
 	const FVector CameraPos = ActiveCamera->GetWorldLocation();
 	if (DistanceSquared(CameraPos, LastVisibleCameraPos) >= VisibleCameraMoveThresholdSq)
@@ -225,9 +229,11 @@ void UWorld::CacheVisibleCameraState()
 	if (!ActiveCamera)
 	{
 		bHasVisibleCameraState = false;
+		LastVisibleCamera = nullptr;
 		return;
 	}
 
+	LastVisibleCamera = ActiveCamera;
 	LastVisibleCameraPos = ActiveCamera->GetWorldLocation();
 	LastVisibleCameraForward = ActiveCamera->GetForwardVector();
 	LastVisibleCameraState = ActiveCamera->GetCameraState();
@@ -271,6 +277,7 @@ void UWorld::UpdateVisibleProxies()
 
 		VisibleProxies.clear();
 		bHasVisibleCameraState = false;
+		LastVisibleCamera = nullptr;
 		return;
 	}
 
@@ -341,12 +348,52 @@ void UWorld::UpdateVisibleProxies()
 	Scene.MarkVisibleSetClean();
 }
 
+void UWorld::GatherVisibleProxiesForCamera(const UCameraComponent* InCamera, TArray<FPrimitiveSceneProxy*>& OutVisibleProxies) const
+{
+	OutVisibleProxies.clear();
+	if (!InCamera)
+	{
+		return;
+	}
+
+	const uint32 ExpectedProxyCount = Scene.GetProxyCount();
+	if (OutVisibleProxies.capacity() < ExpectedProxyCount)
+	{
+		OutVisibleProxies.reserve(ExpectedProxyCount);
+	}
+
+	{
+		SCOPE_STAT_CAT("FrustumCulling", "1_WorldTick");
+		FConvexVolume ConvexVolume = InCamera->GetConvexVolume();
+		Partition.QueryFrustumAllProxies(ConvexVolume, OutVisibleProxies);
+	}
+
+	// NeverCull 프록시는 frustum 결과와 무관하게 항상 포함
+	for (FPrimitiveSceneProxy* Proxy : Scene.GetNeverCullProxies())
+	{
+		if (!Proxy)
+		{
+			continue;
+		}
+
+		if (std::find(OutVisibleProxies.begin(), OutVisibleProxies.end(), Proxy) == OutVisibleProxies.end())
+		{
+			OutVisibleProxies.push_back(Proxy);
+		}
+	}
+}
+
 FLODUpdateContext UWorld::PrepareLODContext()
 {
-	if (!ActiveCamera) return {};
+	return PrepareLODContextForCamera(ActiveCamera);
+}
 
-	const FVector CameraPos = ActiveCamera->GetWorldLocation();
-	const FVector CameraForward = ActiveCamera->GetForwardVector();
+FLODUpdateContext UWorld::PrepareLODContextForCamera(const UCameraComponent* InCamera)
+{
+	if (!InCamera) return {};
+
+	const FVector CameraPos = InCamera->GetWorldLocation();
+	const FVector CameraForward = InCamera->GetForwardVector();
 
 	const uint32 LODUpdateFrame = VisibleProxyBuildFrame++;
 	const uint32 LODUpdateSlice = LODUpdateFrame & (LOD_UPDATE_SLICE_COUNT - 1);
@@ -354,14 +401,14 @@ FLODUpdateContext UWorld::PrepareLODContext()
 
 	const bool bForceFullLODRefresh =
 		!bShouldStaggerLOD
-		|| LastLODUpdateCamera != ActiveCamera
+		|| LastLODUpdateCamera != InCamera
 		|| !bHasLastFullLODUpdateCameraPos
 		|| FVector::DistSquared(CameraPos, LastFullLODUpdateCameraPos) >= LOD_FULL_UPDATE_CAMERA_MOVE_SQ
 		|| CameraForward.Dot(LastFullLODUpdateCameraForward) < LOD_FULL_UPDATE_CAMERA_ROTATION_DOT;
 
 	if (bForceFullLODRefresh)
 	{
-		LastLODUpdateCamera = ActiveCamera;
+		LastLODUpdateCamera = const_cast<UCameraComponent*>(InCamera);
 		LastFullLODUpdateCameraPos = CameraPos;
 		LastFullLODUpdateCameraForward = CameraForward;
 		bHasLastFullLODUpdateCameraPos = true;

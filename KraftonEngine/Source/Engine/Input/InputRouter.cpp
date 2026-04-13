@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "UI/EditorConsoleWidget.h"
+
 namespace
 {
 constexpr float ViewportInputDeadZonePixels = 4.0f;
@@ -166,11 +168,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		CapturedViewport = nullptr;
 	}
 
-	if ((bImGuiCaptureMouse && !CapturedViewport) || bHardBlockMouse)
+	if (bImGuiCaptureMouse || bHardBlockMouse)
 	{
 		bAnyPointerPressed = false;
 		bAnyPointerDown = false;
-		if (bHardBlockMouse)
+		if (bHardBlockMouse || bImGuiCaptureMouse)
 		{
 			CapturedViewport = nullptr;
 		}
@@ -226,11 +228,7 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 
 	OutContext = {};
 	OutBinding = {};
-	const bool bViewportOwnsKeyboard =
-		(CapturedViewport == TargetEntry->Viewport)
-		|| (HoveredViewport == TargetEntry->Viewport)
-		|| (bRelativeMouseModeActive && RelativeMouseModeViewport == TargetEntry->Viewport);
-	const bool bBlockKeyboardForViewport = bImGuiCaptureKeyboard && !bViewportOwnsKeyboard;
+	const bool bBlockKeyboardForViewport = bImGuiCaptureKeyboard;
 
 	FInputFrame Frame;
 	Frame.FrameNumber = ++InputFrameCounter;
@@ -390,7 +388,7 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		OutContext.Events.push_back(E);
 	}
 
-	const bool bBlockMouseForViewport = bHardBlockMouse || (bImGuiCaptureMouse && !OutContext.bCaptured);
+	const bool bBlockMouseForViewport = bHardBlockMouse || bImGuiCaptureMouse;
 	if (bBlockKeyboardForViewport || bBlockMouseForViewport)
 	{
 		if (bBlockMouseForViewport)

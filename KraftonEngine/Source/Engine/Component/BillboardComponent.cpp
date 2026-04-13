@@ -66,30 +66,13 @@ void UBillboardComponent::PostEditProperty(const char* PropertyName)
 void UBillboardComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 	
 {
-	if (!GetOwner() || !GetOwner()->GetWorld()) return;
-
-	const UCameraComponent* ActiveCamera = GetOwner()->GetWorld()->GetActiveCamera();
-	if (!ActiveCamera) return;
-
-	FVector WorldLocation = GetWorldLocation();
-	FVector CameraForward = ActiveCamera->GetForwardVector().Normalized();
-	FVector Forward = CameraForward * -1;
-	FVector WorldUp = FVector(0.0f, 0.0f, 1.0f);
-
-	if (std::abs(Forward.Dot(WorldUp)) > 0.99f)
-	{
-		WorldUp = FVector(0.0f, 1.0f, 0.0f); // 임시 Up축 변경
-	}
-
-	FVector Right = WorldUp.Cross(Forward).Normalized();
-	FVector Up = Forward.Cross(Right).Normalized();
-
-	FMatrix RotMatrix;
-	RotMatrix.SetAxes(Forward, Right, Up);
-
-	CachedWorldMatrix = FMatrix::MakeScaleMatrix(GetVisualScale()) * RotMatrix * FMatrix::MakeTranslationMatrix(WorldLocation);
-
-	UpdateWorldAABB();
+	(void)DeltaTime;
+	(void)TickType;
+	(void)ThisTickFunction;
+	// 멀티 뷰포트 에디터에서는 전역 ActiveCamera 기반으로 컴포넌트 월드행렬을
+	// 프레임마다 덮어쓰면 뷰포트 간 상태 오염이 생긴다.
+	// 빌보드 렌더링은 SceneProxy::UpdatePerViewport(Bus 카메라) 경로로 처리하므로
+	// 컴포넌트 Tick에서 카메라 의존 행렬 갱신은 수행하지 않는다.
 }
 
 FVector UBillboardComponent::GetVisualScale() const

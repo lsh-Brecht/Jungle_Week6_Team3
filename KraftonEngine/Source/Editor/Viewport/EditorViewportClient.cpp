@@ -23,6 +23,7 @@
 #include "GameFramework/World.h"
 #include "Engine/Runtime/Engine.h"
 #include "ImGui/imgui.h"
+#include <cmath>
 
 UWorld* FEditorViewportClient::GetWorld() const
 {
@@ -178,33 +179,33 @@ void FEditorViewportClient::Tick(float DeltaTime)
 				else if (Context == SelectionInputContext.get()) { ContextName = "Selection"; }
 				else if (Context == NavigationInputContext.get()) { ContextName = "Navigation"; }
 
-				UE_LOG(
-					"[InputTrace] Domain=%d Context=%s Consumed=1 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
-					static_cast<int32>(RoutedInputContext.Domain),
-					ContextName,
-					static_cast<int32>(RoutedInputContext.Events.size()),
-					RoutedInputContext.bHovered ? 1 : 0,
-					RoutedInputContext.bFocused ? 1 : 0,
-					RoutedInputContext.bCaptured ? 1 : 0,
-					RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
-					RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
-					RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
+				// UE_LOG(
+				// 	"[InputTrace] Domain=%d Context=%s Consumed=1 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
+				// 	static_cast<int32>(RoutedInputContext.Domain),
+				// 	ContextName,
+				// 	static_cast<int32>(RoutedInputContext.Events.size()),
+				// 	RoutedInputContext.bHovered ? 1 : 0,
+				// 	RoutedInputContext.bFocused ? 1 : 0,
+				// 	RoutedInputContext.bCaptured ? 1 : 0,
+				// 	RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
+				// 	RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
+				// 	RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
 			}
 			break;
 		}
 	}
 	if (bHasEvents && !bConsumedByContext)
 	{
-		UE_LOG(
-			"[InputTrace] Domain=%d Context=None Consumed=0 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
-			static_cast<int32>(RoutedInputContext.Domain),
-			static_cast<int32>(RoutedInputContext.Events.size()),
-			RoutedInputContext.bHovered ? 1 : 0,
-			RoutedInputContext.bFocused ? 1 : 0,
-			RoutedInputContext.bCaptured ? 1 : 0,
-			RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
-			RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
-			RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
+		// UE_LOG(
+		// 	"[InputTrace] Domain=%d Context=None Consumed=0 Events=%d Hover=%d Focus=%d Capture=%d Alt=%d Ctrl=%d Shift=%d",
+		// 	static_cast<int32>(RoutedInputContext.Domain),
+		// 	static_cast<int32>(RoutedInputContext.Events.size()),
+		// 	RoutedInputContext.bHovered ? 1 : 0,
+		// 	RoutedInputContext.bFocused ? 1 : 0,
+		// 	RoutedInputContext.bCaptured ? 1 : 0,
+		// 	RoutedInputContext.Frame.IsDown(VK_MENU) ? 1 : 0,
+		// 	RoutedInputContext.Frame.IsDown(VK_CONTROL) ? 1 : 0,
+		// 	RoutedInputContext.Frame.IsDown(VK_SHIFT) ? 1 : 0);
 	}
 
 	bHasRoutedInputContext = false;
@@ -311,6 +312,12 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 	{
 		return false;
 	}
+	// ImGui가 마우스를 캡처 중인 동안에는 상대마우스 모드 진입/유지를 금지한다.
+	// (UI 클릭/드래그는 정상 동작하되, 커서 중앙 고정/복귀로 인한 간섭을 막는다.)
+	if (Context.bImGuiCapturedMouse)
+	{
+		return false;
+	}
 	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
 	{
 		return false;
@@ -327,10 +334,6 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 	// LMB 네비게이션 relative 유지 중에는 gizmo hover 재검사로 모드가 흔들리지 않도록 유지 우선.
 	if (Context.bRelativeMouseMode && bLeftLookChord)
 	{
-		if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
-		{
-			return false;
-		}
 		return true;
 	}
 
@@ -357,13 +360,6 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 		return false;
 	}
 
-	// ImGui가 마우스를 캡처 중이면 상대 마우스 신규 진입을 허용하지 않는다.
-	// 이미 relative 모드로 들어간 상태에서만 유지를 허용.
-	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bRelativeMouseMode && !Context.bHovered)
-	{
-		return false;
-	}
-
 	return bRightLookDrag
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookMiddleDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavOrbitAltLeftDown)
@@ -382,8 +378,10 @@ void FEditorViewportClient::UpdateLayoutRect()
 	// FViewport 리사이즈 요청 (슬롯 크기와 RT 크기 동기화)
 	if (Viewport)
 	{
-		uint32 SlotW = static_cast<uint32>(R.Width);
-		uint32 SlotH = static_cast<uint32>(R.Height);
+		const float SafeWidth = (R.Width > 1.0f) ? R.Width : 1.0f;
+		const float SafeHeight = (R.Height > 1.0f) ? R.Height : 1.0f;
+		uint32 SlotW = static_cast<uint32>(std::lround(SafeWidth));
+		uint32 SlotH = static_cast<uint32>(std::lround(SafeHeight));
 		if (SlotW > 0 && SlotH > 0 && (SlotW != Viewport->GetWidth() || SlotH != Viewport->GetHeight()))
 		{
 			Viewport->RequestResize(SlotW, SlotH);

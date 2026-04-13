@@ -15,6 +15,7 @@
 #include "Math/MathUtils.h"
 #include "Engine/Runtime/WindowsWindow.h"
 #include "Viewport/Viewport.h"
+#include "UI/EditorConsoleWidget.h"
 
 FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 	: Owner(InOwner)
@@ -353,4 +354,3 @@ void FEditorSelectionTool::EndSelectionMarquee()
 	bSelectionMarqueeActive = false;
 	bSelectionMarqueeAdditive = false;
 }
-

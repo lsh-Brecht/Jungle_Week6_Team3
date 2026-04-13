@@ -204,7 +204,7 @@ void UEditorEngine::Tick(float DeltaTime)
 
 	const FGuiInputState& GuiInputState = Input.GetGuiInputState();
 	const bool bRouteMouseToImGui =
-		(GuiInputState.bUsingMouse && !IsMouseOverViewport())
+		GuiInputState.bUsingMouse
 		|| bSuppressViewportMouseUntilButtonsReleased;
 	InputRouter.SetForceViewportMouseBlock(bAnyPopupOpen || bSuppressViewportMouseUntilButtonsReleased);
 	InputRouter.SetImGuiCaptureState(
@@ -253,19 +253,39 @@ void UEditorEngine::Tick(float DeltaTime)
 
 	FViewportInputContext RoutedInputContext;
 	FInteractionBinding InteractionBinding;
-	if (!bAnyPopupOpen && InputRouter.Tick(RoutedInputContext, InteractionBinding))
+	if (InputRouter.Tick(RoutedInputContext, InteractionBinding))
 	{
-		if (HandleGlobalShortcuts(RoutedInputContext))
+		if (!bAnyPopupOpen && HandleGlobalShortcuts(RoutedInputContext))
 		{
 			RoutedInputContext.bConsumed = true;
 		}
 
-		for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+		if (!bAnyPopupOpen)
 		{
-			if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
+			bool bHasMousePressEvent = false;
+			for (const FInputEvent& Event : RoutedInputContext.Events)
 			{
-				ViewportLayout.SetActiveViewport(VC);
-				break;
+				if (Event.Type != EInputEventType::KeyPressed)
+				{
+					continue;
+				}
+				if (Event.Key == VK_LBUTTON || Event.Key == VK_RBUTTON || Event.Key == VK_MBUTTON)
+				{
+					bHasMousePressEvent = true;
+					break;
+				}
+			}
+
+			if (bHasMousePressEvent)
+			{
+				for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+				{
+					if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
+					{
+						ViewportLayout.SetActiveViewport(VC);
+						break;
+					}
+				}
 			}
 		}
 	}
@@ -382,7 +402,7 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 		}
 	}
 	PlayInEditorSessionInfo = Info;
-	PIEEntryViewportClient = ViewportLayout.GetActiveViewport();
+	PIEEntryViewportClient = ViewportLayout.GetPIEStartViewport();
 	if (PIEEntryViewportClient)
 	{
 		bSavedEntryViewportGizmo = PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo;
@@ -783,7 +803,7 @@ bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
 		const float VPHeight = ActiveVC->GetViewport() ? static_cast<float>(ActiveVC->GetViewport()->GetHeight()) : ActiveVC->GetWindowHeight();
 		if (VPWidth > 0.0f && VPHeight > 0.0f)
 		{
-			constexpr float SpawnDistanceFromCamera = 20.0f;
+			constexpr float SpawnDistanceFromCamera = 10.0f;
 			FVector BaseLocation = FVector(0.0f, 0.0f, 0.0f);
 			if (TryComputeSpawnLocationFromViewportLocal(ActiveVC, VPWidth * 0.5f, VPHeight * 0.5f, SpawnDistanceFromCamera, BaseLocation))
 			{
@@ -859,7 +879,7 @@ bool UEditorEngine::PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType,
 		return false;
 	}
 
-	constexpr float SpawnDistanceFromCamera = 20.0f;
+	constexpr float SpawnDistanceFromCamera = 10.0f;
 	FVector BaseLocation = FVector(0.0f, 0.0f, 0.0f);
 	if (!TryComputeSpawnLocationFromViewportPoint(ActiveVC, InClientX, InClientY, SpawnDistanceFromCamera, BaseLocation))
 	{

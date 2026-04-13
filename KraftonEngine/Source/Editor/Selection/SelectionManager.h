@@ -41,6 +41,7 @@ public:
 private:
 	void SyncGizmo();
 	void SetActorProxiesSelected(AActor* Actor, bool bSelected);
+	void PromoteToPrimary(AActor* Actor);
 
 	TArray<AActor*> SelectedActors;
 	UGizmoComponent* Gizmo = nullptr;

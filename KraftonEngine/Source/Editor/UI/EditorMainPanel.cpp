@@ -121,11 +121,7 @@ void FEditorMainPanel::Render(float DeltaTime)
 
 	const FEditorSettings& Settings = FEditorSettings::Get();
 
-	if (!bHideEditorWindows && Settings.UI.bConsole)
-	{
-		SCOPE_STAT_CAT("ConsoleWidget.Render", "5_UI");
-		ConsoleWidget.Render(DeltaTime);
-	}
+	// Console는 Footer/Drawer 경로만 사용한다.
 
 	if (!bHideEditorWindows && Settings.UI.bControl)
 	{
@@ -963,22 +959,68 @@ void FEditorMainPanel::Update()
 {
 	ImGuiIO& IO = ImGui::GetIO();
 
-	// 뷰포트 슬롯 위에서는 bUsingMouse를 해제해야 TickInteraction이 동작
 	bool bWantMouse = IO.WantCaptureMouse;
 	bool bWantKeyboard = IO.WantCaptureKeyboard;
 	bool bWantTextInput = IO.WantTextInput;
+	const bool bAnyUIItemActive = ImGui::IsAnyItemActive();
+	const bool bAnyUIItemHovered = ImGui::IsAnyItemHovered();
+	const bool bAnyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+	const bool bAnyWindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+	const bool bAnyWindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
+	const bool bMouseOverViewportRect = (EditorEngine != nullptr) ? EditorEngine->IsMouseOverViewport() : false;
+	bool bHoveredViewportContentWindow = false;
+	bool bHoveredNonViewportWindow = false;
+	bool bHoveredAnyWindow = false;
+	if (ImGuiContext* Context = ImGui::GetCurrentContext())
+	{
+		bHoveredAnyWindow = (Context->HoveredWindow != nullptr);
+		if (ImGuiWindow* HoveredWindow = Context->HoveredWindow)
+		{
+			const char* HoveredName = HoveredWindow->Name ? HoveredWindow->Name : "";
+			bHoveredViewportContentWindow =
+				(std::strcmp(HoveredName, "Viewport") == 0)
+				|| (std::strncmp(HoveredName, "Viewport###", 11) == 0);
+			bHoveredNonViewportWindow = !bHoveredViewportContentWindow;
+		}
+	}
+	if (!bHoveredViewportContentWindow
+		&& bMouseOverViewportRect
+		&& !bHoveredNonViewportWindow
+		&& !bAnyUIItemActive
+		&& !bAnyUIItemHovered
+		&& !bAnyPopupOpen)
+	{
+		// 도킹 상태에서 HoveredWindow 이름이 Viewport가 아니어도,
+		// 실제 viewport 인터랙션 영역 위라면 viewport 입력을 허용한다.
+		bHoveredViewportContentWindow = true;
+	}
+
+	// Viewport "본문"에서만 입력을 viewport로 넘긴다.
+	// 그 외 ImGui(뷰포트 툴바/팝업/기타 창)는 반드시 ImGui가 소비한다.
+	const bool bReleaseMouseToViewport =
+		bMouseOverViewportRect
+		&& !bHoveredNonViewportWindow
+		&& !bAnyPopupOpen;
+	const bool bNonViewportImGuiInteraction =
+		bHoveredNonViewportWindow
+		&& (bAnyWindowHovered || bAnyWindowFocused || bAnyUIItemActive || bAnyUIItemHovered || bAnyPopupOpen || bWantTextInput || bWantKeyboard);
+
 	if (bShowShortcutOverlay)
 	{
 		bWantMouse = true;
 		bWantKeyboard = true;
 	}
-	if (EditorEngine && EditorEngine->IsMouseOverViewport())
+	else if (bNonViewportImGuiInteraction)
+	{
+		// Viewport 외 ImGui 창(패널/팝업/타이틀바 드래그 포함)은 항상 ImGui가 입력 소유.
+		bWantMouse = true;
+	}
+	else if (EditorEngine && bReleaseMouseToViewport)
 	{
 		bWantMouse = false;
-		if (!bWantTextInput)
-		{
-			bWantKeyboard = false;
-		}
+		// 키보드는 ImGui가 원할 때(IO.WantCaptureKeyboard) 절대 내려주지 않는다.
+		// viewport 본문에서만 별도 키보드 캡처가 없을 때 입력을 허용한다.
+		bWantKeyboard = IO.WantCaptureKeyboard || IO.WantTextInput;
 	}
 	InputSystem::Get().GetGuiInputState().bUsingMouse = bWantMouse;
 	InputSystem::Get().GetGuiInputState().bUsingKeyboard = bWantKeyboard;

@@ -72,6 +72,7 @@ public:
 
 	void SetActiveViewport(FLevelEditorViewportClient* InClient);
 	FLevelEditorViewportClient* GetActiveViewport() const { return ActiveViewportClient; }
+	FLevelEditorViewportClient* GetPIEStartViewport() const;
 
 	void SetWorld(UWorld* InWorld);
 	void ResetViewport(UWorld* InWorld);
@@ -125,6 +126,7 @@ private:
 	TArray<FEditorViewportClient*> AllViewportClients;
 	TArray<FLevelEditorViewportClient*> LevelViewportClients;
 	FLevelEditorViewportClient* ActiveViewportClient = nullptr;
+	FLevelEditorViewportClient* LastUserActivatedViewportClient = nullptr;
 
 	SSplitter* RootSplitter = nullptr;
 	SWindow* ViewportWindows[MaxViewportSlots] = {};

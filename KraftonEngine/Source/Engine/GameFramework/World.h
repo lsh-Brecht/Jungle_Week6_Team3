@@ -45,9 +45,11 @@ public:
 	const TArray<FPrimitiveSceneProxy*>& GetVisibleProxies() const { return Scene.GetVisibleProxies(); }
 	void RemoveVisibleProxy(FPrimitiveSceneProxy* Proxy, uint32 Index);
 	void UpdateVisibleProxies();
+	void GatherVisibleProxiesForCamera(const UCameraComponent* InCamera, TArray<FPrimitiveSceneProxy*>& OutVisibleProxies) const;
 
 	// LOD 컨텍스트를 RenderBus에 전달 (Collect 단계에서 LOD 인라인 갱신용)
 	FLODUpdateContext PrepareLODContext();
+	FLODUpdateContext PrepareLODContextForCamera(const UCameraComponent* InCamera);
 
 	void InitWorld();      // Set up the world before gameplay begins
 	void BeginPlay();      // Triggers BeginPlay on all actors
@@ -89,6 +91,7 @@ private:
 	int32 DeferredPickingBVHUpdateDepth = 0;
 	bool bDeferredPickingBVHDirty = false;
 	bool bHasVisibleCameraState = false;
+	UCameraComponent* LastVisibleCamera = nullptr;
 	uint32 VisibleProxyBuildFrame = 0;
 	FVector LastVisibleCameraPos = FVector(0, 0, 0);
 	FVector LastVisibleCameraForward = FVector(1, 0, 0);

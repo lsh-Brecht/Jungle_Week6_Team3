@@ -131,6 +131,7 @@ void FLevelViewportLayout::Initialize(UEditorEngine* InEditor, FWindowsWindow* I
 	AllViewportClients.push_back(LevelVC);
 	LevelViewportClients.push_back(LevelVC);
 	SetActiveViewport(LevelVC);
+	LastUserActivatedViewportClient = LevelVC;
 
 	ViewportWindows[0] = new SWindow();
 	LevelVC->SetLayoutWindow(ViewportWindows[0]);
@@ -185,6 +186,21 @@ void FLevelViewportLayout::SetActiveViewport(FLevelEditorViewportClient* InClien
 			World->SetActiveCamera(ActiveViewportClient->GetCamera());
 		}
 	}
+}
+
+FLevelEditorViewportClient* FLevelViewportLayout::GetPIEStartViewport() const
+{
+	if (LastUserActivatedViewportClient)
+	{
+		for (FLevelEditorViewportClient* VC : LevelViewportClients)
+		{
+			if (VC == LastUserActivatedViewportClient)
+			{
+				return LastUserActivatedViewportClient;
+			}
+		}
+	}
+	return ActiveViewportClient;
 }
 
 void FLevelViewportLayout::SetWorld(UWorld* /*InWorld*/)
@@ -641,6 +657,10 @@ void FLevelViewportLayout::ShrinkViewportSlots(int32 RequiredCount)
 
 		if (ActiveViewportClient == VC)
 			SetActiveViewport(LevelViewportClients[0]);
+		if (LastUserActivatedViewportClient == VC)
+		{
+			LastUserActivatedViewportClient = LevelViewportClients.empty() ? nullptr : LevelViewportClients[0];
+		}
 
 		if (FViewport* VP = VC->GetViewport())
 		{
@@ -1045,35 +1065,36 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 
 		// 입력 처리
+		ImVec2 MousePos = ImGui::GetIO().MousePos;
+		FPoint MP = { MousePos.x, MousePos.y };
+		constexpr float PaneToolbarInputBlockHeight = 34.0f;
+		auto IsViewportInteractiveHover = [&](int32 InSlotIndex) -> bool
+		{
+			if (InSlotIndex < 0 || InSlotIndex >= MaxViewportSlots || !ViewportWindows[InSlotIndex])
+			{
+				return false;
+			}
+			if (!ViewportWindows[InSlotIndex]->IsHover(MP))
+			{
+				return false;
+			}
+			const FRect& SlotRect = ViewportWindows[InSlotIndex]->GetRect();
+			return MousePos.y >= (SlotRect.Y + PaneToolbarInputBlockHeight);
+		};
+
+		// hover window 상태와 무관하게 실제 viewport 인터랙션 영역 여부를 계산한다.
+		for (int32 i = 0; i < ActiveSlotCount; ++i)
+		{
+			const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
+			if (IsViewportInteractiveHover(SlotIndex))
+			{
+				bMouseOverViewport = true;
+				break;
+			}
+		}
+
 		if (ImGui::IsWindowHovered())
 		{
-			ImVec2 MousePos = ImGui::GetIO().MousePos;
-			FPoint MP = { MousePos.x, MousePos.y };
-			constexpr float PaneToolbarInputBlockHeight = 34.0f;
-			auto IsViewportInteractiveHover = [&](int32 InSlotIndex) -> bool
-			{
-				if (InSlotIndex < 0 || InSlotIndex >= MaxViewportSlots || !ViewportWindows[InSlotIndex])
-				{
-					return false;
-				}
-				if (!ViewportWindows[InSlotIndex]->IsHover(MP))
-				{
-					return false;
-				}
-				const FRect& SlotRect = ViewportWindows[InSlotIndex]->GetRect();
-				return MousePos.y >= (SlotRect.Y + PaneToolbarInputBlockHeight);
-			};
-
-			// 마우스가 어떤 슬롯 위에 있는지
-			for (int32 i = 0; i < ActiveSlotCount; ++i)
-			{
-				const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
-				if (IsViewportInteractiveHover(SlotIndex))
-				{
-					bMouseOverViewport = true;
-					break;
-				}
-			}
 
 			// 분할 바 드래그
 			if (RootSplitter)
@@ -1128,6 +1149,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 						&& SlotIndex < MaxViewportSlots
 						&& IsViewportInteractiveHover(SlotIndex))
 					{
+						LastUserActivatedViewportClient = LevelViewportClients[SlotIndex];
 						if (LevelViewportClients[SlotIndex] != ActiveViewportClient)
 							SetActiveViewport(LevelViewportClients[SlotIndex]);
 						break;
@@ -1526,8 +1548,47 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		FEditorViewportController* InputController = VC->GetInputController();
 		FEditorNavigationTool* NavTool = InputController ? InputController->GetNavigationTool() : nullptr;
 		const bool bOnePane = (CurrentLayout == EViewportLayout::OnePane);
+		const bool bPIEPossessed = Editor
+			&& Editor->IsPlayingInEditor()
+			&& Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
 		UGizmoComponent* Gizmo = Editor ? Editor->GetGizmo() : nullptr;
 		FEditorSettings& Settings = FEditorSettings::Get();
+		if (bPIEPossessed)
+		{
+			static const char* ViewModeNames[] = { "Lit", "Unlit", "Wireframe", "Depth", "Scene Depth" };
+			int32 ViewModeIdx = static_cast<int32>(Opts.ViewMode);
+			if (ViewModeIdx < 0 || ViewModeIdx >= static_cast<int32>(IM_ARRAYSIZE(ViewModeNames)))
+			{
+				ViewModeIdx = 0;
+			}
+
+			char ViewModeButtonLabel[48];
+			snprintf(ViewModeButtonLabel, sizeof(ViewModeButtonLabel), "View Mode: %s ▼", ViewModeNames[ViewModeIdx]);
+			char ViewModePopupID[64];
+			snprintf(ViewModePopupID, sizeof(ViewModePopupID), "##PIEViewModePopup_%d", SlotIndex);
+			if (ImGui::Button(ViewModeButtonLabel))
+			{
+				ImGui::OpenPopup(ViewModePopupID);
+			}
+			if (ImGui::BeginPopup(ViewModePopupID))
+			{
+				for (int32 i = 0; i < static_cast<int32>(IM_ARRAYSIZE(ViewModeNames)); ++i)
+				{
+					const bool bSelected = (i == ViewModeIdx);
+					if (ImGui::Selectable(ViewModeNames[i], bSelected))
+					{
+						Opts.ViewMode = static_cast<EViewMode>(i);
+					}
+				}
+				ImGui::EndPopup();
+			}
+
+			ImGui::PopID();
+			ImGui::End();
+			ImGui::PopStyleColor(4);
+			ImGui::PopStyleVar(4);
+			return;
+		}
 
 		static bool GWorldSpaceState[MaxViewportSlots] = { true, true, true, true };
 		static bool GTSnapEnabled[MaxViewportSlots] = { false, false, false, false };
