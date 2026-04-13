@@ -1,0 +1,1 @@
+﻿#include "GameFramework/DecalActor.h"

@@ -2,6 +2,7 @@
 #include "Object/ObjectFactory.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/ActorComponent.h"
+#include "Component/MovementComponent.h"
 #include "Component/TextRenderComponent.h"
 #include "Math/Rotator.h"
 #include "GameFramework/Level.h"
@@ -356,6 +357,10 @@ UObject* AActor::Duplicate(UObject* NewOuter) const
 		if (UTextRenderComponent* TextComp = Cast<UTextRenderComponent>(Comp))
 		{
 			TextComp->RefreshOwnerUUIDText();
+		}
+		else if (UMovementComponent* MovementComp = Cast<UMovementComponent>(Comp))
+		{
+			MovementComp->ResolveUpdatedComponent();
 		}
 	}
 

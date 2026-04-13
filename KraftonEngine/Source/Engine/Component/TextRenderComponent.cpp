@@ -17,6 +17,11 @@ FPrimitiveSceneProxy* UTextRenderComponent::CreateSceneProxy()
 	return new FTextRenderSceneProxy(this);
 }
 
+UTextRenderComponent::UTextRenderComponent()
+{
+	SetFont(FontName);
+}
+
 void UTextRenderComponent::SetFont(const FName& InFontName)
 {
 	FontName = InFontName;
@@ -153,10 +158,6 @@ FString UTextRenderComponent::GetOwnerNameToString() const
 		return Name.ToString();
 	}
 	return FName::None.ToString();
-}
-
-UTextRenderComponent::UTextRenderComponent()
-{
 }
 
 void UTextRenderComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)

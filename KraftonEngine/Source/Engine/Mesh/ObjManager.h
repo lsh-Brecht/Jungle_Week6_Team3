@@ -1,4 +1,5 @@
 ﻿#pragma once
+#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Object/ObjectIterator.h"
@@ -12,6 +13,7 @@ struct FStaticMaterial;
 struct FImportOptions;
 class UStaticMesh;
 class UMaterial;
+class UMaterialInterface;
 
 struct FMeshAssetListItem
 {
@@ -29,8 +31,8 @@ struct FMaterialAssetListItem
 class FObjManager
 {
 	// path → UStaticMesh* 캐시 (소유권은 UObjectManager)
-	static TMap<std::string, UStaticMesh*> StaticMeshCache;
-	static TMap<FString, UMaterial*> MaterialCache;
+ static TMap<FString, UStaticMesh*> StaticMeshCache;
+	static TMap<FString, UMaterialInterface*> MaterialCache;
 	static TArray<FMeshAssetListItem> AvailableMeshFiles;
 	static TArray<FMeshAssetListItem> AvailableObjFiles;
 	static TArray< FMaterialAssetListItem> AvailableMaterialFiles;
@@ -41,7 +43,8 @@ public:
 	static FString GetMBinaryFilePath(const FString& OriginalPath);
 	static UStaticMesh* LoadObjStaticMesh(const std::string& PathFileName, ID3D11Device* InDevice);
 	static UStaticMesh* LoadObjStaticMesh(const FString& PathFileName, const FImportOptions& Options, ID3D11Device* InDevice);
-	static UMaterial* GetOrLoadMaterial(const FString& MaterialName);
+	static UMaterialInterface* GetOrLoadMaterial(const FString& MaterialName);
+   static void EnsureMaterialTextureLoaded(UMaterialInterface* Material, ID3D11Device* InDevice);
 	static void ScanMeshAssets();
 	static const TArray<FMeshAssetListItem>& GetAvailableMeshFiles();
 	static void ScanObjSourceFiles();

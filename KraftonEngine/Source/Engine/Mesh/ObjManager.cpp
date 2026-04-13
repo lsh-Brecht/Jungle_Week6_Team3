@@ -2,17 +2,41 @@
 #include "Mesh/StaticMesh.h"
 #include "Mesh/ObjImporter.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
+#include "Engine/Runtime/Engine.h"
 #include "Editor/UI/EditorConsoleWidget.h"
 #include "Serialization/WindowsArchive.h"
 #include "Engine/Platform/Paths.h"
+#include "Texture/Texture2D.h"
 #include <filesystem>
 #include <algorithm>
 
 TMap<FString, UStaticMesh*> FObjManager::StaticMeshCache;
-TMap<FString, UMaterial*> FObjManager::MaterialCache;
+TMap<FString, UMaterialInterface*> FObjManager::MaterialCache;
 TArray<FMeshAssetListItem> FObjManager::AvailableMeshFiles;
 TArray<FMeshAssetListItem> FObjManager::AvailableObjFiles;
 TArray<FMaterialAssetListItem> FObjManager::AvailableMaterialFiles;
+
+static void ResolveMaterialInstanceParent(UMaterialInterface* Material)
+{
+	UMaterialInstance* InstMat = Cast<UMaterialInstance>(Material);
+	if (!InstMat)
+	{
+		return;
+	}
+
+	if (InstMat->Parent || InstMat->ParentPathFileName.empty() || InstMat->ParentPathFileName == "None")
+	{
+		return;
+	}
+
+	if (InstMat->ParentPathFileName == InstMat->PathFileName)
+	{
+		return;
+	}
+
+	InstMat->Parent = FObjManager::GetOrLoadMaterial(InstMat->ParentPathFileName);
+}
 
 static void EnsureMeshCacheDirExists()
 {
@@ -203,6 +227,9 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, const F
 				FWindowsBinWriter MatWriter(MatBinPath);
 				if (MatWriter.IsValid())
 				{
+					uint32 MatType = static_cast<uint32>(Mat.MaterialInterface->GetMaterialType());
+					MatWriter << MatType;
+
 					Mat.MaterialInterface->Serialize(MatWriter);
 				}
 			}
@@ -297,6 +324,9 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 							FWindowsBinWriter MatWriter(MatBinPath);
 							if (MatWriter.IsValid())
 							{
+								uint32 MatType = static_cast<uint32>(Mat.MaterialInterface->GetMaterialType());
+								MatWriter << MatType;
+
 								Mat.MaterialInterface->Serialize(MatWriter);
 							}
 						}
@@ -336,6 +366,9 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 					FWindowsBinWriter MatWriter(MatBinPath);
 					if (MatWriter.IsValid())
 					{
+						uint32 MatType = static_cast<uint32>(Mat.MaterialInterface->GetMaterialType());
+						MatWriter << MatType;
+
 						Mat.MaterialInterface->Serialize(MatWriter); // UMaterial 데이터 직렬화
 					}
 				}
@@ -366,7 +399,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 }
 
 
-UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
+UMaterialInterface* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 {
 	// 머티리얼 슬롯 이름을 그대로 캐시 키로 사용
 	// stem()을 쓰면 "MatID_1.001" 같은 블렌더 이름에서 ".001"이 확장자로 잘려나감
@@ -375,12 +408,18 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 	// 1. 캐시(RAM)에 이미 있는지 검사
 	if (MaterialCache.contains(FileNameOnly))
 	{
-		UE_LOG("Cached MaterialName: %s;", FileNameOnly.c_str());
-		return MaterialCache[FileNameOnly];
+       UE_LOG("Cached MaterialName: %s;", FileNameOnly.c_str());
+		UMaterialInterface* Cached = MaterialCache[FileNameOnly];
+		if (GEngine)
+		{
+			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+			EnsureMaterialTextureLoaded(Cached, Device);
+		}
+		return Cached;
 	}
 
 	// 2. 캐시에 없다면 빈 객체 생성
-	UMaterial* NewMaterial = UObjectManager::Get().CreateObject<UMaterial>();
+	UMaterialInterface* NewMaterial = nullptr;
 	UE_LOG("Cache Missed MaterialName: %s;", FileNameOnly.c_str());
 
 	FString MBinPath = GetMBinaryFilePath(MaterialName);
@@ -405,7 +444,23 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 		FWindowsBinReader Reader(MBinPath);
 		if (Reader.IsValid())
 		{
+			// 1. 파일 맨 앞의 Type ID를 먼저 읽습니다.
+			uint32 MatType = 0;
+			Reader << MatType;
+
+			// 2. Type ID에 맞춰 알맞은 객체를 메모리에 생성합니다! (이것이 팩토리 패턴)
+			if (MatType == static_cast<uint32>(EMaterialType::Instance))
+			{
+				NewMaterial = UObjectManager::Get().CreateObject<UMaterialInstance>();
+			}
+			else // Master이거나 예외 상황일 때
+			{
+				NewMaterial = UObjectManager::Get().CreateObject<UMaterial>();
+			}
+
+			// 3. 빈 객체가 알맞게 만들어졌으니, 나머지 데이터를 읽어 채웁니다.
 			NewMaterial->Serialize(Reader);
+           ResolveMaterialInstanceParent(NewMaterial);
 		}
 		else
 		{
@@ -420,6 +475,11 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 		// 현재 첨부된 코드 상에는 ObjImporter에서 Material을 같이 추출하지만,
 		// 추후 Material 단독 파일(예: .mat, .json 등)을 파싱하는 전용 Importer가 있다면 이 부분에서 파싱을 수행해야 합니다.
 
+		if (NewMaterial == nullptr)
+		{
+			NewMaterial = UObjectManager::Get().CreateObject<UMaterial>();
+		}
+
 		// 기존 코드 동작 유지 보장: 파일이 존재하면 기존처럼 읽어들이기 시도
 		if (std::filesystem::exists(SrcPath))
 		{
@@ -427,6 +487,7 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 			if (Reader.IsValid())
 			{
 				NewMaterial->Serialize(Reader);
+               ResolveMaterialInstanceParent(NewMaterial);
 			}
 		}
 
@@ -436,6 +497,9 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 			FWindowsBinWriter Writer(MBinPath);
 			if (Writer.IsValid())
 			{
+				uint32 MatType = static_cast<uint32>(NewMaterial->GetMaterialType());
+				Writer << MatType;
+
 				NewMaterial->Serialize(Writer);
 			}
 		}
@@ -443,5 +507,36 @@ UMaterial* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 
 	// 4. 캐시에 등록 후 반환
 	MaterialCache[FileNameOnly] = NewMaterial;
+	if (GEngine)
+	{
+		ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+		EnsureMaterialTextureLoaded(NewMaterial, Device);
+	}
 	return NewMaterial;
+}
+
+void FObjManager::EnsureMaterialTextureLoaded(UMaterialInterface* Material, ID3D11Device* InDevice)
+{
+	if (!Material || !InDevice) return;
+
+	// 1. 만약 원본(Master) 머티리얼이라면
+	if (UMaterial* MasterMat = Cast<UMaterial>(Material))
+	{
+		if (!MasterMat->DiffuseTexture && !MasterMat->DiffuseTextureFilePath.empty())
+		{
+			MasterMat->DiffuseTexture = UTexture2D::LoadFromFile(MasterMat->DiffuseTextureFilePath, InDevice);
+		}
+	}
+	// 2. 만약 인스턴스(Instance) 머티리얼이라면
+	else if (UMaterialInstance* InstMat = Cast<UMaterialInstance>(Material))
+	{
+		// 인스턴스가 텍스처를 오버라이드 했고, 아직 로드 안 됐다면 로드
+		if (InstMat->bOverride_DiffuseTexture && !InstMat->OverriddenDiffuseTexture && !InstMat->OverriddenDiffuseTexturePath.empty())
+		{
+			InstMat->OverriddenDiffuseTexture = UTexture2D::LoadFromFile(InstMat->OverriddenDiffuseTexturePath, InDevice);
+		}
+
+		// 팁: 인스턴스의 부모가 가진 텍스처도 로드되어 있는지 확실히 하려면 여기서 재귀 호출을 할 수도 있습니다.
+		// if (InstMat->Parent) { EnsureMaterialTextureLoaded(InstMat->Parent, InDevice); }
+	}
 }

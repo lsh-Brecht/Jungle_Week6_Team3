@@ -69,7 +69,8 @@ NONE_EXTS = {".natstepfilter", ".config"}
 RC_EXTS = {".rc"}
 
 # Root-level files to include (relative to project dir)
-ROOT_FILES = ["main.cpp"]
+ROOT_SOURCE_FILES = ["main.cpp"]
+ROOT_NONE_FILES = ["packages.config"]
 
 # Include paths (relative to project dir)
 INCLUDE_PATHS = [
@@ -136,11 +137,30 @@ def scan_files(project_dir: Path) -> dict[str, list[str]]:
                 if ext in SHADER_EXTS:
                     result["FxCompile"].append(rel_str)
 
-    # Add root-level files
-    for root_file in ROOT_FILES:
+    # Add root-level source files
+    for root_file in ROOT_SOURCE_FILES:
         full = project_dir / root_file
         if full.exists():
             result["ClCompile"].append(root_file.replace("/", "\\"))
+
+    # Add root-level non-build files such as packages.config
+    for root_file in ROOT_NONE_FILES:
+        full = project_dir / root_file
+        if full.exists():
+            result["None"].append(root_file.replace("/", "\\"))
+
+    # Include any additional root-level natvis/config files that are not under scanned directories.
+    for f in sorted(project_dir.iterdir()):
+        if not f.is_file():
+            continue
+
+        rel_str = f.name
+        ext = f.suffix.lower()
+
+        if ext in NATVIS_EXTS and rel_str not in result["Natvis"]:
+            result["Natvis"].append(rel_str)
+        elif ext in NONE_EXTS and rel_str not in result["None"]:
+            result["None"].append(rel_str)
 
     # Add root-level .rc files
     for f in sorted(project_dir.glob("*.rc")):

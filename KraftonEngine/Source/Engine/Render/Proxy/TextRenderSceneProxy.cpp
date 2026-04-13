@@ -1,4 +1,4 @@
-#include "Render/Proxy/TextRenderSceneProxy.h"
+﻿#include "Render/Proxy/TextRenderSceneProxy.h"
 #include "Component/TextRenderComponent.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ShaderManager.h"
@@ -73,5 +73,6 @@ void FTextRenderSceneProxy::CollectEntries(FRenderBus& Bus)
 	Entry.Font.Text = TextComp->GetText();
 	Entry.Font.Font = TextComp->GetFont();
 	Entry.Font.Scale = TextComp->GetFontSize();
+  Entry.bSelected = bSelected;
 	Bus.AddFontEntry(std::move(Entry));
 }

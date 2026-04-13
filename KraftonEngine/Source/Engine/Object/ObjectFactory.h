@@ -11,7 +11,11 @@ namespace {																					\
 				FObjectFactory::Get().Register(												\
 					#TypeName,																\
 					[](UObject* InOuter)->UObject* {										\
-						return UObjectManager::Get().CreateObject<TypeName>(InOuter);		\
+						if constexpr (std::is_abstract_v<TypeName>) {						\
+							return nullptr;													\
+						} else {															\
+							return UObjectManager::Get().CreateObject<TypeName>(InOuter);	\
+						}																	\
 					}																		\
 				);																			\
 		}																					\

@@ -1,4 +1,5 @@
 ﻿#pragma once
+#pragma once
 
 #include "Component/MeshComponent.h"
 #include "Core/PropertyTypes.h"
@@ -30,9 +31,9 @@ public:
 	void SetStaticMesh(UStaticMesh* InMesh);
 	UStaticMesh* GetStaticMesh() const;
 
-	void SetMaterial(int32 ElementIndex, UMaterial* InMaterial);
-	UMaterial* GetMaterial(int32 ElementIndex) const;
-	const TArray<UMaterial*>& GetOverrideMaterials() const { return OverrideMaterials; }
+	void SetMaterial(int32 ElementIndex, UMaterialInterface* InMaterial);
+	UMaterialInterface* GetMaterial(int32 ElementIndex) const;
+	const TArray<UMaterialInterface*>& GetOverrideMaterials() const { return OverrideMaterials; }
 
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;
@@ -48,7 +49,7 @@ private:
 
 	UStaticMesh* StaticMesh = nullptr;
 	FString StaticMeshPath = "None";
-	TArray<UMaterial*> OverrideMaterials;
+	TArray<UMaterialInterface*> OverrideMaterials;
 	TArray<FMaterialSlot> MaterialSlots; // 경로 + UVScroll 묶음
 
 	FVector CachedLocalCenter = { 0, 0, 0 };

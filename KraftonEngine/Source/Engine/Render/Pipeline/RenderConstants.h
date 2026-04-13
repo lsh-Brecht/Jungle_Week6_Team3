@@ -193,18 +193,21 @@ struct FFontEntry
 {
 	FPerObjectConstants PerObject;
 	FFontConstants Font;
+	bool bSelected = false;
 };
 
 struct FSubUVEntry
 {
 	FPerObjectConstants PerObject;
 	FSubUVConstants SubUV;
+  bool bSelected = false;
 };
 
 struct FBillboardEntry
 {
 	FPerObjectConstants PerObject;
 	FBillboardConstants Billboard;
+  bool bSelected = false;
 };
 
 struct FAABBEntry
