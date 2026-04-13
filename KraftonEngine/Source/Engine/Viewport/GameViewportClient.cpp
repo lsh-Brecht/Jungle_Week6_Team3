@@ -1,4 +1,4 @@
-#include "Viewport/GameViewportClient.h"
+﻿#include "Viewport/GameViewportClient.h"
 
 #include "Component/CameraComponent.h"
 #include "Component/SceneComponent.h"
@@ -12,6 +12,8 @@
 #include "Mesh/ObjManager.h"
 #include "Object/Object.h"
 #include "Viewport/Viewport.h"
+#include "Component/FireBallComponent.h"
+#include "Component/ProjectileMovementComponent.h"
 
 #include <d3d11.h>
 #include <cmath>
@@ -85,6 +87,53 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 		if (Context.Frame.IsDown('S')) MoveInput.X -= 1.0f;
 		if (Context.Frame.IsDown('A')) MoveInput.Y -= 1.0f;
 		if (Context.Frame.IsDown('D')) MoveInput.Y += 1.0f;
+
+		if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_SPACE))
+		{
+			UWorld* World = PIEPlayerActor->GetWorld();
+			if (World)
+			{
+				AActor* FireballActor = World->SpawnActor<AActor>();
+				if (FireballActor)
+				{
+					USceneComponent* Root = FireballActor->AddComponent<USceneComponent>();
+					FireballActor->SetRootComponent(Root);
+
+					UStaticMeshComponent* MeshComp = FireballActor->AddComponent<UStaticMeshComponent>();
+					MeshComp->AttachToComponent(Root);
+					MeshComp->SetRelativeScale(FVector(0.2f, 0.2f, 0.2f));
+
+					if (ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice())
+					{
+						if (UStaticMesh* SphereMesh = FObjManager::LoadObjStaticMesh("Data/BasicShape/Sphere.OBJ", Device))
+						{
+							MeshComp->SetStaticMesh(SphereMesh);
+						}
+					}
+
+					UFireBallComponent* FireballComp = FireballActor->AddComponent<UFireBallComponent>();
+					FireballComp->AttachToComponent(Root);
+					FireballComp->SetRadius(2.0f);
+					FireballComp->SetIntensity(25.0f);
+					FireballComp->SetRadius(5.f);
+					FireballComp->SetColor({1.0f, 0.f,0.f ,0.f });
+
+					UProjectileMovementComponent* ProjectileComp = FireballActor->AddComponent<UProjectileMovementComponent>();
+					FVector Forward = PIEPlayerActor->GetActorForward();
+					ProjectileComp->SetVelocity(Forward);
+					ProjectileComp->SetInitialSpeed(50.0f);
+
+					FVector SpawnLocation = PIEPlayerActor->GetActorLocation() + Forward * 2.0f;
+					FireballActor->SetActorLocation(SpawnLocation);
+
+					// Manually trigger BeginPlay for components added after actor spawn
+					Root->BeginPlay();
+					MeshComp->BeginPlay();
+					FireballComp->BeginPlay();
+					ProjectileComp->BeginPlay();
+				}
+			}
+		}
 	}
 
 	if (MoveInput.Length() > 0.0f)
