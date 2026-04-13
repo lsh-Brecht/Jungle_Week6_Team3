@@ -114,6 +114,31 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 
 	// 에디터 전용 초기화
 	FEditorSettings::Get().LoadFromFile(FEditorSettings::GetDefaultSettingsPath());
+	{
+		FEditorSettings& Settings = FEditorSettings::Get();
+		switch (Settings.FXAAStage)
+		{
+		case 0: Settings.FXAAEdgeThreshold = 0.125f; Settings.FXAAEdgeThresholdMin = 0.0625f; break;
+		case 1: Settings.FXAAEdgeThreshold = 0.063f; Settings.FXAAEdgeThresholdMin = 0.0312f; break;
+		case 2: Settings.FXAAEdgeThreshold = 0.0312f; Settings.FXAAEdgeThresholdMin = 0.0156f; break;
+		case 3: Settings.FXAAEdgeThreshold = 0.0200f; Settings.FXAAEdgeThresholdMin = 0.0080f; break;
+		case 4: break; // Custom
+		default:
+			Settings.FXAAStage = 1;
+			Settings.FXAAEdgeThreshold = 0.063f;
+			Settings.FXAAEdgeThresholdMin = 0.0312f;
+			break;
+		}
+		if (Settings.FXAAEdgeThresholdMin > Settings.FXAAEdgeThreshold)
+		{
+			Settings.FXAAEdgeThresholdMin = Settings.FXAAEdgeThreshold;
+		}
+
+		FFXAAConstants FXAA = {};
+		FXAA.EdgeThreshold = Settings.FXAAEdgeThreshold;
+		FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
+		Renderer.SetFXAAConstants(FXAA);
+	}
 
 	MainPanel.Create(Window, Renderer, this);
 

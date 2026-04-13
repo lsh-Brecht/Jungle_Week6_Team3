@@ -20,6 +20,9 @@ namespace Key
 	constexpr const char* CameraRotateSmoothSpeed = "CameraRotateSmoothSpeed";
 	constexpr const char* InitViewPos = "InitViewPos";
 	constexpr const char* InitLookAt = "InitLookAt";
+	constexpr const char* FXAAStage = "FXAAStage";
+	constexpr const char* FXAAEdgeThreshold = "FXAAEdgeThreshold";
+	constexpr const char* FXAAEdgeThresholdMin = "FXAAEdgeThresholdMin";
 
 	// Slot Render Options
 	constexpr const char* ViewMode = "ViewMode";
@@ -77,6 +80,9 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::bEnableCameraSmoothing] = bEnableCameraSmoothing;
 	Viewport[Key::CameraMoveSmoothSpeed] = CameraMoveSmoothSpeed;
 	Viewport[Key::CameraRotateSmoothSpeed] = CameraRotateSmoothSpeed;
+	Viewport[Key::FXAAStage] = FXAAStage;
+	Viewport[Key::FXAAEdgeThreshold] = FXAAEdgeThreshold;
+	Viewport[Key::FXAAEdgeThresholdMin] = FXAAEdgeThresholdMin;
 
 	JSON InitPos = Array(InitViewPos.X, InitViewPos.Y, InitViewPos.Z);
 	Viewport[Key::InitViewPos] = InitPos;
@@ -191,6 +197,12 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			CameraMoveSmoothSpeed = static_cast<float>(Viewport[Key::CameraMoveSmoothSpeed].ToFloat());
 		if (Viewport.hasKey(Key::CameraRotateSmoothSpeed))
 			CameraRotateSmoothSpeed = static_cast<float>(Viewport[Key::CameraRotateSmoothSpeed].ToFloat());
+		if (Viewport.hasKey(Key::FXAAStage))
+			FXAAStage = Viewport[Key::FXAAStage].ToInt();
+		if (Viewport.hasKey(Key::FXAAEdgeThreshold))
+			FXAAEdgeThreshold = static_cast<float>(Viewport[Key::FXAAEdgeThreshold].ToFloat());
+		if (Viewport.hasKey(Key::FXAAEdgeThresholdMin))
+			FXAAEdgeThresholdMin = static_cast<float>(Viewport[Key::FXAAEdgeThresholdMin].ToFloat());
 
 		if (Viewport.hasKey(Key::InitViewPos))
 		{

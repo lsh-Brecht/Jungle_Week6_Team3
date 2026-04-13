@@ -24,6 +24,59 @@
 #include "Render/Culling/GPUOcclusionCulling.h"
 #endif
 
+namespace
+{
+struct FFXAAPresetEntry
+{
+	const char* Label;
+	float EdgeThreshold;
+	float EdgeThresholdMin;
+};
+
+constexpr FFXAAPresetEntry GFXAAPresets[] = {
+	{ "Low",    0.125f, 0.0625f },
+	{ "Medium", 0.063f, 0.0312f },
+	{ "High",   0.0312f, 0.0156f },
+	{ "Ultra",  0.0200f, 0.0080f },
+	{ "Custom", 0.063f, 0.0312f },
+};
+
+constexpr int32 GFXAAPresetCount = static_cast<int32>(sizeof(GFXAAPresets) / sizeof(GFXAAPresets[0]));
+
+void ApplyFXAAPresetToSettings(FEditorSettings& Settings)
+{
+	if (Settings.FXAAStage < 0)
+	{
+		Settings.FXAAStage = 0;
+	}
+	if (Settings.FXAAStage >= GFXAAPresetCount)
+	{
+		Settings.FXAAStage = GFXAAPresetCount - 1;
+	}
+
+	if (Settings.FXAAStage == GFXAAPresetCount - 1)
+	{
+		return;
+	}
+
+	Settings.FXAAEdgeThreshold = GFXAAPresets[Settings.FXAAStage].EdgeThreshold;
+	Settings.FXAAEdgeThresholdMin = GFXAAPresets[Settings.FXAAStage].EdgeThresholdMin;
+}
+
+void PushFXAAConstantsToRenderer(UEditorEngine* EditorEngine, const FEditorSettings& Settings)
+{
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	FFXAAConstants FXAA = {};
+	FXAA.EdgeThreshold = Settings.FXAAEdgeThreshold;
+	FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
+	EditorEngine->GetRenderer().SetFXAAConstants(FXAA);
+}
+}
+
 void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, UEditorEngine* InEditorEngine)
 {
 	IMGUI_CHECKVERSION();
@@ -445,6 +498,50 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 	ImGui::DragFloat("Move Smooth Speed", &Settings.CameraMoveSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
 	ImGui::DragFloat("Rotate Smooth Speed", &Settings.CameraRotateSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
 	ImGui::EndDisabled();
+
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		const char* CurrentLabel = GFXAAPresets[Settings.FXAAStage >= 0 && Settings.FXAAStage < GFXAAPresetCount ? Settings.FXAAStage : 1].Label;
+		if (ImGui::BeginCombo("FXAA Stage", CurrentLabel))
+		{
+			for (int32 i = 0; i < GFXAAPresetCount; ++i)
+			{
+				const bool bSelected = (Settings.FXAAStage == i);
+				if (ImGui::Selectable(GFXAAPresets[i].Label, bSelected))
+				{
+					Settings.FXAAStage = i;
+					ApplyFXAAPresetToSettings(Settings);
+				}
+				if (bSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		const bool bCustomStage = (Settings.FXAAStage == GFXAAPresetCount - 1);
+		ImGui::BeginDisabled(!bCustomStage);
+		if (ImGui::DragFloat("Edge Threshold", &Settings.FXAAEdgeThreshold, 0.0005f, 0.001f, 0.5f, "%.4f"))
+		{
+			if (Settings.FXAAEdgeThreshold < 0.001f) Settings.FXAAEdgeThreshold = 0.001f;
+			if (Settings.FXAAEdgeThreshold > 0.5f) Settings.FXAAEdgeThreshold = 0.5f;
+		}
+		if (ImGui::DragFloat("Edge Threshold Min", &Settings.FXAAEdgeThresholdMin, 0.0005f, 0.001f, 0.5f, "%.4f"))
+		{
+			if (Settings.FXAAEdgeThresholdMin < 0.001f) Settings.FXAAEdgeThresholdMin = 0.001f;
+			if (Settings.FXAAEdgeThresholdMin > 0.5f) Settings.FXAAEdgeThresholdMin = 0.5f;
+		}
+		ImGui::EndDisabled();
+
+		if (Settings.FXAAEdgeThresholdMin > Settings.FXAAEdgeThreshold)
+		{
+			Settings.FXAAEdgeThresholdMin = Settings.FXAAEdgeThreshold;
+		}
+	}
+
+	PushFXAAConstantsToRenderer(EditorEngine, Settings);
 
 	if (FLevelEditorViewportClient* ActiveVC = EditorEngine->GetActiveViewport())
 	{

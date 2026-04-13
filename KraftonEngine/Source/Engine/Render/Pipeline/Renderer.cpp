@@ -1047,20 +1047,20 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 		return;
 	}
 
-	// SelectionMask 큐가 비어 있으면 복사만 수행
-	if (Bus.GetProxies(ERenderPass::SelectionMask).empty())
-	{
-		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
-		return;
-	}
-
 	Context->OMSetRenderTargets(1, &OutputRTV, nullptr);
 
 	ID3D11ShaderResourceView* SRVs[2] = { SceneColorSRV, OutlineMaskSRV };
 	Context->PSSetShaderResources(0, 2, SRVs);
 
 	FShader* PPShader = FShaderManager::Get().GetShader(EShaderType::OutlinePostProcess);
-	if (PPShader) PPShader->Bind(Context);
+	if (!PPShader)
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+		Context->PSSetShaderResources(0, 2, NullSRV);
+		return;
+	}
+	PPShader->Bind(Context);
 
 	FConstantBuffer* OutlineCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess, sizeof(FOutlinePostProcessConstants));
 	FOutlinePostProcessConstants PPConstants;
@@ -1114,7 +1114,7 @@ void FRenderer::DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* 
 	}
 	FXAAShader->Bind(Context);
 
-	FFXAAConstants FXAAData = {};
+	FFXAAConstants FXAAData = FXAAConstants;
 	FXAAData.TexelSize = FVector2(1.0f / Width, 1.0f / Height);
 
 	FConstantBuffer* FXAACB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess_FXAA, sizeof(FFXAAConstants));
