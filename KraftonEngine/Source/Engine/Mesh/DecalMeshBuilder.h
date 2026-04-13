@@ -42,8 +42,13 @@ public:
 		TArray<FDecalClippedPolygon>& OutPolygons,
 		FDecalClipStats* OutStats = nullptr);
 
+	static void TriangulateClippedPolygons(
+		const TArray<FDecalClippedPolygon>& ClippedPolygons,
+		TArray<FDecalTriangulatedTriangle>& OutTriangles,
+		FDecalTriangulationStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,
-		const UPrimitiveComponent* Primitive);
+		const UStaticMeshComponent* StaticMeshComponent);
 };

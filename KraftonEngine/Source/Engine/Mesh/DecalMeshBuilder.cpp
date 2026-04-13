@@ -327,9 +327,9 @@ namespace
 
 bool FDecalMeshBuilder::PassTargetFilter(
 	const UDecalComponent& DecalComponent,
-	const UPrimitiveComponent* Primitive)
+	const UStaticMeshComponent* StaticMeshComponent)
 {
-	if (!Primitive) return false;
+	if (!StaticMeshComponent) return false;
 
 	const int32 Filter = DecalComponent.GetTargetFilter();
 
@@ -758,6 +758,57 @@ void FDecalMeshBuilder::ClipSATTrianglesAgainstDecalBox(
 		++LocalStats.EmittedPolygonCount;
 
 		OutPolygons.push_back(std::move(Polygon));
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::TriangulateClippedPolygons(
+	const TArray<FDecalClippedPolygon>& ClippedPolygons,
+	TArray<FDecalTriangulatedTriangle>& OutTriangles,
+	FDecalTriangulationStats* OutStats)
+{
+	OutTriangles.clear();
+
+	FDecalTriangulationStats LocalStats;
+	LocalStats.InputPolygonCount = static_cast<int32>(ClippedPolygons.size());
+
+	for (const FDecalClippedPolygon& Polygon : ClippedPolygons)
+	{
+		const size_t VertexCount = Polygon.DecalPositions.size();
+		if (VertexCount < 3)
+		{
+			++LocalStats.SkippedTooSmallPolygonCount;
+			continue;
+		}
+
+		/*
+			convex polygon fan triangulation:
+			(V0, V1, V2), (V0, V2, V3), ...
+		*/
+		const FVector& V0 = Polygon.DecalPositions[0];
+
+		for (size_t i = 1; i + 1 < VertexCount; ++i)
+		{
+			FDecalTriangulatedTriangle Triangle;
+			Triangle.OwnerActor = Polygon.OwnerActor;
+			Triangle.StaticMeshComponent = Polygon.StaticMeshComponent;
+			Triangle.TriangleStartIndex = Polygon.TriangleStartIndex;
+			Triangle.MeshToWorld = Polygon.MeshToWorld;
+			Triangle.WorldToMesh = Polygon.WorldToMesh;
+			Triangle.MeshToDecal = Polygon.MeshToDecal;
+			Triangle.DecalFaceNormal = Polygon.DecalFaceNormal;
+
+			Triangle.DecalPositions[0] = V0;
+			Triangle.DecalPositions[1] = Polygon.DecalPositions[i];
+			Triangle.DecalPositions[2] = Polygon.DecalPositions[i + 1];
+
+			OutTriangles.push_back(Triangle);
+			++LocalStats.EmittedTriangleCount;
+		}
 	}
 
 	if (OutStats)

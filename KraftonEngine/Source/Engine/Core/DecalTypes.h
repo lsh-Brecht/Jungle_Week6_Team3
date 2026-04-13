@@ -165,3 +165,25 @@ struct FDecalClipStats
 	int32 RejectedDegeneratePolygonCount = 0;
 	int32 TotalOutputVertexCount = 0;
 };
+
+struct FDecalTriangulatedTriangle
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	FVector DecalPositions[3];
+	FVector DecalFaceNormal;
+};
+
+struct FDecalTriangulationStats
+{
+	int32 InputPolygonCount = 0;
+	int32 EmittedTriangleCount = 0;
+	int32 SkippedTooSmallPolygonCount = 0;
+};
