@@ -8,6 +8,7 @@
 #include "Serialization/Archive.h"
 #include "Core/DecalTypes.h"
 #include "Mesh/DecalMeshBuilder.h"
+#include "Render/Proxy/DecalSceneProxy.h"
 
 #include <algorithm>
 #include <cmath>
@@ -80,7 +81,39 @@ IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
 
 FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
 {
-	return nullptr;
+	return new FDecalSceneProxy(this);
+}
+
+void UDecalComponent::RebuildDecalMeshNow()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		RenderableMesh.Clear();
+		return;
+	}
+
+	TArray<FDecalPrimitiveCandidate> Candidates;
+	TArray<FDecalSourceTriangle> SourceTriangles;
+	TArray<FDecalLocalTriangle> LocalTriangles;
+	TArray<FDecalCoarseOverlapTriangle> CoarseTriangles;
+	TArray<FDecalSATTriangle> SATTriangles;
+	TArray<FDecalClippedPolygon> ClippedPolygons;
+	TArray<FDecalTriangulatedTriangle> Triangles;
+	TArray<FDecalUVTriangle> UVTriangles;
+
+	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, nullptr);
+	FDecalMeshBuilder::GatherBruteForceTriangles(Candidates, SourceTriangles, nullptr);
+	FDecalMeshBuilder::TransformTrianglesToDecalLocal(*this, SourceTriangles, LocalTriangles, nullptr);
+	FDecalMeshBuilder::GatherCoarseOverlapTriangles(LocalTriangles, CoarseTriangles, nullptr);
+	FDecalMeshBuilder::GatherSATOverlapTriangles(CoarseTriangles, SATTriangles, nullptr);
+	FDecalMeshBuilder::ClipSATTrianglesAgainstDecalBox(SATTriangles, ClippedPolygons, nullptr);
+	FDecalMeshBuilder::TriangulateClippedPolygons(ClippedPolygons, Triangles, nullptr);
+	FDecalMeshBuilder::ComputeTriangleUVs(Triangles, UVTriangles, nullptr);
+	FDecalMeshBuilder::BuildRenderableMesh(UVTriangles, RenderableMesh, nullptr);
+
+	ClearDecalDirty();
+	MarkRenderStateDirty();
 }
 
 void UDecalComponent::UpdateWorldAABB() const
