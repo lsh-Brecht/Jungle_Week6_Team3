@@ -1,7 +1,6 @@
 #include "Common/ConstantBuffers.hlsl"
 
 Texture2D<float> DepthTex : register(t0);
-SamplerState PointSampler : register(s0);
 
 struct PS_Input
 {
@@ -17,14 +16,38 @@ PS_Input VS(uint vertexID : SV_VertexID)
     return output;
 }
 
+float ConvertFromDeviceZ(float DeviceZ)
+{
+    if (abs(Projection[2][3]) < 1e-6f)
+    {
+        float proj33 = Projection[2][2];
+        float safeProj33 = (abs(proj33) > 1e-6f) ? proj33 : 1e-6f;
+        return (DeviceZ - Projection[3][2]) / safeProj33;
+    }
+
+    float denom = DeviceZ * InvDeviceZToWorldZTransform2 - InvDeviceZToWorldZTransform3;
+    return 1.0f / max(denom, 1e-6f);
+}
+
 float4 PS(PS_Input input) : SV_Target
 {
-    float d = DepthTex.Sample(PointSampler, input.uv);
-    float denom = max(FarPlane - d * (FarPlane - NearPlane), 1e-6f);
-    float viewDepth = (NearPlane * FarPlane) / denom;
+    const int2 coord = int2(input.position.xy);
+    float deviceZ = DepthTex.Load(int3(coord, 0));
 
-    // Visualize with a logarithmic ramp so mid/far depth keeps visible contrast.
-    float depth01 = saturate(log2(1.0f + viewDepth) / log2(1.0f + FarPlane));
-    float gray = 1.0f - depth01;
+    // Background / untouched depth stays black.
+    if (deviceZ >= 0.999999f)
+    {
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    float viewDepth = ConvertFromDeviceZ(deviceZ);
+    float nearDepth = max(NearPlane, 1e-6f);
+    float farDepth = max(FarPlane, nearDepth + 1e-6f);
+    float safeViewDepth = clamp(viewDepth, nearDepth, farDepth);
+    float depth01 = saturate(log2(1.0f + safeViewDepth) / log2(1.0f + farDepth));
+    float contrastDepth = pow(depth01, 1.35f) * 0.85f;
+
+    // UE-style scene depth: near is dark, far gets brighter, background stays black.
+    float gray = saturate(contrastDepth);
     return float4(gray, gray, gray, 1.0);
 }
