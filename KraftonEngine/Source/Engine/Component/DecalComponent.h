@@ -90,6 +90,7 @@ public:
 
 	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
 
+	void DebugRunBroadPhase() const;
 private:
 	/*
 	* - 저장/복제는 경로 기반

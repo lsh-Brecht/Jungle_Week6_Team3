@@ -6,6 +6,8 @@
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Pipeline/RenderConstants.h"
 #include "Serialization/Archive.h"
+#include "Core/DecalTypes.h"
+#include "Mesh/DecalMeshBuilder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -400,4 +402,28 @@ void UDecalComponent::AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxC
 	const FVector Center = DecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
 	const FVector ForwardTip = DecalLocalToWorld.TransformPositionWithW(FVector(0.5f, 0.0f, 0.0f));
 	AddDebugLine(RenderBus, Center, ForwardTip, FColor::Red());
+}
+
+void UDecalComponent::DebugRunBroadPhase() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	TArray<FDecalPrimitiveCandidate> Candidates;
+	FDecalBroadPhaseStats Stats;
+	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, &Stats);
+
+	/*
+		여기서 디버깅 포인트:
+		- TotalPrimitiveCount
+		- StaticMeshPrimitiveCount
+		- FilterPassedCount
+		- BoundsOverlapCount
+		- Candidates.size()
+
+		처음엔 이 숫자들이 기대와 맞는지 보는 게 가장 중요합니다.
+	*/
 }
