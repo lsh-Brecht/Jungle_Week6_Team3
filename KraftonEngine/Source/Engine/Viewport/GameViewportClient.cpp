@@ -258,9 +258,17 @@ void UGameViewportClient::ReleasePIEPlayer()
 {
 	if (PIEPlayerActor)
 	{
-		if (UWorld* OwnerWorld = PIEPlayerActor->GetWorld())
+		// PIE 종료 순서/예외 경로에서 Actor가 이미 해제됐을 수 있으므로 UUID로 유효성 확인.
+		UObject* Found = (PIEPlayerActorUUID != 0u)
+			? UObjectManager::Get().FindByUUID(PIEPlayerActorUUID)
+			: nullptr;
+
+		if (Found == PIEPlayerActor)
 		{
-			OwnerWorld->DestroyActor(PIEPlayerActor);
+			if (UWorld* OwnerWorld = PIEPlayerActor->GetWorld())
+			{
+				OwnerWorld->DestroyActor(PIEPlayerActor);
+			}
 		}
 	}
 

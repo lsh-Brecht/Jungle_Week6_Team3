@@ -547,7 +547,16 @@ void UEditorEngine::EndPlayMap()
 	//MainPanel.RestoreEditorWindowsAfterPIE();
 	//ViewportLayout.RestoreWorldAxisAfterPIE();
 
+	if (UGameViewportClient* PIEVC = GetGameViewportClient())
+	{
+		PIEVC->OnEndPIE();
+		UObjectManager::Get().DestroyObject(PIEVC);
+		SetGameViewportClient(nullptr);
+	}
+
 	// PIE WorldContext 제거 (DestroyWorldContext가 EndPlay + DestroyObject 수행).
+	// 주의: UGameViewportClient::OnEndPIE()보다 먼저 파괴하면 PIEPlayerActor가 이미 해제되어
+	// ReleasePIEPlayer()에서 dangling 포인터 접근이 발생할 수 있다.
 	DestroyWorldContext(FName("PIE"));
 
 	// PIE 월드의 프록시가 모두 파괴됐으므로 GPU Occlusion readback 무효화.
@@ -557,12 +566,6 @@ void UEditorEngine::EndPlayMap()
 	}
 
 	PlayInEditorSessionInfo.reset();
-	if (UGameViewportClient* PIEVC = GetGameViewportClient())
-	{
-		PIEVC->OnEndPIE();
-		UObjectManager::Get().DestroyObject(PIEVC);
-		SetGameViewportClient(nullptr);
-	}
 	ViewportLayout.EndPIEViewportMode();
 	PIEEntryViewportClient = nullptr;
 	PIEControlMode = EPIEControlMode::Possessed;
