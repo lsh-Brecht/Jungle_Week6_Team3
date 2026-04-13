@@ -27,6 +27,11 @@ public:
 		TArray<FDecalLocalTriangle>& OutLocalTriangles,
 		FDecalTransformStats* OutStats = nullptr);
 
+	static void GatherCoarseOverlapTriangles(
+		const TArray<FDecalLocalTriangle>& LocalTriangles,
+		TArray<FDecalCoarseOverlapTriangle>& OutAcceptedTriangles,
+		FDecalCoarseOverlapStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,

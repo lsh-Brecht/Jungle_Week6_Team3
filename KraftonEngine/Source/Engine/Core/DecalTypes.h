@@ -71,11 +71,38 @@ struct FDecalLocalTriangle
 
 	FVector DecalPositions[3];
 
-	FVector DecalFaceNormmal;
+	FVector DecalFaceNormal;
 };
 
 struct FDecalTransformStats
 {
 	int32 SourceTriangleCount = 0;
 	int32 TransformedTriangleCount = 0;
+};
+
+struct FDecalCoarseOverlapTriangle
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	FVector DecalPositions[3];
+	FVector DecalFaceNormal;
+
+	// 디버그용
+	FBoundingBox DecalLocalTriangleAABB;
+	bool bAnyVertexInsideBox = false;
+};
+
+struct FDecalCoarseOverlapStats
+{
+	int32 InputTriangleCount = 0;
+	int32 TriangleAABBOverlapCount = 0;
+	int32 AnyVertexInsideCount = 0;
+	int32 CoarseAcceptedCount = 0;
 };

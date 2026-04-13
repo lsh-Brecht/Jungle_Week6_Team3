@@ -24,6 +24,30 @@ namespace
 		}
 		return N;
 	}
+
+	FBoundingBox MakeTriangleAABB(const FVector& A, const FVector& B, const FVector& C)
+	{
+		FBoundingBox Bounds;
+		Bounds.Expand(A);
+		Bounds.Expand(B);
+		Bounds.Expand(C);
+		return Bounds;
+	}
+
+	FBoundingBox GetCanonicalDecalBoxBounds()
+	{
+		return FBoundingBox(
+			FVector(-0.5f, -0.5f, -0.5f),
+			FVector(0.5f, 0.5f, 0.5f));
+	}
+
+	bool IsPointInsideCanonicalDecalBox(const FVector& P)
+	{
+		return
+			P.X >= -0.5f && P.X <= 0.5f &&
+			P.Y >= -0.5f && P.Y <= 0.5f &&
+			P.Z >= -0.5f && P.Z <= 0.5f;
+	}
 }
 
 bool FDecalMeshBuilder::PassTargetFilter(
@@ -235,7 +259,7 @@ void FDecalMeshBuilder::TransformTrianglesToDecalLocal(
 		LocalTriangle.DecalPositions[1] = MeshToDecal.TransformPositionWithW(SourceTriangle.LocalPositions[1]);
 		LocalTriangle.DecalPositions[2] = MeshToDecal.TransformPositionWithW(SourceTriangle.LocalPositions[2]);
 
-		LocalTriangle.DecalFaceNormmal = ComputeTriangleNormal(
+		LocalTriangle.DecalFaceNormal = ComputeTriangleNormal(
 			LocalTriangle.DecalPositions[0],
 			LocalTriangle.DecalPositions[1],
 			LocalTriangle.DecalPositions[2]);
@@ -249,3 +273,72 @@ void FDecalMeshBuilder::TransformTrianglesToDecalLocal(
 		*OutStats = LocalStats;
 	}
 }
+
+void FDecalMeshBuilder::GatherCoarseOverlapTriangles(
+	const TArray<FDecalLocalTriangle>& LocalTriangles,
+	TArray<FDecalCoarseOverlapTriangle>& OutAcceptedTriangles,
+	FDecalCoarseOverlapStats* OutStats)
+{
+	OutAcceptedTriangles.clear();
+
+	FDecalCoarseOverlapStats LocalStats;
+	LocalStats.InputTriangleCount = static_cast<int32>(LocalTriangles.size());
+
+	const FBoundingBox DecalBoxBounds = GetCanonicalDecalBoxBounds();
+
+	for (const FDecalLocalTriangle& LocalTriangle : LocalTriangles)
+	{
+		const FVector& P0 = LocalTriangle.DecalPositions[0];
+		const FVector& P1 = LocalTriangle.DecalPositions[1];
+		const FVector& P2 = LocalTriangle.DecalPositions[2];
+
+		const FBoundingBox TriangleAABB = MakeTriangleAABB(P0, P1, P2);
+
+		if (!TriangleAABB.IsIntersected(DecalBoxBounds))
+		{
+			continue;
+		}
+
+		++LocalStats.TriangleAABBOverlapCount;
+
+		const bool bInside0 = IsPointInsideCanonicalDecalBox(P0);
+		const bool bInside1 = IsPointInsideCanonicalDecalBox(P1);
+		const bool bInside2 = IsPointInsideCanonicalDecalBox(P2);
+	
+		const bool bAnyVertexInside = bInside0 || bInside1 || bInside2;
+		if (bAnyVertexInside)
+		{
+			++LocalStats.AnyVertexInsideCount;
+		}
+
+		/*
+			임시 coarse 규칙:
+			- triangle AABB가 decal box와 겹치면 일단 근처로 본다.
+			- vertex 하나라도 box 안이면 더 강한 힌트.
+			- 지금 단계에서는 둘 중 하나만 만족해도 accept.
+
+			즉, SAT 전이므로 false positive를 허용한다.
+		*/
+		FDecalCoarseOverlapTriangle Accepted;
+		Accepted.OwnerActor = LocalTriangle.OwnerActor;
+		Accepted.StaticMeshComponent = LocalTriangle.StaticMeshComponent;
+		Accepted.TriangleStartIndex = LocalTriangle.TriangleStartIndex;
+		Accepted.MeshToWorld = LocalTriangle.MeshToWorld;
+		Accepted.WorldToMesh = LocalTriangle.WorldToMesh;
+		Accepted.MeshToDecal = LocalTriangle.MeshToDecal;
+		Accepted.DecalPositions[0] = P0;
+		Accepted.DecalPositions[1] = P1;
+		Accepted.DecalPositions[2] = P2;
+		Accepted.DecalFaceNormal = LocalTriangle.DecalFaceNormal;
+		Accepted.DecalLocalTriangleAABB = TriangleAABB;
+		Accepted.bAnyVertexInsideBox = bAnyVertexInside;
+
+		OutAcceptedTriangles.push_back(Accepted);
+		++LocalStats.CoarseAcceptedCount;
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}	
