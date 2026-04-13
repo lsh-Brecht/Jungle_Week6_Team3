@@ -81,10 +81,16 @@ IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
 
 FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
 {
+	if (bDecalDirty)
+	{
+		BuildDecalMesh();
+		ClearDecalDirty();
+	}
+
 	return new FDecalSceneProxy(this);
 }
 
-void UDecalComponent::RebuildDecalMeshNow()
+void UDecalComponent::BuildDecalMesh()
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -111,7 +117,11 @@ void UDecalComponent::RebuildDecalMeshNow()
 	FDecalMeshBuilder::TriangulateClippedPolygons(ClippedPolygons, Triangles, nullptr);
 	FDecalMeshBuilder::ComputeTriangleUVs(Triangles, UVTriangles, nullptr);
 	FDecalMeshBuilder::BuildRenderableMesh(UVTriangles, RenderableMesh, nullptr);
+}
 
+void UDecalComponent::RebuildDecalMeshNow()
+{
+	BuildDecalMesh();
 	ClearDecalDirty();
 	MarkRenderStateDirty();
 }
@@ -172,7 +182,7 @@ void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	UPrimitiveComponent::GetEditableProperties(OutProps);
 
 	OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
-	OutProps.push_back({ "Decal Material", EPropertyType::String, &DecalMaterialPath });
+	OutProps.push_back({ "Decal Material", EPropertyType::MaterialRef, &DecalMaterialPath });
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
 	OutProps.push_back({ "Target Filter", EPropertyType::Int, &TargetFilter });
 	OutProps.push_back({ "Draw Debug OBB", EPropertyType::Bool, &bDrawDebugOBB });
@@ -185,19 +195,23 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 	if (strcmp(PropertyName, "Decal Size") == 0)
 	{
 		SetDecalSize(DecalSize);
+		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Decal Material") == 0)
 	{
 		ReloadMaterialFromPath();
 		MarkDecalDirty();
+		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Sort Order") == 0)
 	{
 		SetSortOrder(SortOrder);
+		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Target Filter") == 0)
 	{
 		SetTargetFilter(TargetFilter);
+		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Draw Debug OBB") == 0)
 	{

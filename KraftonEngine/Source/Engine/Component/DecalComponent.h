@@ -98,6 +98,8 @@ public:
 	const FDecalRenderableMesh& GetRenderableMesh() const { return RenderableMesh; }
 
 private:
+	void BuildDecalMesh();
+
 	/*
 	* - 저장/복제는 경로 기반
 	* - 런타임 사용은 포인터 기반
