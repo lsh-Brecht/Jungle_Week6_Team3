@@ -10,8 +10,99 @@
 #include "Mesh/ObjManager.h"
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/StaticMeshActor.h"
+#include "Viewport/GameViewportClient.h"
+#include "Viewport/Viewport.h"
+#include "Platform/Paths.h"
+#include "Math/MathUtils.h"
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <commdlg.h>
+#include <shellapi.h>
+#include <filesystem>
+#include "ImGui/imgui.h"
 
 IMPLEMENT_CLASS(UEditorEngine, UEngine)
+
+namespace
+{
+UCameraComponent* FindPerspectiveViewportCamera(const UEditorEngine* InEditor)
+{
+	if (!InEditor)
+	{
+		return nullptr;
+	}
+
+	for (FLevelEditorViewportClient* VC : InEditor->GetLevelViewportClients())
+	{
+		if (!VC)
+		{
+			continue;
+		}
+		if (VC->GetRenderOptions().ViewportType == ELevelViewportType::Perspective
+			|| VC->GetRenderOptions().ViewportType == ELevelViewportType::FreeOrthographic)
+		{
+			return VC->GetCamera();
+		}
+	}
+	return nullptr;
+}
+
+FString BuildScenePathFromStem(const FString& InStem)
+{
+	std::filesystem::path ScenePath = std::filesystem::path(FSceneSaveManager::GetSceneDirectory())
+		/ (FPaths::ToWide(InStem) + FSceneSaveManager::SceneExtension);
+	return FPaths::ToUtf8(ScenePath.wstring());
+}
+
+FString GetFileStem(const FString& InPath)
+{
+	const std::filesystem::path P = std::filesystem::path(FPaths::ToWide(InPath));
+	return FPaths::ToUtf8(P.stem().wstring());
+}
+
+bool TryComputeSpawnLocationFromViewportLocal(FLevelEditorViewportClient* InViewportClient, float InLocalX, float InLocalY, float InDistance, FVector& OutLocation)
+{
+	if (!InViewportClient || !InViewportClient->GetCamera())
+	{
+		return false;
+	}
+
+	const float VPWidth = InViewportClient->GetViewport() ? static_cast<float>(InViewportClient->GetViewport()->GetWidth()) : InViewportClient->GetWindowWidth();
+	const float VPHeight = InViewportClient->GetViewport() ? static_cast<float>(InViewportClient->GetViewport()->GetHeight()) : InViewportClient->GetWindowHeight();
+	if (VPWidth <= 0.0f || VPHeight <= 0.0f)
+	{
+		return false;
+	}
+
+	const float LocalMouseX = Clamp(InLocalX, 0.0f, VPWidth - 1.0f);
+	const float LocalMouseY = Clamp(InLocalY, 0.0f, VPHeight - 1.0f);
+	const FRay Ray = InViewportClient->GetCamera()->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
+	OutLocation = Ray.Origin + Ray.Direction.Normalized() * InDistance;
+	return true;
+}
+
+bool TryComputeSpawnLocationFromViewportPoint(FLevelEditorViewportClient* InViewportClient, int32 InClientX, int32 InClientY, float InDistance, FVector& OutLocation)
+{
+	if (!InViewportClient)
+	{
+		return false;
+	}
+
+	const FRect& ViewRect = InViewportClient->GetViewportScreenRect();
+	if (ViewRect.Width <= 0.0f || ViewRect.Height <= 0.0f)
+	{
+		return false;
+	}
+
+	const float LocalX = static_cast<float>(InClientX) - ViewRect.X;
+	const float LocalY = static_cast<float>(InClientY) - ViewRect.Y;
+	return TryComputeSpawnLocationFromViewportLocal(InViewportClient, LocalX, LocalY, InDistance, OutLocation);
+}
+}
 
 void UEditorEngine::Init(FWindowsWindow* InWindow)
 {
@@ -44,6 +135,8 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 
 	// Editor render pipeline
 	SetRenderPipeline(std::make_unique<FEditorRenderPipeline>(this, Renderer));
+
+	InputRouter.SetOwnerWindow(Window->GetHWND());
 }
 
 void UEditorEngine::Shutdown()
@@ -82,14 +175,110 @@ void UEditorEngine::Tick(float DeltaTime)
 		StartQueuedPlaySessionRequest();
 	}
 
+	MainPanel.Update();
+
+	const bool bAnyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+	if (bHadAnyPopupOpenLastFrame && !bAnyPopupOpen)
+	{
+		bSuppressViewportMouseUntilButtonsReleased = true;
+	}
+	const bool bSuppressRequestedByViewportLayout = ViewportLayout.ConsumeViewportMouseSuppressRequest();
+	if (bSuppressRequestedByViewportLayout)
+	{
+		bSuppressViewportMouseUntilButtonsReleased = true;
+	}
+
+	InputSystem& Input = InputSystem::Get();
+	const bool bAnyMouseButtonDown =
+		Input.GetKey(VK_LBUTTON)
+		|| Input.GetKey(VK_RBUTTON)
+		|| Input.GetKey(VK_MBUTTON)
+		|| Input.GetKey(VK_XBUTTON1)
+		|| Input.GetKey(VK_XBUTTON2)
+		|| Input.GetLeftDragging()
+		|| Input.GetRightDragging();
+	if (bSuppressViewportMouseUntilButtonsReleased && !bAnyMouseButtonDown && !bSuppressRequestedByViewportLayout)
+	{
+		bSuppressViewportMouseUntilButtonsReleased = false;
+	}
+
+	const FGuiInputState& GuiInputState = Input.GetGuiInputState();
+	const bool bRouteMouseToImGui =
+		(GuiInputState.bUsingMouse && !IsMouseOverViewport())
+		|| bSuppressViewportMouseUntilButtonsReleased;
+	InputRouter.SetForceViewportMouseBlock(bAnyPopupOpen || bSuppressViewportMouseUntilButtonsReleased);
+	InputRouter.SetImGuiCaptureState(
+		bRouteMouseToImGui,
+		GuiInputState.bUsingKeyboard || GuiInputState.bUsingTextInput);
+	InputRouter.ClearTargets();
+
+	for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+	{
+		if (!VC || !VC->GetViewport())
+		{
+			continue;
+		}
+
+		FViewportClient* ReceiverClient = VC;
+		EInteractionDomain Domain = GetCurrentInteractionDomain();
+		if (IsPlayingInEditor()
+			&& PIEControlMode == EPIEControlMode::Possessed
+			&& VC == PIEEntryViewportClient
+			&& GetGameViewportClient())
+		{
+			ReceiverClient = GetGameViewportClient();
+			Domain = EInteractionDomain::PIE;
+			GetGameViewportClient()->SetViewport(VC->GetViewport());
+		}
+
+		InputRouter.RegisterTarget(
+			VC->GetViewport(),
+			ReceiverClient,
+			Domain,
+			[VC](FRect& OutRect)
+			{
+				const FRect& R = VC->GetViewportScreenRect();
+				if (R.Width <= 0.0f || R.Height <= 0.0f)
+				{
+					return false;
+				}
+				OutRect = R;
+				return true;
+			},
+			[this]()
+			{
+				return GetWorld();
+			});
+	}
+
+	FViewportInputContext RoutedInputContext;
+	FInteractionBinding InteractionBinding;
+	if (!bAnyPopupOpen && InputRouter.Tick(RoutedInputContext, InteractionBinding))
+	{
+		if (HandleGlobalShortcuts(RoutedInputContext))
+		{
+			RoutedInputContext.bConsumed = true;
+		}
+
+		for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+		{
+			if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
+			{
+				ViewportLayout.SetActiveViewport(VC);
+				break;
+			}
+		}
+	}
+
 	for (FEditorViewportClient* VC : ViewportLayout.GetAllViewportClients())
 	{
 		VC->Tick(DeltaTime);
 	}
 
-	MainPanel.Update();
-	UEngine::Tick(DeltaTime);
+	WorldTick(DeltaTime);
+	Render(DeltaTime);
 	SelectionManager.Tick();
+	bHadAnyPopupOpenLastFrame = bAnyPopupOpen;
 }
 
 UCameraComponent* UEditorEngine::GetCamera() const
@@ -193,6 +382,11 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 		}
 	}
 	PlayInEditorSessionInfo = Info;
+	PIEEntryViewportClient = ViewportLayout.GetActiveViewport();
+	if (PIEEntryViewportClient)
+	{
+		bSavedEntryViewportGizmo = PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo;
+	}
 
 	// 4) ActiveWorldHandle을 PIE로 전환 — 이후 GetWorld()는 PIE 월드를 반환.
 	SetActiveWorld(FName("PIE"));
@@ -220,6 +414,25 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 	SelectionManager.ClearSelection();
 	//SelectionManager.SetGizmoEnabled(false); //PIE가 시작되면 gizmo 비활성화
 	SelectionManager.SetWorld(PIEWorld);
+
+	if (!GetGameViewportClient())
+	{
+		UGameViewportClient* PIEVC = UObjectManager::Get().CreateObject<UGameViewportClient>();
+		SetGameViewportClient(PIEVC);
+	}
+	if (UGameViewportClient* PIEVC = GetGameViewportClient())
+	{
+		if (PIEEntryViewportClient)
+		{
+			PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
+			PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
+		}
+		PIEVC->OnBeginPIE();
+	}
+	ViewportLayout.BeginPIEViewportMode();
+
+	// PIE 시작 직후 기본 진입 모드는 항상 Possessed로 맞춘다.
+	EnterPIEPossessedMode();
 	
 	//이 코드와 대응되는 게 아래 EndPlayMap()에 있음.
 	//MainPanel.HideEditorWindowsForPIE(); //PIE 중에는 에디터 패널을 숨김.
@@ -280,6 +493,10 @@ void UEditorEngine::EndPlayMap()
 	SelectionManager.ClearSelection();
 	//SelectionManager.SetGizmoEnabled(true); //PIE가 끝나면 gizmo 활성화
 	SelectionManager.SetWorld(GetWorld());
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = bSavedEntryViewportGizmo;
+	}
 	
 	//이 코드와 대응되는 게 위의 StartPlayInEditorSession()에 있음.
 	//MainPanel.RestoreEditorWindowsAfterPIE();
@@ -295,6 +512,15 @@ void UEditorEngine::EndPlayMap()
 	}
 
 	PlayInEditorSessionInfo.reset();
+	if (UGameViewportClient* PIEVC = GetGameViewportClient())
+	{
+		PIEVC->OnEndPIE();
+		UObjectManager::Get().DestroyObject(PIEVC);
+		SetGameViewportClient(nullptr);
+	}
+	ViewportLayout.EndPIEViewportMode();
+	PIEEntryViewportClient = nullptr;
+	PIEControlMode = EPIEControlMode::Possessed;
 }
 
 // ─── 기존 메서드 ──────────────────────────────────────────
@@ -309,6 +535,96 @@ void UEditorEngine::CloseScene()
 	ClearScene();
 }
 
+EInteractionDomain UEditorEngine::GetCurrentInteractionDomain() const
+{
+	if (!IsPlayingInEditor())
+	{
+		return EInteractionDomain::Editor;
+	}
+	return (PIEControlMode == EPIEControlMode::Possessed) ? EInteractionDomain::PIE : EInteractionDomain::EditorOnPIE;
+}
+
+bool UEditorEngine::HandleGlobalShortcuts(const FViewportInputContext& InputContext)
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	for (const FInputEvent& Event : InputContext.Events)
+	{
+		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_ESCAPE)
+		{
+			RequestEndPlayMap();
+			return true;
+		}
+		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_F8)
+		{
+			return TogglePIEControlMode();
+		}
+		if (Event.Type == EInputEventType::KeyPressed
+			&& PIEControlMode == EPIEControlMode::Ejected
+			&& !InputContext.bImGuiCapturedMouse
+			&& (InputContext.bHovered || InputContext.bCaptured)
+			&& (Event.Key == VK_LBUTTON || Event.Key == VK_RBUTTON))
+		{
+			return EnterPIEPossessedMode();
+		}
+	}
+
+	return false;
+}
+
+bool UEditorEngine::TogglePIEControlMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	if (PIEControlMode == EPIEControlMode::Possessed)
+	{
+		return EnterPIEEjectedMode();
+	}
+	return EnterPIEPossessedMode();
+}
+
+bool UEditorEngine::EnterPIEPossessedMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	PIEControlMode = EPIEControlMode::Possessed;
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = false;
+		if (UGameViewportClient* PIEVC = GetGameViewportClient())
+		{
+			PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
+			PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
+		}
+		ViewportLayout.NotifyPIEPossessedViewport(PIEEntryViewportClient);
+	}
+	return true;
+}
+
+bool UEditorEngine::EnterPIEEjectedMode()
+{
+	if (!IsPlayingInEditor())
+	{
+		return false;
+	}
+
+	PIEControlMode = EPIEControlMode::Ejected;
+	if (PIEEntryViewportClient)
+	{
+		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = true;
+	}
+	return true;
+}
+
 void UEditorEngine::NewScene()
 {
 	StopPlayInEditorImmediate();
@@ -319,6 +635,266 @@ void UEditorEngine::NewScene()
 	SelectionManager.SetWorld(GetWorld());
 
 	ResetViewport();
+	CurrentLevelFilePath.clear();
+}
+
+bool UEditorEngine::SaveSceneAs(const FString& InSceneName)
+{
+	if (InSceneName.empty())
+	{
+		return false;
+	}
+
+	StopPlayInEditorImmediate();
+	FWorldContext* Ctx = GetWorldContextFromHandle(GetActiveWorldHandle());
+	if (!Ctx || !Ctx->World)
+	{
+		return false;
+	}
+
+	UCameraComponent* PerspectiveCam = FindPerspectiveViewportCamera(this);
+	FSceneSaveManager::SaveSceneAsJSON(InSceneName, *Ctx, PerspectiveCam);
+	CurrentLevelFilePath = BuildScenePathFromStem(InSceneName);
+	return true;
+}
+
+bool UEditorEngine::SaveScene()
+{
+	if (HasCurrentLevelFilePath())
+	{
+		return SaveSceneAs(GetFileStem(CurrentLevelFilePath));
+	}
+
+	return SaveSceneAsWithDialog();
+}
+
+bool UEditorEngine::SaveSceneAsWithDialog()
+{
+	wchar_t FilePath[MAX_PATH] = {};
+	const std::wstring InitialDir = FSceneSaveManager::GetSceneDirectory();
+	const std::wstring DefaultFile = HasCurrentLevelFilePath()
+		? std::filesystem::path(FPaths::ToWide(CurrentLevelFilePath)).filename().wstring()
+		: std::wstring(L"Untitled.Scene");
+
+	wcsncpy_s(FilePath, DefaultFile.c_str(), _TRUNCATE);
+
+	OPENFILENAMEW Ofn = {};
+	Ofn.lStructSize = sizeof(Ofn);
+	Ofn.hwndOwner = Window ? Window->GetHWND() : nullptr;
+	Ofn.lpstrFilter = L"Scene Files (*.Scene)\0*.Scene\0All Files (*.*)\0*.*\0";
+	Ofn.lpstrFile = FilePath;
+	Ofn.nMaxFile = MAX_PATH;
+	Ofn.lpstrInitialDir = InitialDir.c_str();
+	Ofn.lpstrTitle = L"Save Scene As";
+	Ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetSaveFileNameW(&Ofn))
+	{
+		return false;
+	}
+
+	const FString SelectedPath = FPaths::ToUtf8(std::wstring(FilePath));
+	return SaveSceneAs(GetFileStem(SelectedPath));
+}
+
+bool UEditorEngine::LoadSceneFromPath(const FString& InScenePath)
+{
+	if (InScenePath.empty())
+	{
+		return false;
+	}
+
+	StopPlayInEditorImmediate();
+	ClearScene();
+
+	FWorldContext LoadCtx;
+	FPerspectiveCameraData CamData;
+	FSceneSaveManager::LoadSceneFromJSON(InScenePath, LoadCtx, CamData);
+	if (!LoadCtx.World)
+	{
+		return false;
+	}
+
+	GetWorldList().push_back(LoadCtx);
+	SetActiveWorld(LoadCtx.ContextHandle);
+	GetSelectionManager().SetWorld(LoadCtx.World);
+	LoadCtx.World->WarmupPickingData();
+	ResetViewport();
+
+	if (CamData.bValid)
+	{
+		if (UCameraComponent* Cam = FindPerspectiveViewportCamera(this))
+		{
+			Cam->SetWorldLocation(CamData.Location);
+			Cam->SetRelativeRotation(CamData.Rotation);
+			FCameraState CS = Cam->GetCameraState();
+			CS.FOV = CamData.FOV;
+			CS.NearZ = CamData.NearClip;
+			CS.FarZ = CamData.FarClip;
+			Cam->SetCameraState(CS);
+		}
+	}
+
+	CurrentLevelFilePath = InScenePath;
+	return true;
+}
+
+bool UEditorEngine::LoadSceneWithDialog()
+{
+	wchar_t FilePath[MAX_PATH] = {};
+	const std::wstring InitialDir = FSceneSaveManager::GetSceneDirectory();
+
+	OPENFILENAMEW Ofn = {};
+	Ofn.lStructSize = sizeof(Ofn);
+	Ofn.hwndOwner = Window ? Window->GetHWND() : nullptr;
+	Ofn.lpstrFilter = L"Scene Files (*.Scene)\0*.Scene\0All Files (*.*)\0*.*\0";
+	Ofn.lpstrFile = FilePath;
+	Ofn.nMaxFile = MAX_PATH;
+	Ofn.lpstrInitialDir = InitialDir.c_str();
+	Ofn.lpstrTitle = L"Load Scene";
+	Ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetOpenFileNameW(&Ofn))
+	{
+		return false;
+	}
+
+	return LoadSceneFromPath(FPaths::ToUtf8(std::wstring(FilePath)));
+}
+
+bool UEditorEngine::OpenAssetFolder() const
+{
+	const std::wstring AssetDir = FPaths::Combine(FPaths::RootDir(), L"Asset");
+	if (!std::filesystem::exists(AssetDir))
+	{
+		return false;
+	}
+
+	const HINSTANCE Result = ShellExecuteW(nullptr, L"open", AssetDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	return reinterpret_cast<INT_PTR>(Result) > 32;
+}
+
+bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
+{
+	FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport();
+	if (ActiveVC)
+	{
+		const float VPWidth = ActiveVC->GetViewport() ? static_cast<float>(ActiveVC->GetViewport()->GetWidth()) : ActiveVC->GetWindowWidth();
+		const float VPHeight = ActiveVC->GetViewport() ? static_cast<float>(ActiveVC->GetViewport()->GetHeight()) : ActiveVC->GetWindowHeight();
+		if (VPWidth > 0.0f && VPHeight > 0.0f)
+		{
+			constexpr float SpawnDistanceFromCamera = 20.0f;
+			FVector BaseLocation = FVector(0.0f, 0.0f, 0.0f);
+			if (TryComputeSpawnLocationFromViewportLocal(ActiveVC, VPWidth * 0.5f, VPHeight * 0.5f, SpawnDistanceFromCamera, BaseLocation))
+			{
+				UWorld* World = GetWorld();
+				if (!World)
+				{
+					return false;
+				}
+
+				InCount = (std::max)(1, InCount);
+				const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
+					? "Data/BasicShape/Sphere.OBJ"
+					: "Data/BasicShape/Cube.OBJ";
+
+				bool bSpawnedAny = false;
+				for (int32 i = 0; i < InCount; ++i)
+				{
+					AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
+					if (!Actor)
+					{
+						continue;
+					}
+					const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+					Actor->InitDefaultComponents(MeshPath);
+					Actor->SetActorLocation(SpawnLocation);
+					World->InsertActorToOctree(Actor);
+					bSpawnedAny = true;
+				}
+				return bSpawnedAny;
+			}
+		}
+	}
+
+	// 액티브 뷰포트를 얻지 못한 경우에만 기존 fallback 경로를 사용.
+	UWorld* World = GetWorld();
+	if (!World || !GetCamera())
+	{
+		return false;
+	}
+
+	InCount = (std::max)(1, InCount);
+	FVector BaseLocation = GetCamera()->GetWorldLocation() + GetCamera()->GetForwardVector() * 50.0f;
+
+	const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
+		? "Data/BasicShape/Sphere.OBJ"
+		: "Data/BasicShape/Cube.OBJ";
+
+	bool bSpawnedAny = false;
+	for (int32 i = 0; i < InCount; ++i)
+	{
+		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
+		if (!Actor)
+		{
+			continue;
+		}
+
+		const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+		Actor->InitDefaultComponents(MeshPath);
+		Actor->SetActorLocation(SpawnLocation);
+		World->InsertActorToOctree(Actor);
+		bSpawnedAny = true;
+	}
+
+	return bSpawnedAny;
+}
+
+bool UEditorEngine::PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType, int32 InClientX, int32 InClientY, int32 InCount)
+{
+	UWorld* World = GetWorld();
+	FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport();
+	if (!World || !ActiveVC)
+	{
+		return false;
+	}
+
+	constexpr float SpawnDistanceFromCamera = 20.0f;
+	FVector BaseLocation = FVector(0.0f, 0.0f, 0.0f);
+	if (!TryComputeSpawnLocationFromViewportPoint(ActiveVC, InClientX, InClientY, SpawnDistanceFromCamera, BaseLocation))
+	{
+		if (UCameraComponent* Camera = ActiveVC->GetCamera())
+		{
+			BaseLocation = Camera->GetWorldLocation() + Camera->GetForwardVector() * SpawnDistanceFromCamera;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	InCount = (std::max)(1, InCount);
+	const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
+		? "Data/BasicShape/Sphere.OBJ"
+		: "Data/BasicShape/Cube.OBJ";
+
+	bool bSpawnedAny = false;
+	for (int32 i = 0; i < InCount; ++i)
+	{
+		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
+		if (!Actor)
+		{
+			continue;
+		}
+
+		const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+		Actor->InitDefaultComponents(MeshPath);
+		Actor->SetActorLocation(SpawnLocation);
+		World->InsertActorToOctree(Actor);
+		bSpawnedAny = true;
+	}
+
+	return bSpawnedAny;
 }
 
 void UEditorEngine::ClearScene()
@@ -339,6 +915,7 @@ void UEditorEngine::ClearScene()
 
 	WorldList.clear();
 	ActiveWorldHandle = FName::None;
+	CurrentLevelFilePath.clear();
 
 	ViewportLayout.DestroyAllCameras();
 }

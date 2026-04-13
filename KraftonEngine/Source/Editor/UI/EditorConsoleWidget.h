@@ -16,6 +16,9 @@ public:
 	static void AddLog(const char* fmt, ...);
 	virtual void Initialize(UEditorEngine* InEditorEngine) override;
 	virtual void Render(float DeltaTime) override;
+	void RenderDrawerToolbar();
+	void RenderLogContents(float Height = 0.0f);
+	void RenderInputLine(const char* Label = "Input", float Width = 0.0f, bool bFocusInput = false);
 
 	void Clear()
 	{

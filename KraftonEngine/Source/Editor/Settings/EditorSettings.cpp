@@ -15,6 +15,9 @@ namespace Key
 	constexpr const char* CameraSpeed = "CameraSpeed";
 	constexpr const char* CameraRotationSpeed = "CameraRotationSpeed";
 	constexpr const char* CameraZoomSpeed = "CameraZoomSpeed";
+	constexpr const char* bEnableCameraSmoothing = "bEnableCameraSmoothing";
+	constexpr const char* CameraMoveSmoothSpeed = "CameraMoveSmoothSpeed";
+	constexpr const char* CameraRotateSmoothSpeed = "CameraRotateSmoothSpeed";
 	constexpr const char* InitViewPos = "InitViewPos";
 	constexpr const char* InitLookAt = "InitLookAt";
 
@@ -71,6 +74,9 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::CameraSpeed] = CameraSpeed;
 	Viewport[Key::CameraRotationSpeed] = CameraRotationSpeed;
 	Viewport[Key::CameraZoomSpeed] = CameraZoomSpeed;
+	Viewport[Key::bEnableCameraSmoothing] = bEnableCameraSmoothing;
+	Viewport[Key::CameraMoveSmoothSpeed] = CameraMoveSmoothSpeed;
+	Viewport[Key::CameraRotateSmoothSpeed] = CameraRotateSmoothSpeed;
 
 	JSON InitPos = Array(InitViewPos.X, InitViewPos.Y, InitViewPos.Z);
 	Viewport[Key::InitViewPos] = InitPos;
@@ -179,6 +185,12 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			CameraRotationSpeed = static_cast<float>(Viewport[Key::CameraRotationSpeed].ToFloat());
 		if (Viewport.hasKey(Key::CameraZoomSpeed))
 			CameraZoomSpeed = static_cast<float>(Viewport[Key::CameraZoomSpeed].ToFloat());
+		if (Viewport.hasKey(Key::bEnableCameraSmoothing))
+			bEnableCameraSmoothing = Viewport[Key::bEnableCameraSmoothing].ToBool();
+		if (Viewport.hasKey(Key::CameraMoveSmoothSpeed))
+			CameraMoveSmoothSpeed = static_cast<float>(Viewport[Key::CameraMoveSmoothSpeed].ToFloat());
+		if (Viewport.hasKey(Key::CameraRotateSmoothSpeed))
+			CameraRotateSmoothSpeed = static_cast<float>(Viewport[Key::CameraRotateSmoothSpeed].ToFloat());
 
 		if (Viewport.hasKey(Key::InitViewPos))
 		{
