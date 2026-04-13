@@ -41,6 +41,7 @@ public:
 	void MarkDecalDirty();
 	void ClearDecalDirty() { bDecalDirty = false; }
 	bool IsDecalDirty() const { return bDecalDirty; }
+	void EnsureDecalMeshBuilt();
 
 	/*
 	* 지금은 실제 렌더 메시가 없으므로 SceneProxy를 만들지 않음.
@@ -81,6 +82,8 @@ public:
 
 	void SetDrawDebugOBB(bool bEnable) { bDrawDebugOBB = bEnable; }
 	bool IsDrawDebugOBBEnabled() const { return bDrawDebugOBB; }
+	void SetDrawDebugReceiverTriangles(bool bEnable) { bDrawDebugReceiverTriangles = bEnable; }
+	bool IsDrawDebugReceiverTrianglesEnabled() const { return bDrawDebugReceiverTriangles; }
 
 	FTransform GetTransformIncludingDecalSize() const;
 	FMatrix GetDecalLocalToWorldMatrix() const;
@@ -111,6 +114,7 @@ private:
 	* wireframe만 봐도 transform/size/forward 축이 바로 드러나게 만들기 위한 함수
 	*/
 	void AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxColor) const;
+	void AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const;
 
 private:
 	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
@@ -118,11 +122,14 @@ private:
 	FString DecalMaterialPath = "None";
 
 	FDecalRenderableMesh RenderableMesh;
+	TArray<FDecalSATTriangle> DebugReceiverTriangles;
 
 	int32 SortOrder = 0;
+	int32 DebugTriangleDrawLimit = 256;
 
 	int32 TargetFilter = DecalTarget_StaticMeshComponent;
 
 	bool bDecalDirty = true;
 	bool bDrawDebugOBB = true;
+	bool bDrawDebugReceiverTriangles = false;
 };

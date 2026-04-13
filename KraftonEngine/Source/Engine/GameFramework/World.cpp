@@ -2,6 +2,7 @@
 #include "Object/ObjectFactory.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/StaticMeshComponent.h"
+#include "Component/DecalComponent.h"
 #include "Engine/Render/Culling/ConvexVolume.h"
 #include "Engine/Component/CameraComponent.h"
 #include "Render/Pipeline/LODContext.h"
@@ -182,6 +183,41 @@ void UWorld::UpdateActorInOctree(AActor* Actor)
 {
 	Partition.UpdateActor(Actor);
 	InvalidateVisibleSet();
+}
+
+void UWorld::NotifyPrimitiveTransformChanged(UPrimitiveComponent* Primitive)
+{
+	if (!Primitive)
+	{
+		return;
+	}
+
+	// 데칼 자신이 움직이는 경우는 UDecalComponent가 자기 rebuild를 직접 관리한다.
+	if (Cast<UDecalComponent>(Primitive))
+	{
+		return;
+	}
+
+	// 현재 geometry decal은 receiver mesh triangle을 캐시하므로,
+	// receiver primitive transform이 바뀌면 모든 데칼을 다시 계산해야 한다.
+	for (AActor* Actor : GetActors())
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+
+		for (UPrimitiveComponent* CandidatePrimitive : Actor->GetPrimitiveComponents())
+		{
+			UDecalComponent* DecalComponent = Cast<UDecalComponent>(CandidatePrimitive);
+			if (!DecalComponent)
+			{
+				continue;
+			}
+
+			DecalComponent->MarkDecalDirty();
+		}
+	}
 }
 
 // LOD 상수 및 SelectLOD는 LODContext.h에 정의

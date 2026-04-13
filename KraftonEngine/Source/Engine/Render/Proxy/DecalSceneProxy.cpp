@@ -37,6 +37,7 @@ void FDecalSceneProxy::UpdateMaterial()
 void FDecalSceneProxy::UpdateMesh()
 {
 	UDecalComponent* Decal = GetDecalComponent();
+	Decal->EnsureDecalMeshBuilt();
 	const FDecalRenderableMesh& SrcMesh = Decal->GetRenderableMesh();
 
 	MeshBuffer = nullptr;

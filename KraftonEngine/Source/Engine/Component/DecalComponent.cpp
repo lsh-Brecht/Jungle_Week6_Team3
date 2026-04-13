@@ -97,6 +97,7 @@ void UDecalComponent::BuildDecalMesh()
 	if (!World)
 	{
 		RenderableMesh.Clear();
+		DebugReceiverTriangles.clear();
 		return;
 	}
 
@@ -118,6 +119,8 @@ void UDecalComponent::BuildDecalMesh()
 	FDecalMeshBuilder::TriangulateClippedPolygons(ClippedPolygons, Triangles, nullptr);
 	FDecalMeshBuilder::ComputeTriangleUVs(Triangles, UVTriangles, nullptr);
 	FDecalMeshBuilder::BuildRenderableMesh(UVTriangles, RenderableMesh, nullptr);
+
+	DebugReceiverTriangles = SATTriangles;
 }
 
 void UDecalComponent::RebuildDecalMeshNow()
@@ -125,6 +128,17 @@ void UDecalComponent::RebuildDecalMeshNow()
 	BuildDecalMesh();
 	ClearDecalDirty();
 	MarkRenderStateDirty();
+}
+
+void UDecalComponent::EnsureDecalMeshBuilt()
+{
+	if (!bDecalDirty)
+	{
+		return;
+	}
+
+	BuildDecalMesh();
+	ClearDecalDirty();
 }
 
 void UDecalComponent::OnTransformDirty()
@@ -135,11 +149,6 @@ void UDecalComponent::OnTransformDirty()
 	// 위치/회전/스케일이 바뀌면 broad phase부터 다시 계산해야 합니다.
 	// 그렇지 않으면 예전에 겹쳤던 결과가 현재 transform에서도 그대로 따라다니게 됩니다.
 	MarkDecalDirty();
-
-	if (Owner && Owner->GetWorld())
-	{
-		RebuildDecalMeshNow();
-	}
 }
 
 void UDecalComponent::UpdateWorldAABB() const
@@ -167,6 +176,8 @@ void UDecalComponent::Serialize(FArchive& Ar)
 	Ar << SortOrder;
 	Ar << TargetFilter;
 	Ar << bDrawDebugOBB;
+	Ar << bDrawDebugReceiverTriangles;
+	Ar << DebugTriangleDrawLimit;
 
 	if (Ar.IsLoading())
 	{
@@ -202,6 +213,8 @@ void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
 	OutProps.push_back({ "Target Filter", EPropertyType::Int, &TargetFilter });
 	OutProps.push_back({ "Draw Debug OBB", EPropertyType::Bool, &bDrawDebugOBB });
+	OutProps.push_back({ "Draw Debug Receiver Triangles", EPropertyType::Bool, &bDrawDebugReceiverTriangles });
+	OutProps.push_back({ "Debug Triangle Draw Limit", EPropertyType::Int, &DebugTriangleDrawLimit });
 }
 
 void UDecalComponent::PostEditProperty(const char* PropertyName)
@@ -211,36 +224,58 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 	if (strcmp(PropertyName, "Decal Size") == 0)
 	{
 		SetDecalSize(DecalSize);
-		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Decal Material") == 0)
 	{
 		ReloadMaterialFromPath();
 		MarkDecalDirty();
-		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Sort Order") == 0)
 	{
 		SetSortOrder(SortOrder);
-		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Target Filter") == 0)
 	{
 		SetTargetFilter(TargetFilter);
-		RebuildDecalMeshNow();
 	}
 	else if (strcmp(PropertyName, "Draw Debug OBB") == 0)
 	{
 		// ?????
 	}
+	else if (strcmp(PropertyName, "Draw Debug Receiver Triangles") == 0)
+	{
+		// 디버그 표시 토글만 바뀐 경우 geometry rebuild는 필요 없다.
+	}
+	else if (strcmp(PropertyName, "Debug Triangle Draw Limit") == 0)
+	{
+		DebugTriangleDrawLimit = std::max(DebugTriangleDrawLimit, 0);
+	}
 }
 
 void UDecalComponent::CollectEditorVisualizations(FRenderBus& RenderBus) const
 {
-	if (!bDrawDebugOBB || !IsVisible()) return;
+	const bool bShouldDrawOBB = bDrawDebugOBB;
+	const bool bShouldDrawReceiverTriangles = bDrawDebugReceiverTriangles;
+	if ((!bShouldDrawOBB && !bShouldDrawReceiverTriangles) || !IsVisible())
+	{
+		return;
+	}
 
-	const FColor BoxColor = bDecalDirty ? FColor::Yellow() : FColor::Green();
-	AddDebugOBBLines(RenderBus, BoxColor);
+	if (bDecalDirty)
+	{
+		const_cast<UDecalComponent*>(this)->EnsureDecalMeshBuilt();
+	}
+
+	if (bShouldDrawOBB)
+	{
+		const FColor BoxColor = bDecalDirty ? FColor::Yellow() : FColor::Green();
+		AddDebugOBBLines(RenderBus, BoxColor);
+	}
+
+	if (bShouldDrawReceiverTriangles)
+	{
+		AddDebugReceiverTriangleLines(RenderBus, FColor(96, 255, 96, 255));
+	}
 }
 
 void UDecalComponent::SetDecalSize(const FVector& InSize)
@@ -465,6 +500,30 @@ void UDecalComponent::AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxC
 	const FVector Center = DecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
 	const FVector ForwardTip = DecalLocalToWorld.TransformPositionWithW(FVector(0.5f, 0.0f, 0.0f));
 	AddDebugLine(RenderBus, Center, ForwardTip, FColor::Red());
+}
+
+void UDecalComponent::AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const
+{
+	if (DebugReceiverTriangles.empty() || DebugTriangleDrawLimit <= 0)
+	{
+		return;
+	}
+
+	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
+	const int32 TriangleCountToDraw = std::min<int32>(static_cast<int32>(DebugReceiverTriangles.size()), DebugTriangleDrawLimit);
+
+	for (int32 TriangleIndex = 0; TriangleIndex < TriangleCountToDraw; ++TriangleIndex)
+	{
+		const FDecalSATTriangle& Triangle = DebugReceiverTriangles[TriangleIndex];
+
+		const FVector WorldP0 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[0]);
+		const FVector WorldP1 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[1]);
+		const FVector WorldP2 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[2]);
+
+		AddDebugLine(RenderBus, WorldP0, WorldP1, TriangleColor);
+		AddDebugLine(RenderBus, WorldP1, WorldP2, TriangleColor);
+		AddDebugLine(RenderBus, WorldP2, WorldP0, TriangleColor);
+	}
 }
 
 void UDecalComponent::DebugRunBroadPhase() const
