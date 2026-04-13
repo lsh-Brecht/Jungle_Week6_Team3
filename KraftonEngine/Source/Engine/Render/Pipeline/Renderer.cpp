@@ -300,15 +300,33 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		UpdateSceneEffectBuffer(Context, InRenderBus);
 	}
 
-	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
+	// 패스 실행 순서:
+	// - Grid/Axis가 PostProcess/Font 위를 덮지 않도록 Grid를 먼저 그린다.
+	// - SelectionMask는 PostProcess 내부에서만 실행한다.
+	const ERenderPass PassOrder[] = {
+		ERenderPass::Opaque,
+		ERenderPass::Decal,
+		ERenderPass::Translucent,
+		ERenderPass::SubUV,
+		ERenderPass::Billboard,
+		ERenderPass::Editor,
+		ERenderPass::Grid,
+		ERenderPass::GizmoOuter,
+		ERenderPass::GizmoInner,
+		ERenderPass::Font,
+		ERenderPass::PostProcess,
+		ERenderPass::OverlayFont
+	};
+
+	for (ERenderPass CurPass : PassOrder)
 	{
-		ERenderPass CurPass = static_cast<ERenderPass>(i);
-      if (CurPass == ERenderPass::SelectionMask)
+		if (CurPass == ERenderPass::SelectionMask)
 		{
 			continue;
 		}
 
-		const auto& Batcher = PassBatchers[i];
+		const uint32 PassIndex = static_cast<uint32>(CurPass);
+		const auto& Batcher = PassBatchers[PassIndex];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
 		const bool bAlwaysExecutePass = (CurPass == ERenderPass::SelectionMask || CurPass == ERenderPass::PostProcess);
@@ -345,7 +363,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		}
 
 		if (bHasBatcher)
-			PassBatchers[i].DrawBatch(CurPass, InRenderBus, Context);
+			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
 	}
@@ -370,7 +388,10 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Font] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 
-	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	// PostProcess는 ping RT를 매 단계 "완전한 새 프레임"으로 갱신해야 한다.
+	// AlphaBlend 상태면 이전 뷰포트/이전 단계의 잔상이 합성되어
+	// 멀티 뷰포트에서 selection 시 화면이 덮여 보이는 아티팩트가 발생한다.
+	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
@@ -1026,20 +1047,20 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 		return;
 	}
 
-	// SelectionMask 큐가 비어 있으면 복사만 수행
-	if (Bus.GetProxies(ERenderPass::SelectionMask).empty())
-	{
-		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
-		return;
-	}
-
 	Context->OMSetRenderTargets(1, &OutputRTV, nullptr);
 
 	ID3D11ShaderResourceView* SRVs[2] = { SceneColorSRV, OutlineMaskSRV };
 	Context->PSSetShaderResources(0, 2, SRVs);
 
 	FShader* PPShader = FShaderManager::Get().GetShader(EShaderType::OutlinePostProcess);
-	if (PPShader) PPShader->Bind(Context);
+	if (!PPShader)
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+		Context->PSSetShaderResources(0, 2, NullSRV);
+		return;
+	}
+	PPShader->Bind(Context);
 
 	FConstantBuffer* OutlineCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess, sizeof(FOutlinePostProcessConstants));
 	FOutlinePostProcessConstants PPConstants;
@@ -1093,7 +1114,7 @@ void FRenderer::DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* 
 	}
 	FXAAShader->Bind(Context);
 
-	FFXAAConstants FXAAData = {};
+	FFXAAConstants FXAAData = FXAAConstants;
 	FXAAData.TexelSize = FVector2(1.0f / Width, 1.0f / Height);
 
 	FConstantBuffer* FXAACB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess_FXAA, sizeof(FFXAAConstants));
@@ -1157,6 +1178,13 @@ void FRenderer::UpdateFrameBuffer(ID3D11DeviceContext* Context, const FRenderBus
 	frameConstantData.InverseView = InRenderBus.GetView().GetInverse();
 	frameConstantData.InverseProjection = InRenderBus.GetProj().GetInverse();
 	frameConstantData.InverseViewProjection = (InRenderBus.GetView() * InRenderBus.GetProj()).GetInverse();
+
+	const auto& Projection = frameConstantData.Projection;
+	if (std::abs(Projection.M[3][2]) > 1e-6f)
+	{
+		frameConstantData.InvDeviceZToWorldZTransform2 = 1.0f / Projection.M[3][2];
+		frameConstantData.InvDeviceZToWorldZTransform3 = Projection.M[2][2] / Projection.M[3][2];
+	}
 
 	if (GEngine && GEngine->GetTimer())
 	{

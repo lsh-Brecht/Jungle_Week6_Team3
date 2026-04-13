@@ -194,6 +194,30 @@
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp">
       <Filter>Source\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorGizmoTool.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorNavigationTool.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorSelectionTool.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorViewportCommandTool.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorViewportController.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorViewportInputContexts.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorViewportModes.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Input\EditorViewportTools.cpp">
+      <Filter>Source\Editor\Input</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Editor\Selection\SelectionManager.cpp">
       <Filter>Source\Editor\Selection</Filter>
     </ClCompile>
@@ -319,6 +343,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\World.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Input\InputRouter.cpp">
+      <Filter>Source\Engine\Input</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Input\InputSystem.cpp">
       <Filter>Source\Engine\Input</Filter>
@@ -561,6 +588,36 @@
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h">
       <Filter>Source\Editor</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorGizmoTool.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorNavigationTool.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorSelectionTool.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportCommandTool.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportController.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputContexts.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputMapping.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputUtils.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportModes.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorViewportTools.h">
+      <Filter>Source\Editor\Input</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Editor\PIE\PIETypes.h">
       <Filter>Source\Editor\PIE</Filter>
     </ClInclude>
@@ -726,7 +783,16 @@
     <ClInclude Include="Source\Engine\GameFramework\WorldContext.h">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputBinding.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputRouter.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Input\InputSystem.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputTypes.h">
       <Filter>Source\Engine\Input</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Materials\Material.h">

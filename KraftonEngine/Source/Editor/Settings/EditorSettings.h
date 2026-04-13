@@ -17,8 +17,14 @@ public:
 	float CameraSpeed = 10.f;
 	float CameraRotationSpeed = 60.f;
 	float CameraZoomSpeed = 300.f;
+	bool bEnableCameraSmoothing = true;
+	float CameraMoveSmoothSpeed = 4.0f;
+	float CameraRotateSmoothSpeed = 2.0f;
 	FVector InitViewPos = FVector(10, 0, 5);
 	FVector InitLookAt = FVector(0, 0, 0);
+	int32 FXAAStage = 1; // 0:Low, 1:Medium, 2:High, 3:Ultra, 4:Custom
+	float FXAAEdgeThreshold = 0.063f;
+	float FXAAEdgeThresholdMin = 0.0312f;
 
 	// Viewport Layout
 	int32 LayoutType = 0; // EViewportLayout

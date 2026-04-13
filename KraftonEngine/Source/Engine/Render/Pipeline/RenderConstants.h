@@ -8,6 +8,8 @@
 #include "Math/Matrix.h"
 #include "Math/Vector.h"
 #include "Render/Fog/FogRenderTypes.h"
+#include <cstddef>
+#include <cstring>
 
 class FShader;
 
@@ -46,10 +48,27 @@ struct FPerObjectConstants
 	}
 };
 
+struct FGPUFloat4x4
+{
+	float M[4][4] = {};
+
+	FGPUFloat4x4() = default;
+	FGPUFloat4x4(const FMatrix& InMatrix)
+	{
+		std::memcpy(M, InMatrix.M, sizeof(M));
+	}
+
+	FGPUFloat4x4& operator=(const FMatrix& InMatrix)
+	{
+		std::memcpy(M, InMatrix.M, sizeof(M));
+		return *this;
+	}
+};
+
 struct FFrameConstants
 {
-	FMatrix View;
-	FMatrix Projection;
+	FGPUFloat4x4 View;
+	FGPUFloat4x4 Projection;
 	float bIsWireframe;
 	FVector WireframeColor;
 	float Time;
@@ -58,10 +77,20 @@ struct FFrameConstants
 	float _pad0;
 	FVector CameraPosition;
 	float _pad1;
-	FMatrix InverseView;
-	FMatrix InverseProjection;
-	FMatrix InverseViewProjection;
+	FGPUFloat4x4 InverseView;
+	FGPUFloat4x4 InverseProjection;
+	FGPUFloat4x4 InverseViewProjection;
+	float InvDeviceZToWorldZTransform2;
+	float InvDeviceZToWorldZTransform3;
+	float _framePad2[2];
 };
+
+static_assert(sizeof(FGPUFloat4x4) == 64, "FGPUFloat4x4 must match HLSL float4x4 size.");
+static_assert(offsetof(FFrameConstants, InverseView) == 176, "FFrameConstants::InverseView offset must match HLSL cbuffer layout.");
+static_assert(offsetof(FFrameConstants, InverseProjection) == 240, "FFrameConstants::InverseProjection offset must match HLSL cbuffer layout.");
+static_assert(offsetof(FFrameConstants, InverseViewProjection) == 304, "FFrameConstants::InverseViewProjection offset must match HLSL cbuffer layout.");
+static_assert(offsetof(FFrameConstants, InvDeviceZToWorldZTransform2) == 368, "FFrameConstants::InvDeviceZToWorldZTransform2 offset must match HLSL cbuffer layout.");
+static_assert(sizeof(FFrameConstants) == 384, "FFrameConstants size must match HLSL cbuffer layout.");
 
 struct FLocalTintEffectConstants
 {

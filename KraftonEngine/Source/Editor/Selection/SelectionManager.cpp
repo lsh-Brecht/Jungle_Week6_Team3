@@ -62,6 +62,26 @@ void FSelectionManager::Select(AActor* Actor)
 	SyncGizmo();
 }
 
+void FSelectionManager::AddSelect(AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+
+	if (std::find(SelectedActors.begin(), SelectedActors.end(), Actor) != SelectedActors.end())
+	{
+		PromoteToPrimary(Actor);
+		SyncGizmo();
+		return;
+	}
+
+	SelectedActors.push_back(Actor);
+	PromoteToPrimary(Actor);
+	SetActorProxiesSelected(Actor, true);
+	SyncGizmo();
+}
+
 void FSelectionManager::SelectRange(AActor* ClickedActor, const TArray<AActor*>& ActorList)
 {
 	if (!ClickedActor) return;
@@ -111,6 +131,7 @@ void FSelectionManager::SelectRange(AActor* ClickedActor, const TArray<AActor*>&
 			SetActorProxiesSelected(ActorList[i], true);
 		}
 	}
+	PromoteToPrimary(ClickedActor);
 	SyncGizmo();
 }
 
@@ -127,6 +148,7 @@ void FSelectionManager::ToggleSelect(AActor* Actor)
 	else
 	{
 		SelectedActors.push_back(Actor);
+		PromoteToPrimary(Actor);
 		SetActorProxiesSelected(Actor, true);
 	}
 	SyncGizmo();
@@ -225,4 +247,21 @@ void FSelectionManager::SyncGizmo()
 		Gizmo->SetSelectedActors(nullptr);
 		Gizmo->Deactivate();
 	}
+}
+
+void FSelectionManager::PromoteToPrimary(AActor* Actor)
+{
+	if (!Actor || SelectedActors.empty() || SelectedActors.front() == Actor)
+	{
+		return;
+	}
+
+	auto It = std::find(SelectedActors.begin(), SelectedActors.end(), Actor);
+	if (It == SelectedActors.end())
+	{
+		return;
+	}
+
+	SelectedActors.erase(It);
+	SelectedActors.insert(SelectedActors.begin(), Actor);
 }

@@ -69,13 +69,23 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	UWorld* World = Editor->GetWorld();
 	if (!World) return;
+	TArray<FPrimitiveSceneProxy*> VisibleProxiesForViewport;
+	World->GatherVisibleProxiesForCamera(Camera, VisibleProxiesForViewport);
+
+	// GPU Occlusion readback/result는 현재 전역 상태를 공유하므로
+	// 멀티 뷰포트에서 카메라별 결과가 섞여 아티팩트가 발생할 수 있다.
+	// 멀티 뷰포트에서는 occlusion을 비활성화하고 frustum culling만 사용한다.
+	const bool bEnableGPUOcclusion = !Editor->IsSplitViewport();
 
 	// GPU Occlusion 지연 초기화
-	if (!GPUOcclusion.IsInitialized())
+	if (bEnableGPUOcclusion && !GPUOcclusion.IsInitialized())
 		GPUOcclusion.Initialize(Renderer.GetFD3DDevice().GetDevice());
 
 	// 이전 프레임 Occlusion 결과 읽기 (staging → OccludedSet)
-	GPUOcclusion.ReadbackResults(Ctx);
+	if (bEnableGPUOcclusion)
+	{
+		GPUOcclusion.ReadbackResults(Ctx);
+	}
 
 	// 뷰포트별 렌더 옵션 사용
 	const FViewportRenderOptions& Opts = VC->GetRenderOptions();
@@ -99,13 +109,13 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 	PopulateScenePostProcessConstants(World, Bus);
 	Bus.SetViewportInfo(VP);
 	Bus.SetViewportType(Opts.ViewportType);
-	Bus.SetOcclusionCulling(&GPUOcclusion);
-	Bus.SetLODContext(World->PrepareLODContext());
+	Bus.SetOcclusionCulling(bEnableGPUOcclusion ? &GPUOcclusion : nullptr);
+	Bus.SetLODContext(World->PrepareLODContextForCamera(Camera));
 
 	// 2. 프록시 + Batcher Entry를 ERenderPass별로 수집
 	{
 		SCOPE_STAT_CAT("Collector", "3_Collect");
-		Collector.CollectWorld(World, Bus);
+		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
 
 		if (UGizmoComponent* Gizmo = Editor->GetGizmo())
 			Gizmo->UpdateAxisMask(Opts.ViewportType);
@@ -151,7 +161,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 	}
 
 	// 5. GPU Occlusion — DSV 언바인딩 후 Hi-Z 생성 + Occlusion Test 디스패치
-	if (GPUOcclusion.IsInitialized())
+	if (bEnableGPUOcclusion && GPUOcclusion.IsInitialized())
 	{
 		SCOPE_STAT_CAT("GPUOcclusion", "4_ExecutePass");
 

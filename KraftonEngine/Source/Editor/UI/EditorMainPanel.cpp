@@ -1,19 +1,81 @@
 ﻿#include "Editor/UI/EditorMainPanel.h"
 
 #include "Editor/EditorEngine.h"
+#include "Editor/PIE/PIETypes.h"
 #include "Editor/Settings/EditorSettings.h"
+#include "Editor/Viewport/LevelEditorViewportClient.h"
+#include "Engine/Component/CameraComponent.h"
+#include "Engine/Platform/Paths.h"
 #include "Engine/Runtime/WindowsWindow.h"
 
 #include "ImGui/imgui.h"
+#include "ImGui/imgui_internal.h"
 #include "ImGui/imgui_impl_dx11.h"
 #include "ImGui/imgui_impl_win32.h"
 
 #include "Render/Pipeline/Renderer.h"
 #include "Engine/Input/InputSystem.h"
+#include "WICTextureLoader.h"
+
+#include <utility>
+#include <cstring>
 
 #if STATS
 #include "Render/Culling/GPUOcclusionCulling.h"
 #endif
+
+namespace
+{
+struct FFXAAPresetEntry
+{
+	const char* Label;
+	float EdgeThreshold;
+	float EdgeThresholdMin;
+};
+
+constexpr FFXAAPresetEntry GFXAAPresets[] = {
+	{ "Low",    0.125f, 0.0625f },
+	{ "Medium", 0.063f, 0.0312f },
+	{ "High",   0.0312f, 0.0156f },
+	{ "Ultra",  0.0200f, 0.0080f },
+	{ "Custom", 0.063f, 0.0312f },
+};
+
+constexpr int32 GFXAAPresetCount = static_cast<int32>(sizeof(GFXAAPresets) / sizeof(GFXAAPresets[0]));
+
+void ApplyFXAAPresetToSettings(FEditorSettings& Settings)
+{
+	if (Settings.FXAAStage < 0)
+	{
+		Settings.FXAAStage = 0;
+	}
+	if (Settings.FXAAStage >= GFXAAPresetCount)
+	{
+		Settings.FXAAStage = GFXAAPresetCount - 1;
+	}
+
+	if (Settings.FXAAStage == GFXAAPresetCount - 1)
+	{
+		return;
+	}
+
+	Settings.FXAAEdgeThreshold = GFXAAPresets[Settings.FXAAStage].EdgeThreshold;
+	Settings.FXAAEdgeThresholdMin = GFXAAPresets[Settings.FXAAStage].EdgeThresholdMin;
+}
+
+void PushFXAAConstantsToRenderer(UEditorEngine* EditorEngine, const FEditorSettings& Settings)
+{
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	FFXAAConstants FXAA = {};
+	FXAA.EdgeThreshold = Settings.FXAAEdgeThreshold;
+	FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
+	EditorEngine->GetRenderer().SetFXAAConstants(FXAA);
+}
+}
 
 void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, UEditorEngine* InEditorEngine)
 {
@@ -22,6 +84,42 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 
 	ImGuiIO& IO = ImGui::GetIO();
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	IO.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+	IO.MouseDrawCursor = false;
+
+	ImGuiStyle& Style = ImGui::GetStyle();
+	Style.WindowRounding = 6.0f;
+	Style.FrameRounding = 6.0f;
+	Style.GrabRounding = 6.0f;
+	Style.PopupRounding = 6.0f;
+	Style.TabRounding = 6.0f;
+	Style.ScrollbarRounding = 6.0f;
+	Style.WindowBorderSize = 1.0f;
+	Style.FrameBorderSize = 0.0f;
+	Style.Colors[ImGuiCol_Text] = ImVec4(0.93f, 0.94f, 0.96f, 1.0f);
+	Style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.52f, 0.56f, 0.62f, 1.0f);
+	Style.Colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.0f);
+	Style.Colors[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.11f, 0.14f, 1.0f);
+	Style.Colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.11f, 0.13f, 0.98f);
+	Style.Colors[ImGuiCol_Border] = ImVec4(0.20f, 0.23f, 0.27f, 1.0f);
+	Style.Colors[ImGuiCol_FrameBg] = ImVec4(0.17f, 0.19f, 0.22f, 1.0f);
+	Style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.21f, 0.24f, 0.29f, 1.0f);
+	Style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.16f, 0.30f, 0.53f, 1.0f);
+	Style.Colors[ImGuiCol_TitleBg] = ImVec4(0.09f, 0.10f, 0.12f, 1.0f);
+	Style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.10f, 0.12f, 0.15f, 1.0f);
+	Style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.11f, 0.12f, 0.15f, 1.0f);
+	Style.Colors[ImGuiCol_Button] = ImVec4(0.20f, 0.22f, 0.26f, 0.95f);
+	Style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.29f, 0.35f, 1.0f);
+	Style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.16f, 0.30f, 0.53f, 1.0f);
+	Style.Colors[ImGuiCol_Header] = ImVec4(0.19f, 0.22f, 0.27f, 1.0f);
+	Style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.23f, 0.28f, 0.35f, 1.0f);
+	Style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.16f, 0.30f, 0.53f, 1.0f);
+	Style.Colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.16f, 0.20f, 1.0f);
+	Style.Colors[ImGuiCol_TabHovered] = ImVec4(0.22f, 0.26f, 0.33f, 1.0f);
+	Style.Colors[ImGuiCol_TabActive] = ImVec4(0.16f, 0.30f, 0.53f, 1.0f);
+	Style.Colors[ImGuiCol_CheckMark] = ImVec4(0.32f, 0.61f, 0.93f, 1.0f);
+	Style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.32f, 0.61f, 0.93f, 1.0f);
+	Style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.39f, 0.69f, 0.97f, 1.0f);
 
 	Window = InWindow;
 	EditorEngine = InEditorEngine;
@@ -32,6 +130,9 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	ImGui_ImplWin32_Init((void*)InWindow->GetHWND());
 	ImGui_ImplDX11_Init(InRenderer.GetFD3DDevice().GetDevice(), InRenderer.GetFD3DDevice().GetDeviceContext());
 
+	const std::wstring AddActorIconPath = FPaths::Combine(FPaths::RootDir(), L"Asset/Editor/ToolIcons/Add_Actor.png");
+	DirectX::CreateWICTextureFromFile(InRenderer.GetFD3DDevice().GetDevice(), AddActorIconPath.c_str(), nullptr, &AddActorIconSRV);
+
 	ConsoleWidget.Initialize(InEditorEngine);
 	ControlWidget.Initialize(InEditorEngine);
 	PropertyWidget.Initialize(InEditorEngine);
@@ -41,6 +142,14 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 
 void FEditorMainPanel::Release()
 {
+	ConsoleWidget.Clear();
+	FEditorConsoleWidget::ClearHistory();
+	if (AddActorIconSRV)
+	{
+		AddActorIconSRV->Release();
+		AddActorIconSRV = nullptr;
+	}
+
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
@@ -52,46 +161,9 @@ void FEditorMainPanel::Render(float DeltaTime)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-
-	// --- 우상단 Windows 토글 버튼 ---
-	if (!bHideEditorWindows)
-	{
-		FEditorSettings& S = FEditorSettings::Get();
-		const ImGuiViewport* VP = ImGui::GetMainViewport();
-		const float ButtonW = 80.0f;
-		const float Margin = 8.0f;
-		ImGui::SetNextWindowPos(ImVec2(VP->Pos.x + VP->Size.x - ButtonW - Margin, VP->Pos.y + Margin));
-		ImGui::SetNextWindowSize(ImVec2(0, 0));
-		ImGui::Begin("##WidgetToggle", nullptr,
-			ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoDocking);
-		if (ImGui::Button("Windows", ImVec2(ButtonW, 0)))
-		{
-			bShowWidgetList = !bShowWidgetList;
-		}
-		ImGui::End();
-
-		if (bShowWidgetList)
-		{
-			ImGui::SetNextWindowPos(ImVec2(VP->Pos.x + VP->Size.x - 150.0f - Margin, VP->Pos.y + Margin + 30.0f));
-			ImGui::SetNextWindowSize(ImVec2(150.0f, 0));
-			ImGui::Begin("##WidgetList", &bShowWidgetList,
-				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-				ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-				ImGuiWindowFlags_NoDocking);
-			ImGui::Checkbox("Console", &S.UI.bConsole);
-			ImGui::Checkbox("Control", &S.UI.bControl);
-			ImGui::Checkbox("Property", &S.UI.bProperty);
-			ImGui::Checkbox("Scene", &S.UI.bScene);
-			ImGui::Checkbox("Stat", &S.UI.bStat);
-#if STATS
-			ImGui::Checkbox("Hi-Z Debug", &S.UI.bHiZDebug);
-#endif
-			ImGui::End();
-		}
-	}
+	RenderMainMenuBar();
+	RenderEditorToolbar();
+	RenderDockSpace();
 
 	// 뷰포트 렌더링은 EditorEngine이 담당 (SSplitter 레이아웃 + ImGui::Image)
 	if (EditorEngine)
@@ -102,11 +174,7 @@ void FEditorMainPanel::Render(float DeltaTime)
 
 	const FEditorSettings& Settings = FEditorSettings::Get();
 
-	if (!bHideEditorWindows && Settings.UI.bConsole)
-	{
-		SCOPE_STAT_CAT("ConsoleWidget.Render", "5_UI");
-		ConsoleWidget.Render(DeltaTime);
-	}
+	// Console는 Footer/Drawer 경로만 사용한다.
 
 	if (!bHideEditorWindows && Settings.UI.bControl)
 	{
@@ -131,6 +199,7 @@ void FEditorMainPanel::Render(float DeltaTime)
 		SCOPE_STAT_CAT("StatWidget.Render", "5_UI");
 		StatWidget.Render(DeltaTime);
 	}
+	RenderEditorDebugPanel();
 
 #if STATS
 	if (!bHideEditorWindows)
@@ -139,8 +208,799 @@ void FEditorMainPanel::Render(float DeltaTime)
 	}
 #endif
 
+	float EffectiveDeltaTime = DeltaTime;
+	if (EffectiveDeltaTime <= 0.0f)
+	{
+		EffectiveDeltaTime = ImGui::GetIO().DeltaTime;
+		if (EffectiveDeltaTime <= 0.0f)
+		{
+			EffectiveDeltaTime = 1.0f / 60.0f;
+		}
+	}
+	const float TargetAnim = bConsoleDrawerVisible ? 1.0f : 0.0f;
+	const float AnimSpeed = 8.0f;
+	if (ConsoleDrawerAnim < TargetAnim)
+	{
+		ConsoleDrawerAnim += EffectiveDeltaTime * AnimSpeed;
+		if (ConsoleDrawerAnim > 1.0f)
+		{
+			ConsoleDrawerAnim = 1.0f;
+		}
+	}
+	else if (ConsoleDrawerAnim > TargetAnim)
+	{
+		ConsoleDrawerAnim -= EffectiveDeltaTime * AnimSpeed;
+		if (ConsoleDrawerAnim < 0.0f)
+		{
+			ConsoleDrawerAnim = 0.0f;
+		}
+	}
+
+	FooterLogSystem.Tick(EffectiveDeltaTime);
+
+	RenderShortcutOverlay();
+	RenderConsoleDrawer(DeltaTime);
+	RenderFooterOverlay(DeltaTime);
+
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+void FEditorMainPanel::RenderDockSpace()
+{
+	const ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+	if (!MainViewport)
+	{
+		return;
+	}
+
+	constexpr float EditorToolBarHeight = 40.0f;
+	constexpr float FooterHeight = 32.0f;
+	const ImVec2 DockPos(MainViewport->WorkPos.x, MainViewport->WorkPos.y + EditorToolBarHeight);
+	const ImVec2 DockSize(
+		MainViewport->WorkSize.x,
+		(MainViewport->WorkSize.y > (FooterHeight + EditorToolBarHeight)) ? (MainViewport->WorkSize.y - FooterHeight - EditorToolBarHeight) : 0.0f);
+
+	ImGui::SetNextWindowPos(DockPos);
+	ImGui::SetNextWindowSize(DockSize);
+	ImGui::SetNextWindowViewport(MainViewport->ID);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+	const ImGuiWindowFlags DockHostFlags =
+		ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoTitleBar
+		| ImGuiWindowFlags_NoCollapse
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoBringToFrontOnFocus
+		| ImGuiWindowFlags_NoNavFocus
+		| ImGuiWindowFlags_NoBackground;
+	ImGui::Begin("##MainDockHost", nullptr, DockHostFlags);
+	ImGui::PopStyleVar(3);
+
+	const ImGuiID DockSpaceId = ImGui::GetID("MainDockSpace");
+	ImGui::DockSpace(DockSpaceId, ImVec2(0.0f, 0.0f));
+	ImGui::End();
+}
+
+void FEditorMainPanel::RenderEditorToolbar()
+{
+	const ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+	if (!MainViewport)
+	{
+		return;
+	}
+
+	constexpr float EditorToolBarHeight = 40.0f;
+	const ImVec2 BarPos = MainViewport->WorkPos;
+	const ImVec2 BarSize(MainViewport->WorkSize.x, EditorToolBarHeight);
+
+	ImGui::SetNextWindowPos(BarPos, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(BarSize, ImGuiCond_Always);
+	ImGui::SetNextWindowViewport(MainViewport->ID);
+
+	const ImGuiWindowFlags BarFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoFocusOnAppearing;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.13f, 0.14f, 0.17f, 0.98f));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.33f, 0.39f, 1.0f));
+
+	if (ImGui::Begin("##EditorToolbar", nullptr, BarFlags))
+	{
+		const bool bPIEEnabled = EditorEngine ? EditorEngine->IsPlayingInEditor() : false;
+		const bool bPIEEjectedMode =
+			bPIEEnabled
+			&& EditorEngine
+			&& EditorEngine->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Ejected;
+		const bool bAddActorEnabled = !bPIEEnabled || bPIEEjectedMode;
+		const bool bStartEnabled = !bPIEEnabled;
+		const bool bStopEnabled = bPIEEnabled;
+
+		const float AddActorButtonSize = 30.0f;
+		const float PieButtonSize = 24.0f;
+		const float AddActorToPIEGap = 36.0f;
+		const float LeftMargin = 10.0f;
+		const float ControlCenterY = EditorToolBarHeight * 0.5f;
+		const float AddActorStartY = ControlCenterY - AddActorButtonSize * 0.5f;
+		const float PieStartY = ControlCenterY - PieButtonSize * 0.5f;
+
+		ImGui::SetCursorPos(ImVec2(LeftMargin, AddActorStartY));
+		if (!bAddActorEnabled) ImGui::BeginDisabled();
+		const bool bAddActorClicked = ImGui::InvisibleButton("##PIEAddActorButton", ImVec2(AddActorButtonSize, AddActorButtonSize));
+		if (!bAddActorEnabled) ImGui::EndDisabled();
+		{
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			const bool bHovered = bAddActorEnabled && ImGui::IsItemHovered();
+			const ImU32 Bg = ImGui::GetColorU32(
+				bAddActorEnabled
+				? (bHovered ? ImVec4(0.29f, 0.31f, 0.39f, 1.0f) : ImVec4(0.23f, 0.25f, 0.33f, 1.0f))
+				: ImVec4(0.18f, 0.19f, 0.22f, 1.0f));
+			const ImU32 Border = ImGui::GetColorU32(bAddActorEnabled ? ImVec4(0.40f, 0.44f, 0.58f, 1.0f) : ImVec4(0.29f, 0.31f, 0.36f, 1.0f));
+			ImDrawList* DrawList = ImGui::GetWindowDrawList();
+			DrawList->AddRectFilled(Min, Max, Bg, 6.0f);
+			DrawList->AddRect(Min, Max, Border, 6.0f);
+
+			if (AddActorIconSRV)
+			{
+				const float Padding = 6.0f;
+				DrawList->AddImage((ImTextureID)AddActorIconSRV, ImVec2(Min.x + Padding, Min.y + Padding), ImVec2(Max.x - Padding, Max.y - Padding));
+			}
+			else
+			{
+				const ImVec2 C((Min.x + Max.x) * 0.5f, (Min.y + Max.y) * 0.5f);
+				DrawList->AddLine(ImVec2(C.x - 6.0f, C.y), ImVec2(C.x + 6.0f, C.y), ImGui::GetColorU32(ImVec4(0.72f, 0.85f, 0.95f, 1.0f)), 2.0f);
+				DrawList->AddLine(ImVec2(C.x, C.y - 6.0f), ImVec2(C.x, C.y + 6.0f), ImGui::GetColorU32(ImVec4(0.72f, 0.85f, 0.95f, 1.0f)), 2.0f);
+			}
+		}
+		if (bAddActorEnabled && bAddActorClicked)
+		{
+			ImGui::OpenPopup("##PIEBarPlaceActorPopup");
+		}
+		if (ImGui::BeginPopup("##PIEBarPlaceActorPopup"))
+		{
+			if (ImGui::MenuItem("Cube"))
+			{
+				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Cube))
+				{
+					FooterLogSystem.Push("Actor placed: Cube");
+				}
+			}
+			if (ImGui::MenuItem("Sphere"))
+			{
+				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Sphere))
+				{
+					FooterLogSystem.Push("Actor placed: Sphere");
+				}
+			}
+			ImGui::EndPopup();
+		}
+
+		ImGui::SameLine(0.0f, AddActorToPIEGap);
+		const ImVec2 PIEGroupCursor = ImGui::GetCursorScreenPos();
+		const float PIEGroupPaddingX = 10.0f;
+		const float PIEGroupPaddingY = 4.0f;
+		const float PIEGroupSpacing = 6.0f;
+		const float PIEGroupWidth = PIEGroupPaddingX * 2.0f + PieButtonSize * 2.0f + PIEGroupSpacing;
+		const float PIEGroupHeight = PieButtonSize + PIEGroupPaddingY * 2.0f;
+		const ImVec2 PIEGroupMin(PIEGroupCursor.x, ImGui::GetWindowPos().y + ControlCenterY - PIEGroupHeight * 0.5f);
+		const ImVec2 PIEGroupMax(PIEGroupMin.x + PIEGroupWidth, PIEGroupMin.y + PIEGroupHeight);
+		ImGui::GetWindowDrawList()->AddRectFilled(PIEGroupMin, PIEGroupMax, ImGui::GetColorU32(ImVec4(0.27f, 0.29f, 0.34f, 1.0f)), 4.0f);
+		ImGui::GetWindowDrawList()->AddRect(PIEGroupMin, PIEGroupMax, ImGui::GetColorU32(ImVec4(0.39f, 0.42f, 0.48f, 1.0f)), 4.0f);
+		const float MidX = PIEGroupMin.x + PIEGroupPaddingX + PieButtonSize + PIEGroupSpacing * 0.5f;
+		ImGui::GetWindowDrawList()->AddLine(
+			ImVec2(MidX, PIEGroupMin.y + 4.0f),
+			ImVec2(MidX, PIEGroupMax.y - 4.0f),
+			ImGui::GetColorU32(ImVec4(0.45f, 0.48f, 0.55f, 0.9f)),
+			1.0f);
+		ImGui::SetCursorPos(ImVec2(
+			PIEGroupMin.x - ImGui::GetWindowPos().x + PIEGroupPaddingX,
+			PieStartY));
+
+		if (!bStartEnabled) ImGui::BeginDisabled();
+		const bool bStartClicked = ImGui::InvisibleButton("##PIEStartButton", ImVec2(PieButtonSize, PieButtonSize));
+		if (!bStartEnabled) ImGui::EndDisabled();
+		{
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			const bool bHovered = bStartEnabled && ImGui::IsItemHovered();
+			const ImU32 Bg = ImGui::GetColorU32(
+				bStartEnabled
+				? (bHovered ? ImVec4(0.20f, 0.26f, 0.20f, 1.0f) : ImVec4(0.16f, 0.20f, 0.16f, 1.0f))
+				: ImVec4(0.14f, 0.14f, 0.15f, 1.0f));
+			const ImU32 Border = ImGui::GetColorU32(bStartEnabled ? ImVec4(0.30f, 0.36f, 0.30f, 1.0f) : ImVec4(0.24f, 0.24f, 0.26f, 1.0f));
+			const ImU32 Icon = ImGui::GetColorU32(bStartEnabled ? ImVec4(0.52f, 0.92f, 0.56f, 1.0f) : ImVec4(0.45f, 0.45f, 0.47f, 1.0f));
+			ImDrawList* DrawList = ImGui::GetWindowDrawList();
+			DrawList->AddRectFilled(Min, Max, Bg, 2.0f);
+			DrawList->AddRect(Min, Max, Border, 2.0f);
+			const ImVec2 C((Min.x + Max.x) * 0.5f, (Min.y + Max.y) * 0.5f);
+			const float IconScale = PieButtonSize / 30.0f;
+			DrawList->AddTriangleFilled(
+				ImVec2(C.x - 5.0f * IconScale, C.y - 8.0f * IconScale),
+				ImVec2(C.x - 5.0f * IconScale, C.y + 8.0f * IconScale),
+				ImVec2(C.x + 9.0f * IconScale, C.y),
+				Icon);
+		}
+		if (bStartEnabled && bStartClicked && EditorEngine)
+		{
+			FRequestPlaySessionParams Params;
+			EditorEngine->RequestPlaySession(Params);
+		}
+
+		ImGui::SetCursorPos(ImVec2(
+			PIEGroupMin.x - ImGui::GetWindowPos().x + PIEGroupPaddingX + PieButtonSize + PIEGroupSpacing,
+			PieStartY));
+		if (!bStopEnabled) ImGui::BeginDisabled();
+		const bool bStopClicked = ImGui::InvisibleButton("##PIEStopButton", ImVec2(PieButtonSize, PieButtonSize));
+		if (!bStopEnabled) ImGui::EndDisabled();
+		{
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			const bool bHovered = bStopEnabled && ImGui::IsItemHovered();
+			const ImU32 Bg = ImGui::GetColorU32(
+				bStopEnabled
+				? (bHovered ? ImVec4(0.26f, 0.20f, 0.20f, 1.0f) : ImVec4(0.20f, 0.16f, 0.16f, 1.0f))
+				: ImVec4(0.14f, 0.14f, 0.15f, 1.0f));
+			const ImU32 Border = ImGui::GetColorU32(bStopEnabled ? ImVec4(0.38f, 0.30f, 0.30f, 1.0f) : ImVec4(0.24f, 0.24f, 0.26f, 1.0f));
+			const ImU32 Icon = ImGui::GetColorU32(bStopEnabled ? ImVec4(0.92f, 0.48f, 0.48f, 1.0f) : ImVec4(0.45f, 0.45f, 0.47f, 1.0f));
+			ImDrawList* DrawList = ImGui::GetWindowDrawList();
+			DrawList->AddRectFilled(Min, Max, Bg, 2.0f);
+			DrawList->AddRect(Min, Max, Border, 2.0f);
+			const float StopSquareSize = PieButtonSize * 0.5f;
+			const float IconInset = (PieButtonSize - StopSquareSize) * 0.5f;
+			const ImVec2 IconMin(Min.x + IconInset, Min.y + IconInset);
+			const ImVec2 IconMax(Max.x - IconInset, Max.y - IconInset);
+			DrawList->AddRectFilled(IconMin, IconMax, Icon, 2.0f);
+		}
+		if (bStopEnabled && bStopClicked && EditorEngine)
+		{
+			EditorEngine->RequestEndPlayMap();
+		}
+	}
+	ImGui::End();
+
+	ImGui::PopStyleColor(2);
+	ImGui::PopStyleVar(3);
+}
+
+void FEditorMainPanel::RenderEditorDebugPanel()
+{
+	if (!bShowEditorDebugPanel || !EditorEngine)
+	{
+		return;
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(520.0f, 320.0f), ImGuiCond_FirstUseEver);
+	if (!ImGui::Begin("Editor Debug", &bShowEditorDebugPanel))
+	{
+		ImGui::End();
+		return;
+	}
+
+	FEditorSettings& Settings = FEditorSettings::Get();
+	ImGui::DragFloat("Camera Speed", &Settings.CameraSpeed, 0.1f, 0.1f, 32.0f, "%.1f");
+	ImGui::DragFloat("Camera Rotate Speed", &Settings.CameraRotationSpeed, 1.0f, 1.0f, 360.0f, "%.0f");
+	ImGui::DragFloat("Camera Zoom Speed", &Settings.CameraZoomSpeed, 1.0f, 10.0f, 2000.0f, "%.0f");
+	ImGui::Separator();
+	ImGui::Checkbox("Camera Smoothing", &Settings.bEnableCameraSmoothing);
+	ImGui::BeginDisabled(!Settings.bEnableCameraSmoothing);
+	ImGui::DragFloat("Move Smooth Speed", &Settings.CameraMoveSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
+	ImGui::DragFloat("Rotate Smooth Speed", &Settings.CameraRotateSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
+	ImGui::EndDisabled();
+
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		const char* CurrentLabel = GFXAAPresets[Settings.FXAAStage >= 0 && Settings.FXAAStage < GFXAAPresetCount ? Settings.FXAAStage : 1].Label;
+		if (ImGui::BeginCombo("FXAA Stage", CurrentLabel))
+		{
+			for (int32 i = 0; i < GFXAAPresetCount; ++i)
+			{
+				const bool bSelected = (Settings.FXAAStage == i);
+				if (ImGui::Selectable(GFXAAPresets[i].Label, bSelected))
+				{
+					Settings.FXAAStage = i;
+					ApplyFXAAPresetToSettings(Settings);
+				}
+				if (bSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		const bool bCustomStage = (Settings.FXAAStage == GFXAAPresetCount - 1);
+		ImGui::BeginDisabled(!bCustomStage);
+		if (ImGui::DragFloat("Edge Threshold", &Settings.FXAAEdgeThreshold, 0.0005f, 0.001f, 0.5f, "%.4f"))
+		{
+			if (Settings.FXAAEdgeThreshold < 0.001f) Settings.FXAAEdgeThreshold = 0.001f;
+			if (Settings.FXAAEdgeThreshold > 0.5f) Settings.FXAAEdgeThreshold = 0.5f;
+		}
+		if (ImGui::DragFloat("Edge Threshold Min", &Settings.FXAAEdgeThresholdMin, 0.0005f, 0.001f, 0.5f, "%.4f"))
+		{
+			if (Settings.FXAAEdgeThresholdMin < 0.001f) Settings.FXAAEdgeThresholdMin = 0.001f;
+			if (Settings.FXAAEdgeThresholdMin > 0.5f) Settings.FXAAEdgeThresholdMin = 0.5f;
+		}
+		ImGui::EndDisabled();
+
+		if (Settings.FXAAEdgeThresholdMin > Settings.FXAAEdgeThreshold)
+		{
+			Settings.FXAAEdgeThresholdMin = Settings.FXAAEdgeThreshold;
+		}
+	}
+
+	PushFXAAConstantsToRenderer(EditorEngine, Settings);
+
+	if (FLevelEditorViewportClient* ActiveVC = EditorEngine->GetActiveViewport())
+	{
+		if (UCameraComponent* ActiveCamera = ActiveVC->GetCamera())
+		{
+			ImGui::Separator();
+			float CameraFOV_Deg = ActiveCamera->GetFOV() * RAD_TO_DEG;
+			if (ImGui::DragFloat("Camera FOV", &CameraFOV_Deg, 0.5f, 1.0f, 170.0f, "%.1f"))
+			{
+				if (CameraFOV_Deg < 1.0f) CameraFOV_Deg = 1.0f;
+				if (CameraFOV_Deg > 170.0f) CameraFOV_Deg = 170.0f;
+				ActiveCamera->SetFOV(CameraFOV_Deg * DEG_TO_RAD);
+			}
+
+			float OrthoWidth = ActiveCamera->GetOrthoWidth();
+			if (ImGui::DragFloat("Ortho Height", &OrthoWidth, 0.1f, 0.1f, 5000.0f, "%.2f"))
+			{
+				if (OrthoWidth < 0.1f) OrthoWidth = 0.1f;
+				if (OrthoWidth > 5000.0f) OrthoWidth = 5000.0f;
+				ActiveCamera->SetOrthoWidth(OrthoWidth);
+			}
+		}
+
+		auto& ShowFlags = ActiveVC->GetRenderOptions().ShowFlags;
+		ImGui::Separator();
+		ImGui::Checkbox("Grid", &ShowFlags.bGrid);
+		ImGui::Checkbox("World Axis", &ShowFlags.bWorldAxis);
+		ImGui::Checkbox("Gizmo", &ShowFlags.bGizmo);
+		ImGui::Checkbox("Bounding Volume", &ShowFlags.bBoundingVolume);
+		ImGui::Checkbox("Debug Draw", &ShowFlags.bDebugDraw);
+	}
+
+	ImGui::End();
+}
+
+void FEditorMainPanel::RenderMainMenuBar()
+{
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	if (!ImGui::BeginMainMenuBar())
+	{
+		return;
+	}
+
+	if (ImGui::BeginMenu("File"))
+	{
+		const bool bCanSave = EditorEngine->HasCurrentLevelFilePath();
+		if (ImGui::MenuItem("New Scene", "Ctrl+N"))
+		{
+			EditorEngine->NewScene();
+			FooterLogSystem.Push("New Scene created");
+		}
+		if (ImGui::MenuItem("Load Level", "Ctrl+O"))
+		{
+			if (EditorEngine->LoadSceneWithDialog())
+			{
+				FooterLogSystem.Push("Level loaded");
+			}
+		}
+		if (ImGui::MenuItem("Save Level", "Ctrl+S"))
+		{
+			if (EditorEngine->SaveScene())
+			{
+				FooterLogSystem.Push("Level saved");
+			}
+		}
+		if (ImGui::MenuItem("Save Level As...", "Ctrl+Shift+S"))
+		{
+			if (EditorEngine->SaveSceneAsWithDialog())
+			{
+				FooterLogSystem.Push("Level saved as");
+			}
+		}
+
+		ImGui::Separator();
+		if (ImGui::MenuItem("Open Asset Folder"))
+		{
+			if (EditorEngine->OpenAssetFolder())
+			{
+				FooterLogSystem.Push("Asset folder opened");
+			}
+			else
+			{
+				FooterLogSystem.Push("Failed to open Asset folder");
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::BeginDisabled(true);
+		ImGui::MenuItem(bCanSave ? "Current: Loaded Level" : "Current: Unsaved Level", nullptr, false, false);
+		ImGui::EndDisabled();
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("View"))
+	{
+		FEditorSettings& S = FEditorSettings::Get();
+		const bool bMenuConsoleDrawerVisible = bConsoleDrawerVisible;
+		if (ImGui::MenuItem("Console Drawer", nullptr, bMenuConsoleDrawerVisible))
+		{
+			bConsoleDrawerVisible = !bConsoleDrawerVisible;
+			if (bConsoleDrawerVisible)
+			{
+				ConsoleBacktickCycleState = 2;
+				bBringConsoleDrawerToFrontNextFrame = true;
+				bFocusConsoleInputNextFrame = true;
+			}
+			else
+			{
+				ConsoleBacktickCycleState = 0;
+				bFocusConsoleButtonNextFrame = true;
+			}
+		}
+		ImGui::MenuItem("Control", nullptr, &S.UI.bControl);
+		ImGui::MenuItem("Level Manager", nullptr, &S.UI.bScene);
+		ImGui::MenuItem("Property", nullptr, &S.UI.bProperty);
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Settings"))
+	{
+		ImGui::MenuItem("Editor Debug", nullptr, &bShowEditorDebugPanel);
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Help"))
+	{
+		if (ImGui::MenuItem("Shortcuts"))
+		{
+			bShowShortcutOverlay = true;
+		}
+		ImGui::EndMenu();
+	}
+
+	ImGui::EndMainMenuBar();
+}
+
+void FEditorMainPanel::RenderShortcutOverlay()
+{
+	if (!bShowShortcutOverlay)
+	{
+		return;
+	}
+
+	const ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+	const ImVec2 OverlayPos = MainViewport ? MainViewport->Pos : ImVec2(0.0f, 0.0f);
+	const ImVec2 OverlaySize = MainViewport ? MainViewport->Size : ImGui::GetIO().DisplaySize;
+
+	ImGui::SetNextWindowPos(OverlayPos);
+	ImGui::SetNextWindowSize(OverlaySize);
+	ImGui::SetNextWindowBgAlpha(0.38f);
+	const ImGuiWindowFlags BlockerFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoMove;
+	ImGui::Begin("##ShortcutOverlayBlocker", nullptr, BlockerFlags);
+	ImGui::InvisibleButton("##ShortcutOverlayBlockerBtn", OverlaySize);
+	ImGui::End();
+
+	const ImVec2 PanelSize(980.0f, 700.0f);
+	ImGui::SetNextWindowPos(ImVec2(
+		OverlayPos.x + (OverlaySize.x - PanelSize.x) * 0.5f,
+		OverlayPos.y + (OverlaySize.y - PanelSize.y) * 0.5f), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(PanelSize, ImGuiCond_Always);
+
+	ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.14f, 0.15f, 0.18f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.16f, 0.17f, 0.20f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.28f, 0.29f, 0.32f, 1.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	const ImGuiWindowFlags PanelFlags =
+		ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_NoCollapse
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoMove;
+
+	bool bOpen = bShowShortcutOverlay;
+	if (!ImGui::Begin("Shortcuts", &bOpen, PanelFlags))
+	{
+		ImGui::End();
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor(3);
+		bShowShortcutOverlay = bOpen;
+		return;
+	}
+	bShowShortcutOverlay = bOpen;
+
+	ImGui::TextUnformatted("현재 코드상 실제로 동작하는 에디터 단축키를 정리했습니다.");
+	ImGui::Separator();
+
+	constexpr float ShortcutColumnWidth = 200.0f;
+	auto DrawShortcutSection = [ShortcutColumnWidth](const char* InSectionName, const char* InTableId, const TArray<std::pair<const char*, const char*>>& InRows)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.14f, 0.23f, 0.47f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.91f, 0.98f, 1.0f));
+		ImGui::Selectable(InSectionName, false, ImGuiSelectableFlags_Disabled, ImVec2(-1.0f, 22.0f));
+		ImGui::PopStyleColor(2);
+
+		if (ImGui::BeginTable(
+			InTableId,
+			2,
+			ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoPadOuterX))
+		{
+			ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, ShortcutColumnWidth);
+			ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Shortcut");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::TextUnformatted("Action");
+			for (const auto& Row : InRows)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(Row.first);
+				ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(Row.second);
+			}
+			ImGui::EndTable();
+		}
+		ImGui::Spacing();
+	};
+
+	DrawShortcutSection("▼ Viewport Navigation", "ShortcutTable_Nav", {
+		{ "Mouse Right Drag", "뷰포트 카메라 회전 (Perspective)" },
+		{ "Mouse Middle Drag", "뷰포트 카메라 팬 이동" },
+		{ "Alt + Mouse Left Drag", "선택 대상을 기준으로 오빗 회전" },
+		{ "Alt + Mouse Right Drag", "카메라 돌리 인/아웃" },
+		{ "Mouse Wheel", "휠 카메라 FOV 또는 직교 카메라 줌 조절" },
+		{ "Mouse Wheel while rotating", "카메라 이동 속도 조절" },
+		{ "W / A / S / D / Q / E", "카메라 이동 (우클릭 중일 때만 적용)" },
+		{ "F", "현재 선택된 Actor 축으로 카메라 포커스" },
+	});
+
+	DrawShortcutSection("▼ Selection", "ShortcutTable_Selection", {
+		{ "Mouse Left Click", "Actor 단일 선택" },
+		{ "Shift + Mouse Left Click", "선택 추가" },
+		{ "Ctrl + Mouse Left Click", "선택 토글" },
+		{ "Ctrl + Alt + Drag", "박스 선택" },
+		{ "Ctrl + Alt + Shift + Drag", "기존 선택에 박스 선택 추가" },
+		{ "Ctrl + A", "전체 선택" },
+	});
+
+	DrawShortcutSection("▼ Gizmo", "ShortcutTable_Gizmo", {
+		{ "Mouse Left Drag", "기즈모 축 드래그 조작" },
+		{ "Q / W / E / R", "Select / Translate / Rotate / Scale 모드 전환" },
+		{ "Space", "기즈모 타입 순환" },
+		{ "X", "월드/로컬 기즈모 모드 전환" },
+	});
+
+	DrawShortcutSection("▼ File", "ShortcutTable_File", {
+		{ "Ctrl + N", "New Level" },
+		{ "Ctrl + O", "Load Level" },
+		{ "Ctrl + S", "Save Level (경로 없으면 Save As)" },
+		{ "Ctrl + Shift + S", "Save Level As" },
+	});
+
+	DrawShortcutSection("▼ Editor", "ShortcutTable_Editor", {
+		{ "Delete", "선택된 Actor 삭제" },
+		{ "Tab", "Editor Mode 순환" },
+		{ "Backtick(`)", "Console Mode 순환" },
+	});
+
+	DrawShortcutSection("▼ PIE", "ShortcutTable_PIE", {
+		{ "Esc", "PIE 종료" },
+		{ "F8", "Possess / Eject 토글" },
+		{ "Shift + F1", "마우스 캡처 해제" },
+		{ "W / A / S / D", "PIE 플레이어 이동" },
+		{ "Mouse Move (captured)", "PIE 플레이어 카메라 회전" },
+	});
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("참고: ImGui 입력창이 키보드를 잡고 있으면 일부 단축키는 동작하지 않을 수 있습니다.");
+
+	ImGui::End();
+	ImGui::PopStyleVar();
+	ImGui::PopStyleColor(3);
+}
+
+void FEditorMainPanel::RenderConsoleDrawer(float DeltaTime)
+{
+	(void)DeltaTime;
+	constexpr float FooterHeight = 32.0f;
+	constexpr float DrawerMaxHeight = 320.0f;
+	if (ConsoleDrawerAnim <= 0.001f)
+	{
+		return;
+	}
+
+	const ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+	const ImVec2 OverlayPos = MainViewport ? MainViewport->WorkPos : ImVec2(0.0f, 0.0f);
+	const ImVec2 OverlaySize = MainViewport ? MainViewport->WorkSize : ImGui::GetIO().DisplaySize;
+	const float DrawerHeight = DrawerMaxHeight * ConsoleDrawerAnim;
+	if (DrawerHeight <= 1.0f)
+	{
+		return;
+	}
+
+	ImGui::SetNextWindowPos(
+		ImVec2(OverlayPos.x, OverlayPos.y + OverlaySize.y - FooterHeight - DrawerHeight),
+		ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(OverlaySize.x, DrawerHeight), ImGuiCond_Always);
+	if (MainViewport)
+	{
+		ImGui::SetNextWindowViewport(MainViewport->ID);
+	}
+
+	const ImGuiWindowFlags DrawerFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoFocusOnAppearing;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	if (bBringConsoleDrawerToFrontNextFrame)
+	{
+		ImGui::SetNextWindowFocus();
+		bBringConsoleDrawerToFrontNextFrame = false;
+	}
+	if (ImGui::Begin("##EditorConsoleDrawer", nullptr, DrawerFlags))
+	{
+		ConsoleWidget.RenderDrawerToolbar();
+		ImGui::Separator();
+		ConsoleWidget.RenderLogContents(0.0f);
+	}
+	ImGui::End();
+	ImGui::PopStyleVar(3);
+}
+
+void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
+{
+	(void)DeltaTime;
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	const ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+	const ImVec2 OverlayPos = MainViewport ? MainViewport->WorkPos : ImVec2(0.0f, 0.0f);
+	const ImVec2 OverlaySize = MainViewport ? MainViewport->WorkSize : ImGui::GetIO().DisplaySize;
+	constexpr float FooterHeight = 32.0f;
+
+	ImGui::SetNextWindowPos(
+		ImVec2(OverlayPos.x, OverlayPos.y + OverlaySize.y - FooterHeight),
+		ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(OverlaySize.x, FooterHeight), ImGuiCond_Always);
+	if (MainViewport)
+	{
+		ImGui::SetNextWindowViewport(MainViewport->ID);
+	}
+
+	const ImGuiWindowFlags FooterFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoFocusOnAppearing;
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	if (ImGui::Begin("##EditorStatusBar", nullptr, FooterFlags))
+	{
+		const TArray<FString> ActiveLogs = FooterLogSystem.GetActiveMessages();
+		if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false))
+		{
+			switch (ConsoleBacktickCycleState)
+			{
+			case 0:
+				ConsoleBacktickCycleState = 1;
+				bConsoleDrawerVisible = false;
+				bFocusConsoleInputNextFrame = true;
+				FooterLogSystem.Push("Console input focus");
+				break;
+			case 1:
+				ConsoleBacktickCycleState = 2;
+				bConsoleDrawerVisible = true;
+				bBringConsoleDrawerToFrontNextFrame = true;
+				bFocusConsoleInputNextFrame = true;
+				FooterLogSystem.Push("Console drawer opened");
+				break;
+			default:
+				ConsoleBacktickCycleState = 0;
+				bConsoleDrawerVisible = false;
+				bFocusConsoleInputNextFrame = false;
+				bFocusConsoleButtonNextFrame = true;
+				FooterLogSystem.Push("Console drawer closed");
+				break;
+			}
+		}
+
+		const bool bDrawerOpen = ConsoleDrawerAnim > 0.5f;
+		if (bFocusConsoleButtonNextFrame)
+		{
+			ImGui::SetKeyboardFocusHere();
+			bFocusConsoleButtonNextFrame = false;
+		}
+		if (ImGui::Button(bDrawerOpen ? "Console ▼" : "Console ▲"))
+		{
+			bConsoleDrawerVisible = !bConsoleDrawerVisible;
+			if (bConsoleDrawerVisible)
+			{
+				ConsoleBacktickCycleState = 2;
+				bBringConsoleDrawerToFrontNextFrame = true;
+				bFocusConsoleInputNextFrame = true;
+			}
+			else
+			{
+				ConsoleBacktickCycleState = 0;
+				bFocusConsoleButtonNextFrame = true;
+			}
+		}
+
+		ImGui::SameLine();
+		const float InputWidth = OverlaySize.x * (bDrawerOpen ? 0.35f : 0.175f);
+		ConsoleWidget.RenderInputLine("##FooterConsoleInput", InputWidth, bFocusConsoleInputNextFrame);
+		if (bFocusConsoleInputNextFrame)
+		{
+			ConsoleBacktickCycleState = bConsoleDrawerVisible ? 2 : 1;
+		}
+		bFocusConsoleInputNextFrame = false;
+
+		ImGui::SameLine();
+		ImGui::Text("Domain: %s", EditorEngine->IsPlayingInEditor() ? "PIE" : "Editor");
+
+		const FString LevelLabel = EditorEngine->HasCurrentLevelFilePath()
+			? FString("Level: ") + EditorEngine->GetCurrentLevelFilePath()
+			: FString("Level: Unsaved");
+		const float LevelWidth = ImGui::CalcTextSize(LevelLabel.c_str()).x;
+		const float LevelX = OverlaySize.x - ImGui::GetStyle().WindowPadding.x - LevelWidth;
+
+		if (!ActiveLogs.empty())
+		{
+			const FString& LatestLog = ActiveLogs.back();
+			const float LogWidth = ImGui::CalcTextSize(LatestLog.c_str()).x;
+			float LogX = LevelX - 16.0f - LogWidth;
+			const float MinLogX = ImGui::GetCursorPosX() + 8.0f;
+			if (LogX < MinLogX)
+			{
+				LogX = MinLogX;
+			}
+			ImGui::SameLine(LogX);
+			ImGui::TextUnformatted(LatestLog.c_str());
+		}
+
+		ImGui::SameLine(LevelX);
+		ImGui::TextUnformatted(LevelLabel.c_str());
+	}
+	ImGui::End();
+	ImGui::PopStyleVar(3);
 }
 
 #if STATS
@@ -196,13 +1056,68 @@ void FEditorMainPanel::Update()
 {
 	ImGuiIO& IO = ImGui::GetIO();
 
-	// 뷰포트 슬롯 위에서는 bUsingMouse를 해제해야 TickInteraction이 동작
 	bool bWantMouse = IO.WantCaptureMouse;
 	bool bWantKeyboard = IO.WantCaptureKeyboard;
 	bool bWantTextInput = IO.WantTextInput;
-	if (EditorEngine && EditorEngine->IsMouseOverViewport())
+	const bool bAnyUIItemActive = ImGui::IsAnyItemActive();
+	const bool bAnyUIItemHovered = ImGui::IsAnyItemHovered();
+	const bool bAnyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+	const bool bAnyWindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+	const bool bAnyWindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
+	const bool bMouseOverViewportRect = (EditorEngine != nullptr) ? EditorEngine->IsMouseOverViewport() : false;
+	bool bHoveredViewportContentWindow = false;
+	bool bHoveredNonViewportWindow = false;
+	bool bHoveredAnyWindow = false;
+	if (ImGuiContext* Context = ImGui::GetCurrentContext())
+	{
+		bHoveredAnyWindow = (Context->HoveredWindow != nullptr);
+		if (ImGuiWindow* HoveredWindow = Context->HoveredWindow)
+		{
+			const char* HoveredName = HoveredWindow->Name ? HoveredWindow->Name : "";
+			bHoveredViewportContentWindow =
+				(std::strcmp(HoveredName, "Viewport") == 0)
+				|| (std::strncmp(HoveredName, "Viewport###", 11) == 0);
+			bHoveredNonViewportWindow = !bHoveredViewportContentWindow;
+		}
+	}
+	if (!bHoveredViewportContentWindow
+		&& bMouseOverViewportRect
+		&& !bHoveredNonViewportWindow
+		&& !bAnyUIItemActive
+		&& !bAnyUIItemHovered
+		&& !bAnyPopupOpen)
+	{
+		// 도킹 상태에서 HoveredWindow 이름이 Viewport가 아니어도,
+		// 실제 viewport 인터랙션 영역 위라면 viewport 입력을 허용한다.
+		bHoveredViewportContentWindow = true;
+	}
+
+	// Viewport "본문"에서만 입력을 viewport로 넘긴다.
+	// 그 외 ImGui(뷰포트 툴바/팝업/기타 창)는 반드시 ImGui가 소비한다.
+	const bool bReleaseMouseToViewport =
+		bMouseOverViewportRect
+		&& !bHoveredNonViewportWindow
+		&& !bAnyPopupOpen;
+	const bool bNonViewportImGuiInteraction =
+		bHoveredNonViewportWindow
+		&& (bAnyWindowHovered || bAnyWindowFocused || bAnyUIItemActive || bAnyUIItemHovered || bAnyPopupOpen || bWantTextInput || bWantKeyboard);
+
+	if (bShowShortcutOverlay)
+	{
+		bWantMouse = true;
+		bWantKeyboard = true;
+	}
+	else if (bNonViewportImGuiInteraction)
+	{
+		// Viewport 외 ImGui 창(패널/팝업/타이틀바 드래그 포함)은 항상 ImGui가 입력 소유.
+		bWantMouse = true;
+	}
+	else if (EditorEngine && bReleaseMouseToViewport)
 	{
 		bWantMouse = false;
+		// 키보드는 ImGui가 원할 때(IO.WantCaptureKeyboard) 절대 내려주지 않는다.
+		// viewport 본문에서만 별도 키보드 캡처가 없을 때 입력을 허용한다.
+		bWantKeyboard = IO.WantCaptureKeyboard || IO.WantTextInput;
 	}
 	InputSystem::Get().GetGuiInputState().bUsingMouse = bWantMouse;
 	InputSystem::Get().GetGuiInputState().bUsingKeyboard = bWantKeyboard;

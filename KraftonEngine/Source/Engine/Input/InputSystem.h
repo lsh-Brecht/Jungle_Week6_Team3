@@ -15,6 +15,9 @@ class InputSystem : public TSingleton<InputSystem>
 
 public:
     void Tick();
+    void SetUseRawMouse(bool bEnable) { bUseRawMouse = bEnable; }
+    bool IsUsingRawMouse() const { return bUseRawMouse; }
+    void AddRawMouseDelta(int DeltaX, int DeltaY);
 
     // Keyboard
     bool GetKeyDown(int VK) const { return CurrentStates[VK] && !PrevStates[VK]; }
@@ -23,8 +26,8 @@ public:
 
     // Mouse position
     POINT GetMousePos() const { return MousePos; }
-    int MouseDeltaX() const { return MousePos.x - PrevMousePos.x; }
-    int MouseDeltaY() const { return MousePos.y - PrevMousePos.y; }
+    int MouseDeltaX() const { return FrameMouseDeltaX; }
+    int MouseDeltaY() const { return FrameMouseDeltaY; }
     bool MouseMoved() const { return MouseDeltaX() != 0 || MouseDeltaY() != 0; }
 
     // Left drag
@@ -64,6 +67,11 @@ private:
     // Mouse members
     POINT MousePos = { 0, 0 };
     POINT PrevMousePos = { 0, 0 };
+    int FrameMouseDeltaX = 0;
+    int FrameMouseDeltaY = 0;
+    int RawMouseDeltaAccumX = 0;
+    int RawMouseDeltaAccumY = 0;
+    bool bUseRawMouse = false;
 
     bool bLeftDragCandidate = false;
     bool bRightDragCandidate = false;
