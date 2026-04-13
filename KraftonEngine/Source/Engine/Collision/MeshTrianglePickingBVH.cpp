@@ -233,6 +233,53 @@ bool FMeshTrianglePickingBVH::RaycastLocal(const FVector& LocalOrigin, const FVe
 	return bHit;
 }
 
+void FMeshTrianglePickingBVH::QueryTrianglesIntersectingAABBLocal(const FBoundingBox& LocalBounds, TArray<int32>& OutTriangleStartIndices) const
+{
+	OutTriangleStartIndices.clear();
+
+	if (Nodes.empty() || !LocalBounds.IsValid())
+	{
+		return;
+	}
+
+	int32 NodeStack[MeshBVHMaxTraversalStack];
+	int32 StackSize = 0;
+	NodeStack[StackSize++] = 0;
+
+	while (StackSize > 0)
+	{
+		const int32 NodeIndex = NodeStack[--StackSize];
+		const FNode& Node = Nodes[NodeIndex];
+
+		if (!Node.Bounds.IsIntersected(LocalBounds))
+		{
+			continue;
+		}
+
+		if (Node.IsLeaf())
+		{
+			for (int32 LeafOffset = 0; LeafOffset < Node.LeafCount; ++LeafOffset)
+			{
+				const FTriangleLeaf& Leaf = TriangleLeaves[Node.FirstLeaf + LeafOffset];
+				if (Leaf.Bounds.IsIntersected(LocalBounds))
+				{
+					OutTriangleStartIndices.push_back(Leaf.TriangleStartIndex);
+				}
+			}
+			continue;
+		}
+
+		for (int32 ChildIndex = 0; ChildIndex < Node.ChildCount && StackSize < MeshBVHMaxTraversalStack; ++ChildIndex)
+		{
+			const int32 ChildNodeIndex = Node.Children[ChildIndex];
+			if (ChildNodeIndex >= 0)
+			{
+				NodeStack[StackSize++] = ChildNodeIndex;
+			}
+		}
+	}
+}
+
 int32 FMeshTrianglePickingBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int32 End)
 {
 	//triangle leaf 구간 [Start, End)를 하나의 node로 만들고, 필요하면 재귀 분할합니다.

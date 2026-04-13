@@ -21,6 +21,12 @@ public:
 		TArray<FDecalSourceTriangle>& OutTriangles,
 		FDecalTriangleGatherStats* OutStats = nullptr);
 
+	static void GatherBVHFilteredTriangles(
+		const UDecalComponent& DecalComponent,
+		const TArray<FDecalPrimitiveCandidate>& Candidates,
+		TArray<FDecalSourceTriangle>& OutTriangles,
+		FDecalTriangleGatherStats* OutStats = nullptr);
+
 	static void TransformTrianglesToDecalLocal(
 		const UDecalComponent& DecalComponent,
 		const TArray<FDecalSourceTriangle>& SourceTriangles,

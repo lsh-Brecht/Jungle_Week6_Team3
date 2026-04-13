@@ -98,6 +98,7 @@ void UDecalComponent::BuildDecalMesh()
 	{
 		RenderableMesh.Clear();
 		DebugReceiverTriangles.clear();
+		DebugClippedTriangles.clear();
 		return;
 	}
 
@@ -111,7 +112,7 @@ void UDecalComponent::BuildDecalMesh()
 	TArray<FDecalUVTriangle> UVTriangles;
 
 	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, nullptr);
-	FDecalMeshBuilder::GatherBruteForceTriangles(Candidates, SourceTriangles, nullptr);
+	FDecalMeshBuilder::GatherBVHFilteredTriangles(*this, Candidates, SourceTriangles, nullptr);
 	FDecalMeshBuilder::TransformTrianglesToDecalLocal(*this, SourceTriangles, LocalTriangles, nullptr);
 	FDecalMeshBuilder::GatherCoarseOverlapTriangles(LocalTriangles, CoarseTriangles, nullptr);
 	FDecalMeshBuilder::GatherSATOverlapTriangles(CoarseTriangles, SATTriangles, nullptr);
@@ -121,6 +122,7 @@ void UDecalComponent::BuildDecalMesh()
 	FDecalMeshBuilder::BuildRenderableMesh(UVTriangles, RenderableMesh, nullptr);
 
 	DebugReceiverTriangles = SATTriangles;
+	DebugClippedTriangles = Triangles;
 }
 
 void UDecalComponent::RebuildDecalMeshNow()
@@ -275,6 +277,7 @@ void UDecalComponent::CollectEditorVisualizations(FRenderBus& RenderBus) const
 	if (bShouldDrawReceiverTriangles)
 	{
 		AddDebugReceiverTriangleLines(RenderBus, FColor(96, 255, 96, 255));
+		AddDebugClippedTriangleLines(RenderBus, FColor::White());
 	}
 }
 
@@ -515,6 +518,30 @@ void UDecalComponent::AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const
 	for (int32 TriangleIndex = 0; TriangleIndex < TriangleCountToDraw; ++TriangleIndex)
 	{
 		const FDecalSATTriangle& Triangle = DebugReceiverTriangles[TriangleIndex];
+
+		const FVector WorldP0 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[0]);
+		const FVector WorldP1 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[1]);
+		const FVector WorldP2 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[2]);
+
+		AddDebugLine(RenderBus, WorldP0, WorldP1, TriangleColor);
+		AddDebugLine(RenderBus, WorldP1, WorldP2, TriangleColor);
+		AddDebugLine(RenderBus, WorldP2, WorldP0, TriangleColor);
+	}
+}
+
+void UDecalComponent::AddDebugClippedTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const
+{
+	if (DebugClippedTriangles.empty() || DebugTriangleDrawLimit <= 0)
+	{
+		return;
+	}
+
+	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
+	const int32 TriangleCountToDraw = std::min<int32>(static_cast<int32>(DebugClippedTriangles.size()), DebugTriangleDrawLimit);
+
+	for (int32 TriangleIndex = 0; TriangleIndex < TriangleCountToDraw; ++TriangleIndex)
+	{
+		const FDecalTriangulatedTriangle& Triangle = DebugClippedTriangles[TriangleIndex];
 
 		const FVector WorldP0 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[0]);
 		const FVector WorldP1 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[1]);

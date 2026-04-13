@@ -346,6 +346,71 @@ namespace
 
 		return FVector2(Clamp01(U), Clamp01(V));
 	}
+
+	FBoundingBox MakeLocalQueryBoundsFromDecalWorldBox(
+		const UDecalComponent& DecalComponent,
+		const FMatrix& WorldToMesh)
+	{
+		FVector DecalWorldCorners[8];
+		DecalComponent.GetDecalBoxCorners(DecalWorldCorners);
+
+		FBoundingBox LocalBounds;
+		for (const FVector& WorldCorner : DecalWorldCorners)
+		{
+			LocalBounds.Expand(WorldToMesh.TransformPositionWithW(WorldCorner));
+		}
+		return LocalBounds;
+	}
+
+	void AppendTriangleFromStartIndex(
+		const FDecalPrimitiveCandidate& Candidate,
+		int32 TriangleStartIndex,
+		TArray<FDecalSourceTriangle>& OutTriangles,
+		FDecalTriangleGatherStats& InOutStats)
+	{
+		if (!Candidate.MeshAsset)
+		{
+			return;
+		}
+
+		const TArray<FNormalVertex>& Vertices = Candidate.MeshAsset->Vertices;
+		const TArray<uint32>& Indices = Candidate.MeshAsset->Indices;
+
+		if (TriangleStartIndex < 0 || TriangleStartIndex + 2 >= static_cast<int32>(Indices.size()))
+		{
+			++InOutStats.SkippedInvalidTriangleCount;
+			return;
+		}
+
+		const uint32 I0 = Indices[TriangleStartIndex + 0];
+		const uint32 I1 = Indices[TriangleStartIndex + 1];
+		const uint32 I2 = Indices[TriangleStartIndex + 2];
+
+		if (I0 >= Vertices.size() || I1 >= Vertices.size() || I2 >= Vertices.size())
+		{
+			++InOutStats.SkippedInvalidTriangleCount;
+			return;
+		}
+
+		FDecalSourceTriangle Triangle;
+		Triangle.OwnerActor = Candidate.OwnerActor;
+		Triangle.StaticMeshComponent = Candidate.StaticMeshComponent;
+		Triangle.TriangleStartIndex = TriangleStartIndex;
+		Triangle.Indices[0] = I0;
+		Triangle.Indices[1] = I1;
+		Triangle.Indices[2] = I2;
+		Triangle.LocalPositions[0] = Vertices[I0].pos;
+		Triangle.LocalPositions[1] = Vertices[I1].pos;
+		Triangle.LocalPositions[2] = Vertices[I2].pos;
+		Triangle.LocalNormals[0] = Vertices[I0].normal;
+		Triangle.LocalNormals[1] = Vertices[I1].normal;
+		Triangle.LocalNormals[2] = Vertices[I2].normal;
+		Triangle.MeshToWorld = Candidate.MeshToWorld;
+		Triangle.WorldToMesh = Candidate.WorldToMesh;
+
+		OutTriangles.push_back(Triangle);
+		++InOutStats.GatheredTriangleCount;
+	}
 }
 
 bool FDecalMeshBuilder::PassTargetFilter(
@@ -519,6 +584,45 @@ void FDecalMeshBuilder::GatherBruteForceTriangles(
 
 			OutTriangles.push_back(Triangle);
 			++LocalStats.GatheredTriangleCount;
+		}
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::GatherBVHFilteredTriangles(
+	const UDecalComponent& DecalComponent,
+	const TArray<FDecalPrimitiveCandidate>& Candidates,
+	TArray<FDecalSourceTriangle>& OutTriangles,
+	FDecalTriangleGatherStats* OutStats)
+{
+	OutTriangles.clear();
+
+	FDecalTriangleGatherStats LocalStats;
+	LocalStats.CandidatePrimitiveCount = static_cast<int32>(Candidates.size());
+
+	for (const FDecalPrimitiveCandidate& Candidate : Candidates)
+	{
+		if (!Candidate.StaticMesh || !Candidate.MeshAsset)
+		{
+			continue;
+		}
+
+		const FBoundingBox LocalQueryBounds = MakeLocalQueryBoundsFromDecalWorldBox(DecalComponent, Candidate.WorldToMesh);
+		if (!LocalQueryBounds.IsValid())
+		{
+			continue;
+		}
+
+		TArray<int32> CandidateTriangleStartIndices;
+		Candidate.StaticMesh->QueryMeshTriangleCandidatesByBVHLocal(LocalQueryBounds, CandidateTriangleStartIndices);
+
+		for (int32 TriangleStartIndex : CandidateTriangleStartIndices)
+		{
+			AppendTriangleFromStartIndex(Candidate, TriangleStartIndex, OutTriangles, LocalStats);
 		}
 	}
 

@@ -115,6 +115,7 @@ private:
 	*/
 	void AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxColor) const;
 	void AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const;
+	void AddDebugClippedTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const;
 
 private:
 	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
@@ -123,6 +124,7 @@ private:
 
 	FDecalRenderableMesh RenderableMesh;
 	TArray<FDecalSATTriangle> DebugReceiverTriangles;
+	TArray<FDecalTriangulatedTriangle> DebugClippedTriangles;
 
 	int32 SortOrder = 0;
 	int32 DebugTriangleDrawLimit = 256;
