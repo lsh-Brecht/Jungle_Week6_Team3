@@ -29,6 +29,8 @@ public:
 
 	void SetVisibility(bool bNewVisible);
 	inline bool IsVisible() const { return bIsVisible; }
+	void SetReceivesDecal(bool bNewReceivesDecal);
+	bool ReceivesDecal() const { return bReceivesDecal; }
 
 	// 월드 공간 AABB를 FBoundingBox로 반환 (파트 B LineBatcher와의 인터페이스)
 	FBoundingBox GetWorldBoundingBox() const;
@@ -40,6 +42,7 @@ public:
 	void UpdateWorldMatrix() const override;
 
 	virtual bool SupportsOutline() const { return true; }
+	virtual int32 GetSortPriority() const { return 0; }
 
 	// --- 렌더 상태 관리 ---
 	void CreateRenderState() override;
@@ -87,6 +90,7 @@ protected:
 	mutable bool bWorldAABBDirty = true;
 	mutable bool bHasValidWorldAABB = false;
 	bool bIsVisible = true;
+	bool bReceivesDecal = true;
 	FPrimitiveSceneProxy* SceneProxy = nullptr;
 	
 	FOctree* OctreeNode = nullptr;

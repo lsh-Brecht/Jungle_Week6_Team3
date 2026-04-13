@@ -532,6 +532,11 @@ void FRenderer::SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies)
 
 	const auto ProxyLess = [](const FPrimitiveSceneProxy* A, const FPrimitiveSceneProxy* B)
 	{
+		if (A->SortPriority != B->SortPriority)
+		{
+			return A->SortPriority < B->SortPriority;
+		}
+
 		if (A->SortKey != B->SortKey)
 		{
 			return A->SortKey < B->SortKey;

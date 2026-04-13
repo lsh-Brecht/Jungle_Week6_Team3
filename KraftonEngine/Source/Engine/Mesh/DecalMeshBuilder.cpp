@@ -417,16 +417,38 @@ bool FDecalMeshBuilder::PassTargetFilter(
 	const UDecalComponent& DecalComponent,
 	const UStaticMeshComponent* StaticMeshComponent)
 {
-	if (!StaticMeshComponent) return false;
+	if (!StaticMeshComponent)
+	{
+		return false;
+	}
 
 	const int32 Filter = DecalComponent.GetTargetFilter();
 
-	if ((Filter & DecalTarget_StaticMeshComponent) != 0)
+	if ((Filter & DecalTarget_ExcludeSameOwner) != 0)
 	{
-		return true;
+		if (StaticMeshComponent->GetOwner() == DecalComponent.GetOwner())
+		{
+			return false;
+		}
 	}
 
-	return false;
+	if ((Filter & DecalTarget_ReceivesDecalOnly) != 0)
+	{
+		if (!StaticMeshComponent->ReceivesDecal())
+		{
+			return false;
+		}
+	}
+
+	const bool bAllowStaticMesh = (Filter & DecalTarget_StaticMeshComponent) != 0;
+	const bool bAllowAllPrimitive = (Filter & DecalTarget_AllPrimitive) != 0;
+
+	if (!bAllowStaticMesh && !bAllowAllPrimitive)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void FDecalMeshBuilder::GatherBroadPhaseCandidates(

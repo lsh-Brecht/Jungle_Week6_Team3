@@ -9,7 +9,9 @@ enum EDecalTargetFilterBits : int32
 {
 	DecalTarget_None = 0,
 	DecalTarget_StaticMeshComponent = 1 << 0,
-	DecalTarget_AllPrimitive = 1 << 1,
+	DecalTarget_ReceivesDecalOnly = 1 << 1,
+	DecalTarget_ExcludeSameOwner = 1 << 2,
+	DecalTarget_AllPrimitive = 1 << 3,
 };
 
 class UDecalComponent : public UPrimitiveComponent
@@ -76,6 +78,7 @@ public:
 
 	void SetSortOrder(int32 Value);
 	int32 GetSortOrder() const { return SortOrder; }
+	int32 GetSortPriority() const override { return SortOrder; }
 
 	void SetTargetFilter(int32 InFilter);
 	int32 GetTargetFilter() const { return TargetFilter; }
@@ -103,6 +106,8 @@ public:
 
 private:
 	void BuildDecalMesh();
+	void SyncTargetFilterMaskFromOptions();
+	void SyncTargetFilterOptionsFromMask();
 
 	/*
 	* - 저장/복제는 경로 기반
@@ -129,9 +134,12 @@ private:
 	int32 SortOrder = 0;
 	int32 DebugTriangleDrawLimit = 256;
 
-	int32 TargetFilter = DecalTarget_StaticMeshComponent;
+	int32 TargetFilter = DecalTarget_StaticMeshComponent | DecalTarget_ReceivesDecalOnly;
 
 	bool bDecalDirty = true;
 	bool bDrawDebugOBB = true;
 	bool bDrawDebugReceiverTriangles = false;
+	bool bTargetStaticMeshComponent = true;
+	bool bTargetReceivesDecalOnly = true;
+	bool bExcludeSameOwner = false;
 };

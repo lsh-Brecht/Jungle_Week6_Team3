@@ -44,6 +44,7 @@ void UPrimitiveComponent::Serialize(FArchive& Ar)
 {
 	USceneComponent::Serialize(Ar);
 	Ar << bIsVisible;
+	Ar << bReceivesDecal;
 	// LocalExtents는 메시 등에서 재계산되므로 직렬화 제외.
 }
 
@@ -52,6 +53,27 @@ void UPrimitiveComponent::SetVisibility(bool bNewVisible)
 	if (bIsVisible == bNewVisible) return;
 	bIsVisible = bNewVisible;
 	MarkRenderVisibilityDirty();
+}
+
+void UPrimitiveComponent::SetReceivesDecal(bool bNewReceivesDecal)
+{
+	if (bReceivesDecal == bNewReceivesDecal)
+	{
+		return;
+	}
+
+	bReceivesDecal = bNewReceivesDecal;
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	if (UWorld* World = OwnerActor->GetWorld())
+	{
+		World->NotifyPrimitiveTransformChanged(this);
+	}
 }
 
 // ============================================================
@@ -92,6 +114,7 @@ void UPrimitiveComponent::GetEditableProperties(TArray<FPropertyDescriptor>& Out
 {
 	USceneComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Visible", EPropertyType::Bool, &bIsVisible });
+	OutProps.push_back({ "Receives Decal", EPropertyType::Bool, &bReceivesDecal });
 }
 
 void UPrimitiveComponent::PostEditProperty(const char* PropertyName)
@@ -103,6 +126,10 @@ void UPrimitiveComponent::PostEditProperty(const char* PropertyName)
 	{
 		// Property Editor가 bIsVisible을 직접 수정한 경우 dirty 시퀀스만 전파한다.
 		MarkRenderVisibilityDirty();
+	}
+	else if (strcmp(PropertyName, "Receives Decal") == 0)
+	{
+		SetReceivesDecal(bReceivesDecal);
 	}
 }
 

@@ -191,6 +191,7 @@ void UDecalComponent::Serialize(FArchive& Ar)
             다시 빌드되도록 Dirty를 세운다.
         */
 		bDecalDirty = true;
+		SyncTargetFilterOptionsFromMask();
 	
 		MarkWorldBoundsDirty();
 	}
@@ -203,6 +204,7 @@ void UDecalComponent::PostDuplicate()
 	// ??????
 	ReloadMaterialFromPath();
 	bDecalDirty = true;
+	SyncTargetFilterOptionsFromMask();
 	MarkWorldBoundsDirty();
 }
 
@@ -213,7 +215,9 @@ void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
 	OutProps.push_back({ "Decal Material", EPropertyType::MaterialRef, &DecalMaterialPath });
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
-	OutProps.push_back({ "Target Filter", EPropertyType::Int, &TargetFilter });
+	OutProps.push_back({ "Target Static Mesh", EPropertyType::Bool, &bTargetStaticMeshComponent });
+	OutProps.push_back({ "Target Receives Decal Only", EPropertyType::Bool, &bTargetReceivesDecalOnly });
+	OutProps.push_back({ "Exclude Same Owner", EPropertyType::Bool, &bExcludeSameOwner });
 	OutProps.push_back({ "Draw Debug OBB", EPropertyType::Bool, &bDrawDebugOBB });
 	OutProps.push_back({ "Draw Debug Receiver Triangles", EPropertyType::Bool, &bDrawDebugReceiverTriangles });
 	OutProps.push_back({ "Debug Triangle Draw Limit", EPropertyType::Int, &DebugTriangleDrawLimit });
@@ -236,8 +240,11 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 	{
 		SetSortOrder(SortOrder);
 	}
-	else if (strcmp(PropertyName, "Target Filter") == 0)
+	else if (strcmp(PropertyName, "Target Static Mesh") == 0 ||
+		strcmp(PropertyName, "Target Receives Decal Only") == 0 ||
+		strcmp(PropertyName, "Exclude Same Owner") == 0)
 	{
+		SyncTargetFilterMaskFromOptions();
 		SetTargetFilter(TargetFilter);
 	}
 	else if (strcmp(PropertyName, "Draw Debug OBB") == 0)
@@ -333,14 +340,7 @@ void UDecalComponent::SetSortOrder(int32 Value)
 	}
 
 	SortOrder = Value;
-
-	/*
-		SortOrder는 geometry를 바꾸지는 않지만,
-		최종 draw 순서를 바꾸는 데 중요한 값이다.
-
-		현재는 단계 초기라 Dirty를 단순화해서 같은 플래그로 처리한다.
-	*/
-	MarkDecalDirty();
+	MarkProxyDirty(EDirtyFlag::Material);
 }
 
 void UDecalComponent::SetTargetFilter(int32 InFilter)
@@ -351,12 +351,38 @@ void UDecalComponent::SetTargetFilter(int32 InFilter)
 	}
 
 	TargetFilter = InFilter;
+	SyncTargetFilterOptionsFromMask();
 
 	/*
 		broad phase의 후보 primitive 집합이 달라지므로
 		이후 build 결과 전체가 달라질 수 있다.
 	*/
 	MarkDecalDirty();
+}
+
+void UDecalComponent::SyncTargetFilterMaskFromOptions()
+{
+	TargetFilter = DecalTarget_None;
+
+	if (bTargetStaticMeshComponent)
+	{
+		TargetFilter |= DecalTarget_StaticMeshComponent;
+	}
+	if (bTargetReceivesDecalOnly)
+	{
+		TargetFilter |= DecalTarget_ReceivesDecalOnly;
+	}
+	if (bExcludeSameOwner)
+	{
+		TargetFilter |= DecalTarget_ExcludeSameOwner;
+	}
+}
+
+void UDecalComponent::SyncTargetFilterOptionsFromMask()
+{
+	bTargetStaticMeshComponent = (TargetFilter & DecalTarget_StaticMeshComponent) != 0;
+	bTargetReceivesDecalOnly = (TargetFilter & DecalTarget_ReceivesDecalOnly) != 0;
+	bExcludeSameOwner = (TargetFilter & DecalTarget_ExcludeSameOwner) != 0;
 }
 
 void UDecalComponent::MarkDecalDirty()
