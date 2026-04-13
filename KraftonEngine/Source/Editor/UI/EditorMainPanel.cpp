@@ -9,6 +9,7 @@
 #include "Engine/Runtime/WindowsWindow.h"
 
 #include "ImGui/imgui.h"
+#include "ImGui/imgui_internal.h"
 #include "ImGui/imgui_impl_dx11.h"
 #include "ImGui/imgui_impl_win32.h"
 
@@ -17,6 +18,7 @@
 #include "WICTextureLoader.h"
 
 #include <utility>
+#include <cstring>
 
 #if STATS
 #include "Render/Culling/GPUOcclusionCulling.h"
@@ -319,11 +321,20 @@ void FEditorMainPanel::RenderEditorToolbar()
 		}
 		if (ImGui::BeginPopup("##PIEBarPlaceActorPopup"))
 		{
-			ImGui::BeginDisabled(true);
-			ImGui::Selectable("StaticMeshActor");
-			ImGui::Selectable("CameraActor");
-			ImGui::Selectable("PointLight");
-			ImGui::EndDisabled();
+			if (ImGui::MenuItem("Cube"))
+			{
+				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Cube))
+				{
+					FooterLogSystem.Push("Actor placed: Cube");
+				}
+			}
+			if (ImGui::MenuItem("Sphere"))
+			{
+				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Sphere))
+				{
+					FooterLogSystem.Push("Actor placed: Sphere");
+				}
+			}
 			ImGui::EndPopup();
 		}
 
@@ -421,7 +432,7 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 		return;
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(420.0f, 220.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(520.0f, 320.0f), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("Editor Debug", &bShowEditorDebugPanel))
 	{
 		ImGui::End();
@@ -432,9 +443,35 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 	ImGui::DragFloat("Camera Speed", &Settings.CameraSpeed, 0.1f, 0.1f, 32.0f, "%.1f");
 	ImGui::DragFloat("Camera Rotate Speed", &Settings.CameraRotationSpeed, 1.0f, 1.0f, 360.0f, "%.0f");
 	ImGui::DragFloat("Camera Zoom Speed", &Settings.CameraZoomSpeed, 1.0f, 10.0f, 2000.0f, "%.0f");
+	ImGui::Separator();
+	ImGui::Checkbox("Camera Smoothing", &Settings.bEnableCameraSmoothing);
+	ImGui::BeginDisabled(!Settings.bEnableCameraSmoothing);
+	ImGui::DragFloat("Move Smooth Speed", &Settings.CameraMoveSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
+	ImGui::DragFloat("Rotate Smooth Speed", &Settings.CameraRotateSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
+	ImGui::EndDisabled();
 
 	if (FLevelEditorViewportClient* ActiveVC = EditorEngine->GetActiveViewport())
 	{
+		if (UCameraComponent* ActiveCamera = ActiveVC->GetCamera())
+		{
+			ImGui::Separator();
+			float CameraFOV_Deg = ActiveCamera->GetFOV() * RAD_TO_DEG;
+			if (ImGui::DragFloat("Camera FOV", &CameraFOV_Deg, 0.5f, 1.0f, 170.0f, "%.1f"))
+			{
+				if (CameraFOV_Deg < 1.0f) CameraFOV_Deg = 1.0f;
+				if (CameraFOV_Deg > 170.0f) CameraFOV_Deg = 170.0f;
+				ActiveCamera->SetFOV(CameraFOV_Deg * DEG_TO_RAD);
+			}
+
+			float OrthoWidth = ActiveCamera->GetOrthoWidth();
+			if (ImGui::DragFloat("Ortho Height", &OrthoWidth, 0.1f, 0.1f, 5000.0f, "%.2f"))
+			{
+				if (OrthoWidth < 0.1f) OrthoWidth = 0.1f;
+				if (OrthoWidth > 5000.0f) OrthoWidth = 5000.0f;
+				ActiveCamera->SetOrthoWidth(OrthoWidth);
+			}
+		}
+
 		auto& ShowFlags = ActiveVC->GetRenderOptions().ShowFlags;
 		ImGui::Separator();
 		ImGui::Checkbox("Grid", &ShowFlags.bGrid);
@@ -490,7 +527,17 @@ void FEditorMainPanel::RenderMainMenuBar()
 		}
 
 		ImGui::Separator();
-		ImGui::MenuItem("Open Asset Folder", nullptr, false, false);
+		if (ImGui::MenuItem("Open Asset Folder"))
+		{
+			if (EditorEngine->OpenAssetFolder())
+			{
+				FooterLogSystem.Push("Asset folder opened");
+			}
+			else
+			{
+				FooterLogSystem.Push("Failed to open Asset folder");
+			}
+		}
 
 		ImGui::Separator();
 		ImGui::BeginDisabled(true);
@@ -650,6 +697,7 @@ void FEditorMainPanel::RenderShortcutOverlay()
 
 	DrawShortcutSection("▼ Gizmo", "ShortcutTable_Gizmo", {
 		{ "Mouse Left Drag", "기즈모 축 드래그 조작" },
+		{ "Q / W / E / R", "Select / Translate / Rotate / Scale 모드 전환" },
 		{ "Space", "기즈모 타입 순환" },
 		{ "X", "월드/로컬 기즈모 모드 전환" },
 	});

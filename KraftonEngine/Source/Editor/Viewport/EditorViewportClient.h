@@ -80,7 +80,9 @@ public:
 	const FRect& GetViewportScreenRect() const { return ViewportScreenRect; }
 
 	// ImDrawList에 자신의 SRV를 SWindow Rect 위치에 렌더 (활성 테두리 포함)
-	void RenderViewportImage(bool bIsActiveViewport);
+	void RenderViewportImage(bool bIsActiveViewport, bool bDrawActiveOutline = true);
+	void TriggerPIEStartOutlineFlash(float HoldSeconds = 1.0f, float FadeSeconds = 2.0f);
+	void ClearPIEStartOutlineFlash();
 	bool ProcessInput(FViewportInputContext& Context) override;
 	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
 	FEditorViewportController* GetInputController();
@@ -127,4 +129,8 @@ private:
 	std::unique_ptr<IEditorViewportInputContext> GizmoInputContext;
 	std::unique_ptr<IEditorViewportInputContext> SelectionInputContext;
 	std::unique_ptr<IEditorViewportInputContext> NavigationInputContext;
+	bool bPIEOutlineFlashActive = false;
+	float PIEOutlineFlashElapsed = 0.0f;
+	float PIEOutlineFlashHoldDuration = 0.5f;
+	float PIEOutlineFlashFadeDuration = 1.0f;
 };

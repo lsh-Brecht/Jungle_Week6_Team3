@@ -15,6 +15,7 @@ public:
 
 	void SetOwnerWindow(HWND InOwnerWindow) { OwnerWindow = InOwnerWindow; }
 	void SetImGuiCaptureState(bool bCaptureMouse, bool bCaptureKeyboard);
+	void SetForceViewportMouseBlock(bool bEnable) { bForceViewportMouseBlock = bEnable; }
 
 	void ClearTargets();
 	void RegisterTarget(
@@ -53,6 +54,7 @@ private:
 
 	bool bImGuiCaptureMouse = false;
 	bool bImGuiCaptureKeyboard = false;
+	bool bForceViewportMouseBlock = false;
 	uint64 InputFrameCounter = 0;
 	bool bRelativeMouseModeActive = false;
 	FViewport* RelativeMouseModeViewport = nullptr;

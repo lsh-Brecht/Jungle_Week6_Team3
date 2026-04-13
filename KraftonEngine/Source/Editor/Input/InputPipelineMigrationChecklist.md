@@ -14,7 +14,7 @@ Last Updated: 2026-04-11
 - [x] Priority-based context chain with first-consume
 - [x] Context split: `Command / Gizmo / Selection / Navigation`
 - [x] Chord mapping kept and expanded
-- [ ] Fine-tune consume precedence among overlapping contexts
+- [x] Fine-tune consume precedence among overlapping contexts
 
 ## 3) Tool / Mode / Controller
 
@@ -38,7 +38,9 @@ Last Updated: 2026-04-11
 - [x] Cursor lock/hide while relative mouse mode is active
 - [x] Raw mouse delta ingest (`WM_INPUT`) wired to input system
 - [x] PIE quick release shortcut (`Shift+F1`) path
-- [ ] PIE input ownership and capture UX tuning
+- [x] PIE input ownership and capture UX tuning
+  - [x] Keep relative-mouse ownership stable via router fallback to current relative viewport
+  - [x] Possessed/Eject LMB transition no longer collapses relative mode unexpectedly
 
 ## 5) Selection / Picking / Gizmo
 
@@ -49,9 +51,9 @@ Last Updated: 2026-04-11
 
 ## 6) Validation
 
-- [x] Previous Debug x64 build passed
+- [x] Debug x64 build passed (2026-04-12, post Load/Save API wiring)
 - [x] Previous Release x64 build passed
-- [ ] Rebuild after current batch edits (deferred by request)
+- [x] Rebuild after current batch edits
 - [ ] Multi-viewport manual validation
 - [ ] PIE focus switching validation
 - [ ] F8 rapid toggle stress pass
@@ -60,7 +62,9 @@ Last Updated: 2026-04-11
 
 1. Add additional editor modes and connect mode cycle UI hooks.
 2. Expand global command set needed by upcoming UI migration.
-   Note: `UEditorEngine` currently has no public `Load/Save` command entrypoints, so load/save bindings are blocked until API is exposed.
+   - [x] `UEditorEngine` public `Load/Save/SaveAs` entrypoints exposed and key-mapped (`Ctrl+O/S/Shift+Ctrl+S`)
+   - [x] File menu wired to real commands
+   - [x] Open Asset Folder follow-up UX polishing (error feedback)
 3. Tune PIE capture/focus transitions and camera feel.
 
 ## 8) Current Working Notes
@@ -74,3 +78,4 @@ Last Updated: 2026-04-11
 - [x] Cursor hide/lock behavior moved into dedicated `CursorControl` state utility and wired to router relative mode.
 - [x] ImGui mouse-capture now blocks editor-side LMB navigation acquire (prevents splitter-drag + camera-rotate dual consume).
 - [x] Marquee state ownership moved to `SelectionTool` (VC renders overlay by querying controller/mode tool state).
+- [x] Selection no longer consumes LMB navigation-drag release; thresholded left-drag nav keeps precedence.

@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "Editor/Input/EditorViewportInputMapping.h"
+#include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "Editor/Selection/SelectionManager.h"
 #include "Component/CameraComponent.h"
@@ -11,6 +12,8 @@
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Math/Matrix.h"
+#include "Math/MathUtils.h"
+#include "Engine/Runtime/WindowsWindow.h"
 #include "Viewport/Viewport.h"
 
 FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
@@ -28,9 +31,61 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 	}
 
 	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
-	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
+	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
 	{
 		return false;
+	}
+	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
+	{
+		return false;
+	}
+
+	auto GetLocalFromScreenEvent = [this](const POINT& InScreenPos, POINT& OutLocal) -> bool
+	{
+		if (!Owner)
+		{
+			return false;
+		}
+
+		POINT ClientPos = InScreenPos;
+		if (Owner->Window)
+		{
+			ScreenToClient(Owner->Window->GetHWND(), &ClientPos);
+		}
+
+		const FRect& ViewRect = Owner->GetViewportScreenRect();
+		if (ViewRect.Width <= 0.0f || ViewRect.Height <= 0.0f)
+		{
+			return false;
+		}
+
+		OutLocal.x = static_cast<LONG>(Clamp(
+			static_cast<float>(ClientPos.x) - ViewRect.X,
+			0.0f,
+			(std::max)(0.0f, ViewRect.Width - 1.0f)));
+		OutLocal.y = static_cast<LONG>(Clamp(
+			static_cast<float>(ClientPos.y) - ViewRect.Y,
+			0.0f,
+			(std::max)(0.0f, ViewRect.Height - 1.0f)));
+		return true;
+	};
+
+	for (const FInputEvent& Event : Context.Events)
+	{
+		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_LBUTTON)
+		{
+			POINT PressLocal = Context.MouseLocalPos;
+			if (GetLocalFromScreenEvent(Event.MouseScreenPos, PressLocal))
+			{
+				PendingSelectionPressLocal = PressLocal;
+			}
+			else
+			{
+				PendingSelectionPressLocal = Context.MouseLocalPos;
+			}
+			bHasPendingSelectionPress = true;
+			break;
+		}
 	}
 
 	bool bBoxAdditive = false;
@@ -49,6 +104,7 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 
 		if (Context.WasPointerDragStarted(EPointerButton::Left))
 		{
+			bHasPendingSelectionPress = false;
 			return true;
 		}
 	}
@@ -61,6 +117,7 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 		{
 			ApplySelectionMarquee(bSelectionMarqueeAdditive);
 			EndSelectionMarquee();
+			bHasPendingSelectionPress = false;
 			return true;
 		}
 		return true;
@@ -74,17 +131,30 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 	{
 		return false;
 	}
+	const bool bLeftNavigationDragActive = EditorViewportInputUtils::IsLeftNavigationDragActive(Context);
+	if (bLeftNavigationDragActive)
+	{
+		bHasPendingSelectionPress = false;
+		return false;
+	}
 	if (Context.WasPointerDragEnded(EPointerButton::Left))
 	{
-		return true;
+		bHasPendingSelectionPress = false;
+		return false;
 	}
 
-	float LocalMouseX = static_cast<float>(Context.MouseLocalPos.x);
-	float LocalMouseY = static_cast<float>(Context.MouseLocalPos.y);
+	POINT ClickLocal = Context.MouseLocalPos;
+	if (bHasPendingSelectionPress)
+	{
+		ClickLocal = PendingSelectionPressLocal;
+	}
+	float LocalMouseX = static_cast<float>(ClickLocal.x);
+	float LocalMouseY = static_cast<float>(ClickLocal.y);
 	float VPWidth = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetWidth()) : Owner->GetWindowWidth();
 	float VPHeight = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetHeight()) : Owner->GetWindowHeight();
 	const FRay Ray = Owner->GetCamera()->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
 	HandleSelectionClick(Ray);
+	bHasPendingSelectionPress = false;
 	return true;
 }
 

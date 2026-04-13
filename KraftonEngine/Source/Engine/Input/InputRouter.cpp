@@ -76,6 +76,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 {
 	InputSystem::Get().Tick();
 	InputSystem& Input = InputSystem::Get();
+	if (bForceViewportMouseBlock && bRelativeMouseModeActive)
+	{
+		DeactivateRelativeMouseMode();
+	}
+	const bool bHardBlockMouse = bForceViewportMouseBlock;
 
 	if (!OwnerWindow || Targets.empty())
 	{
@@ -161,10 +166,14 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		CapturedViewport = nullptr;
 	}
 
-	if (bImGuiCaptureMouse && !CapturedViewport && !HoveredEntry)
+	if ((bImGuiCaptureMouse && !CapturedViewport) || bHardBlockMouse)
 	{
 		bAnyPointerPressed = false;
 		bAnyPointerDown = false;
+		if (bHardBlockMouse)
+		{
+			CapturedViewport = nullptr;
+		}
 	}
 
 	if (bAnyPointerPressed && HoveredEntry)
@@ -193,6 +202,18 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 	{
 		TargetEntry = FindEntryByViewport(FocusedViewport, TargetRect);
 	}
+	if (!TargetEntry && bRelativeMouseModeActive && RelativeMouseModeViewport)
+	{
+		TargetEntry = FindEntryByViewport(RelativeMouseModeViewport, TargetRect);
+		if (TargetEntry)
+		{
+			FocusedViewport = RelativeMouseModeViewport;
+			if (bAnyPointerDown)
+			{
+				CapturedViewport = RelativeMouseModeViewport;
+			}
+		}
+	}
 	if (!TargetEntry)
 	{
 		if (bRelativeMouseModeActive)
@@ -205,6 +226,11 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 
 	OutContext = {};
 	OutBinding = {};
+	const bool bViewportOwnsKeyboard =
+		(CapturedViewport == TargetEntry->Viewport)
+		|| (HoveredViewport == TargetEntry->Viewport)
+		|| (bRelativeMouseModeActive && RelativeMouseModeViewport == TargetEntry->Viewport);
+	const bool bBlockKeyboardForViewport = bImGuiCaptureKeyboard && !bViewportOwnsKeyboard;
 
 	FInputFrame Frame;
 	Frame.FrameNumber = ++InputFrameCounter;
@@ -223,7 +249,7 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		Frame.KeyDown[VK] = Input.GetKey(VK);
 	}
 
-	if (bImGuiCaptureKeyboard)
+	if (bBlockKeyboardForViewport)
 	{
 		for (int32 VK = 0; VK < 256; ++VK)
 		{
@@ -253,6 +279,8 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 	OutContext.bImGuiCapturedKeyboard = bImGuiCaptureKeyboard;
 	OutContext.bRelativeMouseMode = bRelativeMouseModeActive && (RelativeMouseModeViewport == TargetEntry->Viewport);
 
+	// ImGui가 마우스를 소비 중이면(relative 제외) viewport 마우스 상태를 강제로 비활성화한다.
+	// 이벤트뿐 아니라 Frame(KeyDown/Dragging) 기반 입력도 차단해야 드래그/다운 트리거가 새지 않는다.
 	POINT RestoreScreenPos = OutContext.Frame.MouseScreenPos;
 	const bool bWantsRelativeMouseMode = TargetEntry->Client->WantsRelativeMouseMode(OutContext, RestoreScreenPos);
 	const bool bRelativeViewportMismatch = bRelativeMouseModeActive && (RelativeMouseModeViewport != TargetEntry->Viewport);
@@ -362,23 +390,54 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		OutContext.Events.push_back(E);
 	}
 
-	if (bImGuiCaptureKeyboard || (bImGuiCaptureMouse && !OutContext.bCaptured && !OutContext.bHovered))
+	const bool bBlockMouseForViewport = bHardBlockMouse || (bImGuiCaptureMouse && !OutContext.bCaptured);
+	if (bBlockKeyboardForViewport || bBlockMouseForViewport)
 	{
+		if (bBlockMouseForViewport)
+		{
+			OutContext.Frame.KeyDown[VK_LBUTTON] = false;
+			OutContext.Frame.KeyDown[VK_RBUTTON] = false;
+			OutContext.Frame.KeyDown[VK_MBUTTON] = false;
+			OutContext.Frame.KeyDown[VK_XBUTTON1] = false;
+			OutContext.Frame.KeyDown[VK_XBUTTON2] = false;
+			OutContext.Frame.bLeftDragging = false;
+			OutContext.Frame.bRightDragging = false;
+			OutContext.Frame.LeftDragVector = { 0, 0 };
+			OutContext.Frame.RightDragVector = { 0, 0 };
+			OutContext.Frame.WheelNotches = 0.0f;
+			OutContext.Frame.MouseDelta = { 0, 0 };
+			OutContext.MouseLocalDelta = { 0, 0 };
+		}
+
 		OutContext.Events.erase(
 			std::remove_if(
 				OutContext.Events.begin(),
 				OutContext.Events.end(),
-				[](const FInputEvent& Event)
+				[bBlockKeyboardForViewport, bBlockMouseForViewport](const FInputEvent& Event)
 				{
-					if (Event.Type == EInputEventType::WheelScrolled)
+					if (bBlockMouseForViewport)
+					{
+						if (Event.Type == EInputEventType::WheelScrolled)
+						{
+							return true;
+						}
+						if (Event.Type == EInputEventType::PointerDragStarted || Event.Type == EInputEventType::PointerDragEnded)
+						{
+							return true;
+						}
+						if ((Event.Type == EInputEventType::KeyPressed || Event.Type == EInputEventType::KeyReleased) && IsMouseButtonKey(Event.Key))
+						{
+							return true;
+						}
+					}
+
+					if (bBlockKeyboardForViewport
+						&& (Event.Type == EInputEventType::KeyPressed || Event.Type == EInputEventType::KeyReleased)
+						&& !IsMouseButtonKey(Event.Key))
 					{
 						return true;
 					}
-					if (Event.Type == EInputEventType::PointerDragStarted || Event.Type == EInputEventType::PointerDragEnded)
-					{
-						return true;
-					}
-					return !IsMouseButtonKey(Event.Key);
+					return false;
 				}),
 			OutContext.Events.end());
 	}

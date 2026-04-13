@@ -93,7 +93,7 @@ namespace InputBindingUtils
 		int32& OutActionId)
 	{
 		bool bFound = false;
-		int32 BestPriority = std::numeric_limits<int32>::min();
+		int32 BestPriority = (std::numeric_limits<int32>::min)();
 		int32 BestActionId = 0;
 
 		for (const int32 CandidateActionId : CandidateActionIds)

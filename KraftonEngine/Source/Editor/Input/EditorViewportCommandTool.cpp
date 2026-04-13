@@ -5,6 +5,7 @@
 #include "Editor/Input/EditorNavigationTool.h"
 #include "Editor/Input/EditorViewportController.h"
 #include "Editor/Input/EditorViewportInputMapping.h"
+#include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Selection/SelectionManager.h"
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "Engine/Runtime/Engine.h"
@@ -40,6 +41,7 @@ TArray<int32> GetCommandActionCandidates()
 		static_cast<int32>(EAction::SetModeRotate),
 		static_cast<int32>(EAction::SetModeScale),
 		static_cast<int32>(EAction::CycleGizmoMode),
+		static_cast<int32>(EAction::ToggleCoordinateSpace),
 		static_cast<int32>(EAction::FocusSelection),
 		static_cast<int32>(EAction::DeleteSelection),
 		static_cast<int32>(EAction::SelectAll),
@@ -75,6 +77,24 @@ bool FEditorViewportCommandTool::HandleInput(float DeltaTime)
 	}
 
 	const EAction Action = static_cast<EAction>(TriggeredActionId);
+	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
+	const bool bMouseNavigationActive =
+		EditorViewportInputMapping::IsTriggered(Context, EAction::NavLookRightDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavLookMiddleDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavOrbitAltLeftDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavDollyAltRightDown)
+		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavPanAltMiddleDown)
+		|| EditorViewportInputUtils::IsLeftNavigationDragActive(Context);
+
+	if (bMouseNavigationActive
+		&& (Action == EAction::SetModeSelect
+			|| Action == EAction::SetModeTranslate
+			|| Action == EAction::SetModeRotate
+			|| Action == EAction::SetModeScale))
+	{
+		return false;
+	}
+
 	switch (Action)
 	{
 	case EAction::CycleMode:
@@ -89,6 +109,8 @@ bool FEditorViewportCommandTool::HandleInput(float DeltaTime)
 		return SetMode(EEditorViewportModeType::Scale);
 	case EAction::CycleGizmoMode:
 		return TryCycleGizmoMode();
+	case EAction::ToggleCoordinateSpace:
+		return TryToggleCoordinateSpace();
 	case EAction::FocusSelection:
 		return FocusPrimarySelection();
 	case EAction::DeleteSelection:
@@ -112,7 +134,39 @@ bool FEditorViewportCommandTool::HandleInput(float DeltaTime)
 
 bool FEditorViewportCommandTool::SetMode(EEditorViewportModeType InModeType)
 {
-	return Controller ? Controller->SetMode(InModeType) : false;
+	if (!Controller || !Owner)
+	{
+		return false;
+	}
+
+	if (!Controller->SetMode(InModeType))
+	{
+		return false;
+	}
+
+	UGizmoComponent* Gizmo = Owner->GetGizmo();
+	switch (InModeType)
+	{
+	case EEditorViewportModeType::Select:
+		Owner->GetRenderOptions().ShowFlags.bGizmo = false;
+		break;
+	case EEditorViewportModeType::Translate:
+		Owner->GetRenderOptions().ShowFlags.bGizmo = true;
+		if (Gizmo) Gizmo->SetTranslateMode();
+		break;
+	case EEditorViewportModeType::Rotate:
+		Owner->GetRenderOptions().ShowFlags.bGizmo = true;
+		if (Gizmo) Gizmo->SetRotateMode();
+		break;
+	case EEditorViewportModeType::Scale:
+		Owner->GetRenderOptions().ShowFlags.bGizmo = true;
+		if (Gizmo) Gizmo->SetScaleMode();
+		break;
+	default:
+		break;
+	}
+
+	return true;
 }
 
 bool FEditorViewportCommandTool::FocusPrimarySelection()
@@ -280,9 +334,16 @@ bool FEditorViewportCommandTool::TryCycleGizmoMode()
 	}
 
 	Owner->GetGizmo()->SetNextMode();
-	if (Controller)
+	return SetMode(ToModeType(Owner->GetGizmo()->GetMode()));
+}
+
+bool FEditorViewportCommandTool::TryToggleCoordinateSpace()
+{
+	if (!Owner || !Owner->GetGizmo())
 	{
-		Controller->SetMode(ToModeType(Owner->GetGizmo()->GetMode()));
+		return false;
 	}
+
+	Owner->GetGizmo()->ToggleWorldSpace();
 	return true;
 }

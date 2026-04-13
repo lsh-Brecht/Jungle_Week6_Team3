@@ -20,6 +20,12 @@ class FEditorViewportClient;
 class FOverlayStatSystem;
 class UGameViewportClient;
 
+enum class EEditorPlaceActorType : uint8
+{
+	Cube,
+	Sphere
+};
+
 class UEditorEngine : public UEngine
 {
 public:
@@ -47,6 +53,9 @@ public:
 	bool SaveScene();
 	bool SaveSceneAsWithDialog();
 	bool SaveSceneAs(const FString& InSceneName);
+	bool OpenAssetFolder() const;
+	bool PlaceActor(EEditorPlaceActorType InActorType, int32 InCount = 1);
+	bool PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType, int32 InClientX, int32 InClientY, int32 InCount = 1);
 	bool HasCurrentLevelFilePath() const { return !CurrentLevelFilePath.empty(); }
 	const FString& GetCurrentLevelFilePath() const { return CurrentLevelFilePath; }
 
@@ -128,5 +137,7 @@ private:
 	EPIEControlMode PIEControlMode = EPIEControlMode::Possessed;
 	FLevelEditorViewportClient* PIEEntryViewportClient = nullptr;
 	bool bSavedEntryViewportGizmo = true;
+	bool bHadAnyPopupOpenLastFrame = false;
+	bool bSuppressViewportMouseUntilButtonsReleased = false;
 	FString CurrentLevelFilePath;
 };

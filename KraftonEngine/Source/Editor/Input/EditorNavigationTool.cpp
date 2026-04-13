@@ -25,7 +25,11 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 	}
 
 	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
-	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
+	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
+	{
+		return false;
+	}
+	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
 	{
 		return false;
 	}
@@ -36,10 +40,16 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 	const bool bAltOrbit = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavOrbitAltLeftDown);
 	const bool bAltDolly = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavDollyAltRightDown);
 	const bool bAltPan = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavPanAltMiddleDown);
-	const bool bRightLook = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookRightDown);
-	const bool bMiddlePan = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookMiddleDown);
+	const bool bRightHeld = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookRightDown);
+	const bool bRightLook = bRightHeld
+		&& !bGizmoDragging
+		&& (Context.Frame.bRightDragging || Context.WasPointerDragStarted(EPointerButton::Right) || Context.bRelativeMouseMode);
+	const bool bMiddlePan = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookMiddleDown) && !bGizmoDragging;
 	const bool bLeftDragLook = EditorViewportInputUtils::IsLeftNavigationDragActive(Context) && !bGizmoDragging;
-	const bool bAnyMouseNav = bAltOrbit || bAltDolly || bAltPan || bRightLook || bMiddlePan || bLeftDragLook;
+	const bool bLeftHeld = Context.Frame.IsDown(VK_LBUTTON);
+	const bool bLeftHeldFlyMove = bLeftHeld && !bGizmoDragging && !Context.Frame.IsAltDown() && !Context.Frame.IsCtrlDown();
+	const bool bLeftHeldLook = bLeftHeldFlyMove && Context.bRelativeMouseMode;
+	const bool bAnyMouseNav = bAltOrbit || bAltDolly || bAltPan || bRightLook || bMiddlePan || bLeftDragLook || bLeftHeldFlyMove;
 	const bool bKeyboardBlocked = Context.bImGuiCapturedKeyboard && !bAnyMouseNav;
 
 	UCameraComponent* Camera = Owner->GetCamera();
@@ -78,7 +88,7 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 	if (!bIsOrtho)
 	{
 		FVector Move = FVector(0.0f, 0.0f, 0.0f);
-		const bool bAllowFlyMove = (bRightLook || bAltOrbit || bLeftDragLook) && !bKeyboardBlocked;
+		const bool bAllowFlyMove = (bRightLook || bAltOrbit || bLeftDragLook || bLeftHeldFlyMove) && !bKeyboardBlocked;
 		if (bAllowFlyMove)
 		{
 			if (EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavMoveForward)) Move.X += CameraSpeed;
@@ -112,6 +122,7 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 			bConsumed = true;
 		}
 
+		const bool bBypassRotationSmoothing = bAltOrbit || bMiddlePan || bAltPan;
 		if (bAltOrbit)
 		{
 			FVector Pivot = Camera->GetWorldLocation() + Camera->GetForwardVector() * 10.0f;
@@ -139,7 +150,7 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 				if (EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavRotateRight)) DeltaYaw += AngleVelocity * DeltaTime;
 			}
 
-			if ((bRightLook || bLeftDragLook) && !bAltDolly && !bAltPan)
+			if ((bRightLook || bLeftDragLook || bLeftHeldLook) && !bAltDolly && !bAltPan)
 			{
 				const float MouseLookScale = 0.15f * RotateSensitivity;
 				DeltaYaw += DeltaX * MouseLookScale;
@@ -152,13 +163,15 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 				bConsumed = true;
 			}
 		}
+
+		ApplyCameraSmoothing(DeltaTime, bBypassRotationSmoothing);
 	}
 	else
 	{
 		if (bMiddlePan || bAltPan || bRightLook)
 		{
 			const float PanScale = CameraState.OrthoWidth * 0.002f * MoveSensitivity;
-			Camera->MoveLocal(FVector(0.0f, -DeltaX * PanScale, DeltaY * PanScale));
+			AddCameraMoveInputLocal(FVector(0.0f, -DeltaX * PanScale, DeltaY * PanScale));
 			if (DeltaX != 0.0f || DeltaY != 0.0f)
 			{
 				bConsumed = true;
@@ -179,10 +192,9 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 			Camera->SetOrthoWidth(Clamp(NextWidth, 0.1f, 5000.0f));
 			bConsumed = true;
 		}
-	}
 
-	Camera->SetWorldLocation(CameraTargetLocation);
-	Camera->SetRelativeRotation(CameraTargetRotation);
+		ApplyCameraSmoothing(DeltaTime, true);
+	}
 	return bConsumed;
 }
 
@@ -237,6 +249,50 @@ void FEditorNavigationTool::SyncCameraTargetFromCurrent()
 	CameraTargetLocation = Owner->GetCamera()->GetWorldLocation();
 	CameraTargetRotation = Owner->GetCamera()->GetRelativeRotation();
 	bCameraTargetInitialized = true;
+}
+
+void FEditorNavigationTool::ApplyCameraSmoothing(float DeltaTime, bool bBypassSmoothing)
+{
+	if (!Owner || !Owner->GetCamera())
+	{
+		return;
+	}
+
+	UCameraComponent* Camera = Owner->GetCamera();
+	if (!bCameraTargetInitialized)
+	{
+		SyncCameraTargetFromCurrent();
+	}
+
+	const FEditorSettings* Settings = Owner->GetSettings();
+	const bool bEnableSmoothing = Settings ? Settings->bEnableCameraSmoothing : true;
+	if (bBypassSmoothing || !bEnableSmoothing)
+	{
+		Camera->SetWorldLocation(CameraTargetLocation);
+		Camera->SetRelativeRotation(CameraTargetRotation);
+		return;
+	}
+
+	const float MoveSmoothSpeed = Clamp(Settings ? Settings->CameraMoveSmoothSpeed : 4.0f, 0.01f, 100.0f);
+	const float RotateSmoothSpeed = Clamp(Settings ? Settings->CameraRotateSmoothSpeed : 2.0f, 0.01f, 100.0f);
+	const float MoveAlpha = 1.0f - std::exp(-MoveSmoothSpeed * DeltaTime);
+	const float RotateAlpha = 1.0f - std::exp(-RotateSmoothSpeed * DeltaTime);
+
+	const FVector CurrentLocation = Camera->GetWorldLocation();
+	const FVector NextLocation = CurrentLocation + (CameraTargetLocation - CurrentLocation) * MoveAlpha;
+	Camera->SetWorldLocation(NextLocation);
+
+	FRotator CurrentRotation = Camera->GetRelativeRotation();
+	CurrentRotation.Yaw = InterpAngle(CurrentRotation.Yaw, CameraTargetRotation.Yaw, RotateAlpha);
+	CurrentRotation.Pitch = InterpAngle(CurrentRotation.Pitch, CameraTargetRotation.Pitch, RotateAlpha);
+	CurrentRotation.Roll = 0.0f;
+	Camera->SetRelativeRotation(CurrentRotation);
+}
+
+float FEditorNavigationTool::InterpAngle(float Current, float Target, float Alpha) const
+{
+	const float Delta = std::fmod(Target - Current + 540.0f, 360.0f) - 180.0f;
+	return Current + Delta * Alpha;
 }
 
 FRotator FEditorNavigationTool::MakeLookAtRotation(const FVector& From, const FVector& To) const

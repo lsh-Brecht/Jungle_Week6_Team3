@@ -1,6 +1,6 @@
 # Week05 -> Week06 UI Migration Matrix
 
-Last Updated: 2026-04-11
+Last Updated: 2026-04-12
 
 ## Scope
 
@@ -23,16 +23,18 @@ Last Updated: 2026-04-11
   - Notes: Added reusable drawer methods and backtick char filter.
 
 - `EditorMainPanel` UX features
-  - Status: `Partially migrated (Round 2)`
+  - Status: `Partially migrated (Round 3)`
   - Migrated:
     - Main menu bar (`File/View/Help`)
     - Shortcut overlay modal (table layout from Week05)
     - Footer console bar
     - Animated console drawer
     - Footer timed notification line
+    - File commands wired (`New/Load/Save/SaveAs`)
+    - Footer right-side level path (`Level: <path>` / `Unsaved`)
   - Deferred:
     - Full Week05 toolbar replica (Week06 already uses viewport play toolbar)
-    - Footer timed notification queue (needs dedicated log subsystem)
+    - Fine pixel-parity tuning for spacing/hover/overflow
 
 ## Migration Buckets
 
@@ -42,7 +44,7 @@ Last Updated: 2026-04-11
   - View toggles in menu
 
 - Adapter required
-  - File menu features that need engine API (`Load/Save` public entrypoints)
+  - Open asset folder UX/error handling polish
   - Footer notification queue lifecycle
 
 - Keep Week06 native
@@ -51,6 +53,6 @@ Last Updated: 2026-04-11
 
 ## Next Batch
 
-1. Add footer notification subsystem (`EditorFooterLogSystem`) and hook key actions (new/load/save/PIE toggle).
-2. Add API-backed File menu commands once public editor engine entrypoints are exposed.
-3. Unify command labels/shortcut docs with current input mapping (`EditorViewportInputMapping`).
+1. Unify command labels/shortcut docs with current input mapping (`EditorViewportInputMapping`).
+2. Complete Week05-style viewport toolbar behavior parity (state + interaction edge cases).
+3. Manual multi-viewport/PIE regression pass and visual parity screenshot sweep.

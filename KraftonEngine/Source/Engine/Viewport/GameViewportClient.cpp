@@ -55,7 +55,10 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 	{
 		bPIEInputArmed = true;
 	}
-	if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_LBUTTON) && !Context.bHovered)
+	if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_LBUTTON)
+		&& !Context.bHovered
+		&& !Context.bCaptured
+		&& !Context.bRelativeMouseMode)
 	{
 		bPIEInputArmed = false;
 	}
@@ -144,7 +147,7 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 bool UGameViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
 {
 	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
-	if (Context.bImGuiCapturedMouse)
+	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
 	{
 		return false;
 	}

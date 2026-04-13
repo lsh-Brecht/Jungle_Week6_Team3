@@ -145,6 +145,17 @@ void FEditorViewportClient::SetViewportSize(float InWidth, float InHeight)
 
 void FEditorViewportClient::Tick(float DeltaTime)
 {
+	if (bPIEOutlineFlashActive)
+	{
+		PIEOutlineFlashElapsed += DeltaTime;
+		const float TotalDuration = PIEOutlineFlashHoldDuration + PIEOutlineFlashFadeDuration;
+		if (PIEOutlineFlashElapsed >= TotalDuration)
+		{
+			bPIEOutlineFlashActive = false;
+			PIEOutlineFlashElapsed = 0.0f;
+		}
+	}
+
 	if (!bIsActive || !bHasRoutedInputContext)
 	{
 		return;
@@ -300,8 +311,29 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 	{
 		return false;
 	}
+	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
+	{
+		return false;
+	}
 
-	bool bGizmoBlocksLeftRelativeDrag = Gizmo && (Gizmo->IsHolding() || Gizmo->IsPressedOnHandle());
+	bool bGizmoBlocksLeftRelativeDrag = Gizmo && (Gizmo->IsHolding() || Gizmo->IsPressedOnHandle() || Gizmo->IsHovered());
+	const bool bGizmoInteractionActive = Gizmo && (Gizmo->IsHolding() || Gizmo->IsPressedOnHandle());
+	if (bGizmoInteractionActive)
+	{
+		return false;
+	}
+	const bool bLeftLookChord = Context.Frame.IsDown(VK_LBUTTON) && !Context.Frame.IsAltDown() && !Context.Frame.IsCtrlDown();
+
+	// LMB 네비게이션 relative 유지 중에는 gizmo hover 재검사로 모드가 흔들리지 않도록 유지 우선.
+	if (Context.bRelativeMouseMode && bLeftLookChord)
+	{
+		if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
+		{
+			return false;
+		}
+		return true;
+	}
+
 	if (!bGizmoBlocksLeftRelativeDrag
 		&& Gizmo
 		&& Context.Frame.IsDown(VK_LBUTTON))
@@ -316,6 +348,9 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 	}
 
 	const bool bLeftRelativeDrag = EditorViewportInputUtils::IsLeftNavigationDragActive(Context) && !bGizmoBlocksLeftRelativeDrag;
+	const bool bRightHeld = EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookRightDown);
+	const bool bRightLookDrag = bRightHeld
+		&& (Context.Frame.bRightDragging || Context.WasPointerDragStarted(EPointerButton::Right) || Context.bRelativeMouseMode);
 	const bool bMouseOwnedByViewport = Context.bCaptured || Context.bHovered || Context.bRelativeMouseMode;
 	if (!bMouseOwnedByViewport)
 	{
@@ -324,12 +359,12 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 
 	// ImGui가 마우스를 캡처 중이면 상대 마우스 신규 진입을 허용하지 않는다.
 	// 이미 relative 모드로 들어간 상태에서만 유지를 허용.
-	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
+	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bRelativeMouseMode && !Context.bHovered)
 	{
 		return false;
 	}
 
-	return EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookRightDown)
+	return bRightLookDrag
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavLookMiddleDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavOrbitAltLeftDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavDollyAltRightDown)
@@ -356,7 +391,7 @@ void FEditorViewportClient::UpdateLayoutRect()
 	}
 }
 
-void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport)
+void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport, bool bDrawActiveOutline)
 {
 	if (!Viewport || !Viewport->GetSRV()) return;
 
@@ -366,13 +401,27 @@ void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport)
 	ImDrawList* DrawList = ImGui::GetWindowDrawList();
 	ImVec2 Min(R.X, R.Y);
 	ImVec2 Max(R.X + R.Width, R.Y + R.Height);
+	constexpr float ToolbarBorderOffsetY = 34.0f;
+	const ImVec2 OutlineMin(R.X, R.Y + ToolbarBorderOffsetY);
 
 	DrawList->AddImage((ImTextureID)Viewport->GetSRV(), Min, Max);
 
 	// 활성 뷰포트 테두리 강조
-	if (bIsActiveViewport)
+	if (bIsActiveViewport && bDrawActiveOutline)
 	{
-		DrawList->AddRect(Min, Max, IM_COL32(255, 200, 0, 200), 0.0f, 0, 2.0f);
+		DrawList->AddRect(OutlineMin, Max, IM_COL32(255, 200, 0, 200), 0.0f, 0, 2.0f);
+	}
+
+	if (bPIEOutlineFlashActive && PIEOutlineFlashFadeDuration > 0.0f)
+	{
+		float Alpha01 = 1.0f;
+		if (PIEOutlineFlashElapsed > PIEOutlineFlashHoldDuration)
+		{
+			const float FadeElapsed = PIEOutlineFlashElapsed - PIEOutlineFlashHoldDuration;
+			Alpha01 = 1.0f - Clamp(FadeElapsed / PIEOutlineFlashFadeDuration, 0.0f, 1.0f);
+		}
+		const int32 Alpha = static_cast<int32>(Alpha01 * 255.0f);
+		DrawList->AddRect(OutlineMin, Max, IM_COL32(80, 255, 120, Alpha), 0.0f, 0, 3.0f);
 	}
 
 	POINT MarqueeStart = { 0, 0 };
@@ -392,4 +441,18 @@ void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport)
 		DrawList->AddRectFilled(ImVec2(Left, Top), ImVec2(Right, Bottom), IM_COL32(255, 255, 255, 48));
 		DrawList->AddRect(ImVec2(Left, Top), ImVec2(Right, Bottom), IM_COL32(255, 255, 255, 210), 0.0f, 0, 1.5f);
 	}
+}
+
+void FEditorViewportClient::TriggerPIEStartOutlineFlash(float HoldSeconds, float FadeSeconds)
+{
+	PIEOutlineFlashHoldDuration = HoldSeconds > 0.0f ? HoldSeconds : 1.0f;
+	PIEOutlineFlashFadeDuration = FadeSeconds > 0.0f ? FadeSeconds : 2.0f;
+	PIEOutlineFlashElapsed = 0.0f;
+	bPIEOutlineFlashActive = true;
+}
+
+void FEditorViewportClient::ClearPIEStartOutlineFlash()
+{
+	bPIEOutlineFlashActive = false;
+	PIEOutlineFlashElapsed = 0.0f;
 }

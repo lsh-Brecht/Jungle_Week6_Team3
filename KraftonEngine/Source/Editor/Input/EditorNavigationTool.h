@@ -19,6 +19,8 @@ public:
 
 private:
 	void SyncCameraTargetFromCurrent();
+	void ApplyCameraSmoothing(float DeltaTime, bool bBypassSmoothing);
+	float InterpAngle(float Current, float Target, float Alpha) const;
 	FRotator MakeLookAtRotation(const FVector& From, const FVector& To) const;
 	void AddCameraMoveInputLocal(const FVector& DeltaLocal);
 	void AddCameraRotateInput(float DeltaYaw, float DeltaPitch);

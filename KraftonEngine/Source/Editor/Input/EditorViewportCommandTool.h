@@ -23,6 +23,7 @@ private:
 	bool SaveSceneAs();
 	bool DuplicateSelection();
 	bool TryCycleGizmoMode();
+	bool TryToggleCoordinateSpace();
 
 	FEditorViewportClient* Owner = nullptr;
 	FEditorViewportController* Controller = nullptr;

@@ -29,5 +29,6 @@ private:
 	bool bSelectionMarqueeAdditive = false;
 	POINT SelectionMarqueeStartLocal = { 0, 0 };
 	POINT SelectionMarqueeCurrentLocal = { 0, 0 };
+	bool bHasPendingSelectionPress = false;
+	POINT PendingSelectionPressLocal = { 0, 0 };
 };
-
