@@ -21,6 +21,12 @@ public:
 		TArray<FDecalSourceTriangle>& OutTriangles,
 		FDecalTriangleGatherStats* OutStats = nullptr);
 
+	static void TransformTrianglesToDecalLocal(
+		const UDecalComponent& DecalComponent,
+		const TArray<FDecalSourceTriangle>& SourceTriangles,
+		TArray<FDecalLocalTriangle>& OutLocalTriangles,
+		FDecalTransformStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,

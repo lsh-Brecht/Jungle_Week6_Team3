@@ -57,3 +57,25 @@ struct FDecalTriangleGatherStats
 	int32 GatheredTriangleCount = 0;
 	int32 SkippedInvalidTriangleCount = 0;
 };
+
+struct FDecalLocalTriangle
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	FVector DecalPositions[3];
+
+	FVector DecalFaceNormmal;
+};
+
+struct FDecalTransformStats
+{
+	int32 SourceTriangleCount = 0;
+	int32 TransformedTriangleCount = 0;
+};

@@ -9,6 +9,23 @@
 #include "Mesh/StaticMeshAsset.h"
 #include "Object/Object.h"
 
+namespace
+{
+	FVector ComputeTriangleNormal(const FVector& A, const FVector& B, const FVector& C)
+	{
+		const FVector Edge01 = B - A;
+		const FVector Edge02 = C - A;
+
+		FVector N = Edge01.Cross(Edge02);
+		const float Len = N.Length();
+		if (Len > 0.000001f)
+		{
+			N /= Len;
+		}
+		return N;
+	}
+}
+
 bool FDecalMeshBuilder::PassTargetFilter(
 	const UDecalComponent& DecalComponent,
 	const UPrimitiveComponent* Primitive)
@@ -121,7 +138,7 @@ void FDecalMeshBuilder::GatherBroadPhaseCandidates(
 	}
 }
 
-void GatherBruteForceTriangles(
+void FDecalMeshBuilder::GatherBruteForceTriangles(
 	const TArray<FDecalPrimitiveCandidate>& Candidates,
 	TArray<FDecalSourceTriangle>& OutTriangles,
 	FDecalTriangleGatherStats* OutStats)
@@ -181,6 +198,50 @@ void GatherBruteForceTriangles(
 			OutTriangles.push_back(Triangle);
 			++LocalStats.GatheredTriangleCount;
 		}
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::TransformTrianglesToDecalLocal(
+	const UDecalComponent& DecalComponent,
+	const TArray<FDecalSourceTriangle>& SourceTriangles,
+	TArray<FDecalLocalTriangle>& OutLocalTriangles,
+	FDecalTransformStats* OutStats)
+{
+	OutLocalTriangles.clear();
+
+	FDecalTransformStats LocalStats;
+	LocalStats.SourceTriangleCount = static_cast<int32>(SourceTriangles.size());
+
+	const FMatrix WorldToDecal = DecalComponent.GetWorldToDecalMatrix();
+
+	for (const FDecalSourceTriangle& SourceTriangle : SourceTriangles)
+	{
+		const FMatrix MeshToDecal = SourceTriangle.MeshToWorld * WorldToDecal;
+
+		FDecalLocalTriangle LocalTriangle;
+		LocalTriangle.OwnerActor = SourceTriangle.OwnerActor;
+		LocalTriangle.StaticMeshComponent = SourceTriangle.StaticMeshComponent;
+		LocalTriangle.TriangleStartIndex = SourceTriangle.TriangleStartIndex;
+		LocalTriangle.MeshToWorld = SourceTriangle.MeshToWorld;
+		LocalTriangle.WorldToMesh = SourceTriangle.WorldToMesh;
+		LocalTriangle.MeshToDecal = MeshToDecal;
+
+		LocalTriangle.DecalPositions[0] = MeshToDecal.TransformPositionWithW(SourceTriangle.LocalPositions[0]);
+		LocalTriangle.DecalPositions[1] = MeshToDecal.TransformPositionWithW(SourceTriangle.LocalPositions[1]);
+		LocalTriangle.DecalPositions[2] = MeshToDecal.TransformPositionWithW(SourceTriangle.LocalPositions[2]);
+
+		LocalTriangle.DecalFaceNormmal = ComputeTriangleNormal(
+			LocalTriangle.DecalPositions[0],
+			LocalTriangle.DecalPositions[1],
+			LocalTriangle.DecalPositions[2]);
+
+		OutLocalTriangles.push_back(LocalTriangle);
+		++LocalStats.TransformedTriangleCount;
 	}
 
 	if (OutStats)
