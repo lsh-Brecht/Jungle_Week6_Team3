@@ -305,6 +305,7 @@
     <ClCompile Include="Source\Engine\Component\ActorComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\BillboardComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\CameraComponent.cpp" />
+    <ClCompile Include="Source\Engine\Component\DecalComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\ExponentialHeightFogComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\FireBallComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\GizmoComponent.cpp" />

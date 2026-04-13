@@ -1,48 +1,116 @@
 ﻿#pragma once
-#include "Component/SceneComponent.h"
+#include "Component/PrimitiveComponent.h"
 
 class UMaterialInterface;
-class FDeferredDecalProxy;
+class FArchive;
 
-class UDecalComponent : public USceneComponent
+enum EDecalTargetFilterBits : int32
+{
+	DecalTarget_None = 0,
+	DecalTarget_StaticMeshComponent = 1 << 0,
+	DecalTarget_AllPrimitive = 1 << 1,
+};
+
+class UDecalComponent : public UPrimitiveComponent
 {
 public:
-	DECLARE_CLASS(UDecalComponent, USceneComponent)
+	DECLARE_CLASS(UDecalComponent, UPrimitiveComponent)
+	
+	UDecalComponent() = default;
+	~UDecalComponent() override = default;
 
-	// 렌더링 순서 제어 (겹친 데칼 처리용)
-	//UPROPERTY() int32 SortOrder;
+	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
+	void PostEditProperty(const char* PropertyName) override;
+	/*
+	* EditorRenderPipeline은 선택된 Actor의 Component들에 대해
+	* CollectEditorVisualizations()를 호출해주므로,
+	* SceneProxy 없이도 OBB wireframe 화면에 올릴 수 있음.
+	*/
+	void CollectEditorVisualizations(FRenderBus& RenderBus) const override;
 
-	// 데칼의 크기 (X: 투영 깊이/Forward, Y: 너비, Z: 높이)
-	//UPROPERTY() FVector DecalSize;
+	void Serialize(FArchive& AR) override;
+	void PostDuplicate() override;
 
-	// 머티리얼에 넘겨줄 데칼 컬러
-	//UPROPERTY() FLinearColor DecalColor;
+public:
+	/*
+	* geometry rebuild가 필요한가 를 나타내는 flag.
+	* 초기 단계 (Material / Sort / Filter / Size 변경 모두 하나의 Dirty로 묶음)
+	* 나중 (GeometryDirty / MaterialDirty / SortDirty 분리)
+	*/
+	void MarkDecalDirty();
+	void ClearDecalDirty() { bDecalDirty = false; }
+	bool IsDecalDirty() const { return bDecalDirty; }
 
-	// 페이드 아웃 관련 데이터
-	//UPROPERTY() float FadeStartDelay;
-	//UPROPERTY() float FadeDuration;
-	//UPROPERTY() uint8 bDestroyOwnerAfterFade : 1;
+	/*
+	* 지금은 실제 렌더 메시가 없으므로 SceneProxy를 만들지 않음.
+	* 나중에 FDecalSceneProxy를 만들어 여기서 반환하면 됨.
+	*/
+	FPrimitiveSceneProxy* CreateSceneProxy() override;
 
-	// API
-	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
-	void SetSortOrder(int32 Value);
-	//void SetDecalColor(const FLinearColor& Color);
+	/*
+	* Decal OBB를 감싸는 월드 AABB
+	*/
+	void UpdateWorldAABB() const override;
+	/*
+	* 현재는 실제 렌더링되는 프리미티브가 아니므로 outline 대상일 필요 없음.
+	* 나중에 실제 렌더 mesh가 생긴 뒤에도, outline 정책은 별도로 결정하는 편이 나음.
+	*/
+	bool SupportsOutline() const override { return false; }
+	
+
+public:
+	// ---------
+	// | Decal |
+	// ---------
+	void SetDecalSize(const FVector& InSize);
+	const FVector& GetDecalSize() const { return DecalSize; }
+
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
-	UMaterialInterface* GetDecalMaterial() const;
+	UMaterialInterface* GetDecalMaterial() const { return DecalMaterial; }
+	const FString& GetDecalMaterialPath() const { return DecalMaterialPath; }
 
-	// 자체 엔진의 OBB 혹은 AABB 기반 Culling을 위한 Bounds 계산
-	//virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
+	void SetSortOrder(int32 Value);
+	int32 GetSortOrder() const { return SortOrder; }
 
-	// 데칼 Size가 적용된 최종 Transform 반환 (렌더러/셰이더에서 사용)
+	void SetTargetFilter(int32 InFilter);
+	int32 GetTargetFilter() const { return TargetFilter; }
+
+	void SetDrawDebugOBB(bool bEnable) { bDrawDebugOBB = bEnable; }
+	bool IsDrawDebugOBBEnabled() const { return bDrawDebugOBB; }
+
 	FTransform GetTransformIncludingDecalSize() const;
+	FMatrix GetDecalLocalToWorldMatrix() const;
+	FMatrix GetWorldToDecalMatrix() const;
 
-	// 렌더 스레드에 보낼 프록시 생성
-	virtual FDeferredDecalProxy* CreateSceneProxy();
+	/*
+	* OBB 8개 코너 / OBB를 감싸는 월드 AABB
+	*/
+	void GetDecalBoxCorners(FVector (&OutCorners)[8]) const;
+	FBoundingBox GetDecalWorldAABB() const;
 
-	// 직렬화 (FArchive를 통한 저장/로드)
-	virtual void Serialize(FArchive& Ar) override;
+	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
 
-protected:
+private:
+	/*
+	* - 저장/복제는 경로 기반
+	* - 런타임 사용은 포인터 기반
+	*/
+	void ReloadMaterialFromPath();
+	/*
+	* OBB 선 12개 + forward 축 1개를 RenderBus에 넣음.
+	* wireframe만 봐도 transform/size/forward 축이 바로 드러나게 만들기 위한 함수
+	*/
+	void AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxColor) const;
 
-	UMaterialInterface* DecalMaterial;
+private:
+	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
+	UMaterialInterface* DecalMaterial = nullptr;
+	FString DecalMaterialPath = "None";
+
+	int32 SortOrder = 0;
+
+	int32 TargetFilter = DecalTarget_StaticMeshComponent;
+
+	bool bDecalDirty = true;
+	bool bDrawDebugOBB = true;
 };
