@@ -323,6 +323,29 @@ namespace
 
 		Vertices = std::move(Cleaned);
 	}
+
+	float Clamp01(float Value)
+	{
+		if (Value < 0.0f) return 0.0f;
+		if (Value > 1.0f) return 1.0f;
+		return Value;
+	}
+
+	FVector2 ComputeDecalUVFromLocalPosition(const FVector& DecalLocalPosition)
+	{
+		/*
+			decal local 기준:
+			X = projection depth
+			Y = horizontal
+			Z = vertical
+
+			UV는 YZ를 사용합니다.
+		*/
+		const float U = DecalLocalPosition.Y + 0.5f;
+		const float V = 0.5f - DecalLocalPosition.Z;
+
+		return FVector2(Clamp01(U), Clamp01(V));
+	}
 }
 
 bool FDecalMeshBuilder::PassTargetFilter(
@@ -809,6 +832,43 @@ void FDecalMeshBuilder::TriangulateClippedPolygons(
 			OutTriangles.push_back(Triangle);
 			++LocalStats.EmittedTriangleCount;
 		}
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::ComputeTriangleUVs(
+	const TArray<FDecalTriangulatedTriangle>& InTriangles,
+	TArray<FDecalUVTriangle>& OutUVTriangles,
+	FDecalUVStats* OutStats)
+{
+	OutUVTriangles.clear();
+
+	FDecalUVStats LocalStats;
+	LocalStats.InputTriangleCount = static_cast<int32>(InTriangles.size());
+
+	for (const FDecalTriangulatedTriangle& InTriangle : InTriangles)
+	{
+		FDecalUVTriangle OutTriangle;
+		OutTriangle.OwnerActor = InTriangle.OwnerActor;
+		OutTriangle.StaticMeshComponent = InTriangle.StaticMeshComponent;
+		OutTriangle.TriangleStartIndex = InTriangle.TriangleStartIndex;
+		OutTriangle.MeshToWorld = InTriangle.MeshToWorld;
+		OutTriangle.WorldToMesh = InTriangle.WorldToMesh;
+		OutTriangle.MeshToDecal = InTriangle.MeshToDecal;
+		OutTriangle.DecalFaceNormal = InTriangle.DecalFaceNormal;
+
+		for (int32 i = 0; i < 3; ++i)
+		{
+			OutTriangle.Vertices[i].Position = InTriangle.DecalPositions[i];
+			OutTriangle.Vertices[i].UV = ComputeDecalUVFromLocalPosition(InTriangle.DecalPositions[i]);
+		}
+
+		OutUVTriangles.push_back(OutTriangle);
+		++LocalStats.OutputTriangleCount;
 	}
 
 	if (OutStats)

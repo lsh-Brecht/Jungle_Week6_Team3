@@ -47,6 +47,11 @@ public:
 		TArray<FDecalTriangulatedTriangle>& OutTriangles,
 		FDecalTriangulationStats* OutStats = nullptr);
 
+	static void ComputeTriangleUVs(
+		const TArray<FDecalTriangulatedTriangle>& InTriangles,
+		TArray<FDecalUVTriangle>& OutUVTriangles,
+		FDecalUVStats* OutStats = nullptr);
+
 private:
 	static bool PassTargetFilter(
 		const UDecalComponent& DecalComponent,

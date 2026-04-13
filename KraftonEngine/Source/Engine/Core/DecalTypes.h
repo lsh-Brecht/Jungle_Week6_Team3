@@ -187,3 +187,30 @@ struct FDecalTriangulationStats
 	int32 EmittedTriangleCount = 0;
 	int32 SkippedTooSmallPolygonCount = 0;
 };
+
+struct FDecalUVTriangleVertex
+{
+	FVector Position;
+	FVector2 UV;
+};
+
+struct FDecalUVTriangle
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	FDecalUVTriangleVertex Vertices[3];
+	FVector DecalFaceNormal;
+};
+
+struct FDecalUVStats
+{
+	int32 InputTriangleCount = 0;
+	int32 OutputTriangleCount = 0;
+};
