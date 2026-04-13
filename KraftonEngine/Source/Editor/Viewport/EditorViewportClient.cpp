@@ -7,7 +7,7 @@
 #include "Engine/Profiling/PlatformTime.h"
 #include "Engine/Runtime/WindowsWindow.h"
 
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Viewport/Viewport.h"
 #include "GameFramework/World.h"
 #include "Engine/Runtime/Engine.h"
@@ -16,8 +16,8 @@ UWorld* FEditorViewportClient::GetWorld() const
 {
 	return GEngine ? GEngine->GetWorld() : nullptr;
 }
-#include "Component/GizmoComponent.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/GizmoComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Collision/RayUtils.h"
 #include "Object/Object.h"
 #include "Editor/Selection/SelectionManager.h"

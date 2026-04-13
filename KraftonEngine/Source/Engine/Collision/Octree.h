@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "Engine/Core/CoreTypes.h"
 #include "Engine/Math/Vector.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Render/Culling/ConvexVolume.h"
 #include <memory>
 

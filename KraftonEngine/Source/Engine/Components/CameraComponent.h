@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "Engine/Core/RayTypes.h"
 #include "Object/ObjectFactory.h"
-#include "Component/SceneComponent.h"
+#include "Components/SceneComponent.h"
 #include "Math/Matrix.h"
 #include "Math/MathUtils.h"
 #include "Math/Vector.h"

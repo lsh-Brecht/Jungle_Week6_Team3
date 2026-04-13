@@ -3,7 +3,7 @@
 #include "Collision/Octree.h"
 #include "Collision/RayUtils.h"
 #include "Core/RayTypes.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "GameFramework/AActor.h"
 #include <algorithm>

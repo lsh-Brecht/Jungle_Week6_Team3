@@ -1,5 +1,5 @@
 ﻿#include "RenderBus.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Viewport/Viewport.h"
 
 void FRenderBus::Clear()

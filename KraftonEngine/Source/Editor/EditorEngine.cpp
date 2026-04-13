@@ -2,7 +2,7 @@
 
 #include "Engine/Runtime/WindowsWindow.h"
 #include "Engine/Serialization/SceneSaveManager.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "GameFramework/World.h"
 #include "Editor/EditorRenderPipeline.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"

@@ -4,10 +4,10 @@
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Engine/Core/Common.h"
 #include "GameFramework/WorldContext.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 
 #include "ImGui/imgui.h"
-#include "Component/GizmoComponent.h"
+#include "Components/GizmoComponent.h"
 #include "Serialization/SceneSaveManager.h"
 #include "Profiling/Stats.h"
 

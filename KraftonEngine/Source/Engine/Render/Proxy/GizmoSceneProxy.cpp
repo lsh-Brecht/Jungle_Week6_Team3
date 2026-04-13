@@ -1,5 +1,5 @@
-#include "Render/Proxy/GizmoSceneProxy.h"
-#include "Component/GizmoComponent.h"
+﻿#include "Render/Proxy/GizmoSceneProxy.h"
+#include "Components/GizmoComponent.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Render/Resource/ConstantBufferPool.h"
 #include "Render/Pipeline/RenderBus.h"

@@ -1,5 +1,5 @@
 ﻿#include "Render/Proxy/BillboardSceneProxy.h"
-#include "Component/BillboardComponent.h"
+#include "Components/BillboardComponent.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Pipeline/RenderConstants.h"

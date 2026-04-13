@@ -1,5 +1,6 @@
 ﻿#pragma once
-#include "Component/SceneComponent.h"
+#include "Components/SceneComponent.h"
+#include "Core/EngineTypes.h"
 
 class UMaterialInterface;
 class FDeferredDecalProxy;
@@ -19,14 +20,23 @@ public:
 	//UPROPERTY() FLinearColor DecalColor;
 
 	// 페이드 아웃 관련 데이터
-	//UPROPERTY() float FadeStartDelay;
-	//UPROPERTY() float FadeDuration;
+	float FadeStartDelay;
+	float FadeDuration;
+	float FadeInDuration;
+	float FadeInStartDelay;
 	//UPROPERTY() uint8 bDestroyOwnerAfterFade : 1;
 
-	// API
+	float GetFadeStartDelay() const;
+	float GetFadeDuration() const;
+	float GetFadeInStartDelay() const;
+	float GetFadeInDuration() const;
+
+	FVector DecalSize;
+	FLinearColor DecalColor = FLinearColor::White();
+	
 	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
-	void SetSortOrder(int32 Value);
-	//void SetDecalColor(const FLinearColor& Color);
+	void SetFadeIn(float StartDelay, float Duration);
+	void SetDecalColor(const FLinearColor& Color);
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
 	UMaterialInterface* GetDecalMaterial() const;
 

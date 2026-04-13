@@ -1,6 +1,6 @@
 ﻿#include "ProjectileMovementComponent.h"
 
-#include "Component/SceneComponent.h"
+#include "Components/SceneComponent.h"
 #include "GameFramework/AActor.h"
 #include "Math/MathUtils.h"
 #include "Object/ObjectFactory.h"

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Component/ActorComponent.h"
+#include "Components/ActorComponent.h"
 
 class USceneComponent;
 

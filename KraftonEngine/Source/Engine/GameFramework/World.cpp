@@ -1,9 +1,9 @@
 ﻿#include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CameraComponent.h"	
 #include "Engine/Render/Culling/ConvexVolume.h"
-#include "Engine/Component/CameraComponent.h"
 #include "Render/Pipeline/LODContext.h"
 #include <cmath>
 #include <algorithm>
@@ -78,6 +78,16 @@ void UWorld::AddActor(AActor* Actor)
 	}
 
 	PersistentLevel->AddActor(Actor);
+
+	// 생성자 시점에 AddComponent된 컴포넌트는 Owner/World가 아직 완성되지 않아
+	// CreateRenderState가 early-return될 수 있다. 월드 등록 시점에 한 번 더 보장한다.
+	for (UActorComponent* Comp : Actor->GetComponents())
+	{
+		if (Comp)
+		{
+			Comp->CreateRenderState();
+		}
+	}
 
 	InsertActorToOctree(Actor);
 	MarkWorldPrimitivePickingBVHDirty();

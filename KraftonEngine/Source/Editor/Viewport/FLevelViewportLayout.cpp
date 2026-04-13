@@ -12,8 +12,8 @@
 #include "Platform/Paths.h"
 #include "ImGui/imgui.h"
 #include "WICTextureLoader.h"
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
 
 // ─── 레이아웃별 슬롯 수 ─────────────────────────────────────
 

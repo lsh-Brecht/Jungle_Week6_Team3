@@ -108,10 +108,9 @@ struct FOutlinePostProcessConstants
 struct FFXAAConstants
 {
 	FVector2 TexelSize = FVector2(0.0f, 0.0f);
-	float EdgeThreshold = 0.063f;
-	float EdgeThresholdMin = 0.0312f;
+	float EdgeThreshold = 0.125f;
+	float EdgeThresholdMin = 0.0833f;
 };
-
 
 struct FAABBConstants
 {

@@ -1,5 +1,5 @@
 ﻿#include "TickFunction.h"
-#include "Component/ActorComponent.h"
+#include "Components/ActorComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 

@@ -6,7 +6,7 @@
 #include "Resource/ResourceManager.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Render/Proxy/SubUVSceneProxy.h"
 #include "Serialization/Archive.h"
 

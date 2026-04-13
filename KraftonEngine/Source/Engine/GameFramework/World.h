@@ -5,7 +5,7 @@
 #include "Collision/WorldPrimitivePickingBVH.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/Level.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Render/Proxy/FScene.h"
 #include "Render/DebugDraw/DebugDrawQueue.h"
 #include "Render/Culling/ConvexVolume.h"

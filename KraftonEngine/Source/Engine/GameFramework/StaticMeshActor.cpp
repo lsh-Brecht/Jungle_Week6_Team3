@@ -1,8 +1,8 @@
 ﻿#include "GameFramework/StaticMeshActor.h"
 #include "Object/ObjectFactory.h"
 #include "Engine/Runtime/Engine.h"
-#include "Component/StaticMeshComponent.h"
-#include "Component/TextRenderComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 
 IMPLEMENT_CLASS(AStaticMeshActor, AActor)
 
