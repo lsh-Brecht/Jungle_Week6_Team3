@@ -1676,7 +1676,8 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		auto DrawSnapSection = [&](EToolbarIcon SnapIcon, const char* Prefix, bool& bEnabled, int32& ValueIndex, const char* const* Labels, int32 LabelCount)
 		{
 			ImGui::SameLine(0.0f, 6.0f);
-			if (bEnabled)
+			const bool bWasEnabled = bEnabled;
+			if (bWasEnabled)
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.43f, 0.30f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.50f, 0.36f, 1.0f));
@@ -1688,7 +1689,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 			{
 				bEnabled = !bEnabled;
 			}
-			if (bEnabled)
+			if (bWasEnabled)
 			{
 				ImGui::PopStyleColor(3);
 			}
