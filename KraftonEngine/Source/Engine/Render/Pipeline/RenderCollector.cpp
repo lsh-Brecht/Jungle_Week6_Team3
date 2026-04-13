@@ -20,6 +20,17 @@ void FRenderCollector::CollectWorld(UWorld* World, FRenderBus& RenderBus)
 	CollectVisibleProxies(World->GetVisibleProxies(), RenderBus);
 }
 
+void FRenderCollector::CollectVisibleList(UWorld* World, const TArray<FPrimitiveSceneProxy*>& VisibleProxies, FRenderBus& RenderBus)
+{
+	if (!World)
+	{
+		return;
+	}
+
+	World->GetScene().UpdateDirtyProxies();
+	CollectVisibleProxies(VisibleProxies, RenderBus);
+}
+
 void FRenderCollector::CollectGrid(float GridSpacing, int32 GridHalfLineCount, FRenderBus& RenderBus)
 {
 	FGridEntry Entry = {};

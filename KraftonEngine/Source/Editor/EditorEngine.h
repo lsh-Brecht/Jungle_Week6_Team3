@@ -8,6 +8,7 @@
 #include "Editor/Settings/EditorSettings.h"
 #include "Editor/Selection/SelectionManager.h"
 #include "Editor/PIE/PIETypes.h"
+#include "Engine/Input/InputRouter.h"
 #include <optional>
 #if STATS
 #include "Editor/EditorRenderPipeline.h"
@@ -17,6 +18,13 @@ class UGizmoComponent;
 class FLevelEditorViewportClient;
 class FEditorViewportClient;
 class FOverlayStatSystem;
+class UGameViewportClient;
+
+enum class EEditorPlaceActorType : uint8
+{
+	Cube,
+	Sphere
+};
 
 class UEditorEngine : public UEngine
 {
@@ -40,6 +48,16 @@ public:
 	void ResetViewport();
 	void CloseScene();
 	void NewScene();
+	bool LoadSceneWithDialog();
+	bool LoadSceneFromPath(const FString& InScenePath);
+	bool SaveScene();
+	bool SaveSceneAsWithDialog();
+	bool SaveSceneAs(const FString& InSceneName);
+	bool OpenAssetFolder() const;
+	bool PlaceActor(EEditorPlaceActorType InActorType, int32 InCount = 1);
+	bool PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType, int32 InClientX, int32 InClientY, int32 InCount = 1);
+	bool HasCurrentLevelFilePath() const { return !CurrentLevelFilePath.empty(); }
+	const FString& GetCurrentLevelFilePath() const { return CurrentLevelFilePath; }
 
 	FEditorSettings& GetSettings() { return FEditorSettings::Get(); }
 	const FEditorSettings& GetSettings() const { return FEditorSettings::Get(); }
@@ -74,6 +92,13 @@ public:
 
 	void RequestEndPlayMap();
 	bool IsPlayingInEditor() const { return PlayInEditorSessionInfo.has_value(); }
+	enum class EPIEControlMode : uint8
+	{
+		Possessed,
+		Ejected
+	};
+	EPIEControlMode GetPIEControlMode() const { return PIEControlMode; }
+	bool TogglePIEControlMode();
 
 	// 즉시 동기 종료 — Save / NewScene / Load 등 에디터 월드를 만지는 작업 직전에 호출.
 	// PIE 중이 아니면 no-op.
@@ -92,11 +117,16 @@ private:
 	void StartQueuedPlaySessionRequest();
 	void StartPlayInEditorSession(const FRequestPlaySessionParams& Params);
 	void EndPlayMap();
+	bool EnterPIEPossessedMode();
+	bool EnterPIEEjectedMode();
+	EInteractionDomain GetCurrentInteractionDomain() const;
+	bool HandleGlobalShortcuts(const FViewportInputContext& InputContext);
 
 	FSelectionManager SelectionManager;
 	FEditorMainPanel MainPanel;
 	FLevelViewportLayout ViewportLayout;
 	FOverlayStatSystem OverlayStatSystem;
+	FInputRouter InputRouter;
 
 	// PIE 요청 단일 슬롯 (UE TOptional<FRequestPlaySessionParams>).
 	std::optional<FRequestPlaySessionParams> PlaySessionRequest;
@@ -104,4 +134,10 @@ private:
 	std::optional<FPlayInEditorSessionInfo> PlayInEditorSessionInfo;
 	// 종료 요청 지연 플래그. Tick 선두에서 확인 후 EndPlayMap 호출.
 	bool bRequestEndPlayMapQueued = false;
+	EPIEControlMode PIEControlMode = EPIEControlMode::Possessed;
+	FLevelEditorViewportClient* PIEEntryViewportClient = nullptr;
+	bool bSavedEntryViewportGizmo = true;
+	bool bHadAnyPopupOpenLastFrame = false;
+	bool bSuppressViewportMouseUntilButtonsReleased = false;
+	FString CurrentLevelFilePath;
 };

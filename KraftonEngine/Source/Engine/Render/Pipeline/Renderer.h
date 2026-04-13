@@ -75,6 +75,8 @@ public:
 	void RegisterPostEffect(EPostEffectType Type, FPostEffectCallback Callback);
 	void SetPostEffectEnabled(EPostEffectType Type, bool bEnabled);
 	bool IsPostEffectEnabled(EPostEffectType Type) const;
+	void SetFXAAConstants(const FFXAAConstants& InConstants) { FXAAConstants = InConstants; }
+	const FFXAAConstants& GetFXAAConstants() const { return FXAAConstants; }
 
 	FD3DDevice& GetFD3DDevice() { return Device; }
 	FRenderResources& GetResources() { return Resources; }
@@ -178,4 +180,5 @@ private:
 
 	uint32 PostTargetWidth = 0;
 	uint32 PostTargetHeight = 0;
+	FFXAAConstants FXAAConstants = {};
 };

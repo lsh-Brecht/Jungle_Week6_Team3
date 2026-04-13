@@ -12,6 +12,7 @@ class FRenderCollector
 {
 public:
 	void CollectWorld(UWorld* World, FRenderBus& RenderBus);
+	void CollectVisibleList(UWorld* World, const TArray<FPrimitiveSceneProxy*>& VisibleProxies, FRenderBus& RenderBus);
 	void CollectGrid(float GridSpacing, int32 GridHalfLineCount, FRenderBus& RenderBus);
 	void CollectOverlayText(const FOverlayStatSystem& OverlaySystem, const UEditorEngine& Editor, FRenderBus& RenderBus);
 	void CollectDebugDraw(const FDebugDrawQueue& Queue, FRenderBus& RenderBus);

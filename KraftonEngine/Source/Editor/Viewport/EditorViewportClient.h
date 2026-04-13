@@ -3,9 +3,12 @@
 #include "Viewport/ViewportClient.h"
 #include "Render/Types/RenderTypes.h"
 #include "Render/Types/ViewTypes.h"
+#include "Editor/Input/EditorViewportInputContexts.h"
+#include "Editor/Input/EditorViewportController.h"
 
 #include "UI/SWindow.h"
 #include <string>
+#include <memory>
 #include "Core/RayTypes.h"
 #include "Core/CollisionTypes.h"
 class UWorld;
@@ -16,10 +19,24 @@ class FWindowsWindow;
 class FSelectionManager;
 class FViewport;
 class FOverlayStatSystem;
+class FEditorViewportController;
+class FEditorViewportCommandTool;
+class FEditorNavigationTool;
+class FEditorGizmoTool;
+class FEditorSelectionTool;
 
 class FEditorViewportClient : public FViewportClient
 {
 public:
+	friend class FEditorViewportCommandContext;
+	friend class FEditorViewportGizmoContext;
+	friend class FEditorViewportSelectionContext;
+	friend class FEditorViewportNavigationContext;
+	friend class FEditorViewportCommandTool;
+	friend class FEditorNavigationTool;
+	friend class FEditorGizmoTool;
+	friend class FEditorSelectionTool;
+
 	void Initialize(FWindowsWindow* InWindow);
 	void SetOverlayStatSystem(FOverlayStatSystem* InOverlayStatSystem) { OverlayStatSystem = InOverlayStatSystem; }
 	// World는 더 이상 저장하지 않는다 — GetWorld()는 GEngine->GetWorld()를 경유하여
@@ -60,15 +77,31 @@ public:
 
 	// SWindow Rect → ViewportScreenRect 갱신 + FViewport 리사이즈 요청
 	void UpdateLayoutRect();
+	const FRect& GetViewportScreenRect() const { return ViewportScreenRect; }
 
 	// ImDrawList에 자신의 SRV를 SWindow Rect 위치에 렌더 (활성 테두리 포함)
-	void RenderViewportImage(bool bIsActiveViewport);
+	void RenderViewportImage(bool bIsActiveViewport, bool bDrawActiveOutline = true);
+	void TriggerPIEStartOutlineFlash(float HoldSeconds = 1.0f, float FadeSeconds = 2.0f);
+	void ClearPIEStartOutlineFlash();
+	bool ProcessInput(FViewportInputContext& Context) override;
+	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
+	FEditorViewportController* GetInputController();
+	bool SetInteractionMode(EEditorViewportModeType InModeType);
+	EEditorViewportModeType GetInteractionMode() const;
+	bool CycleInteractionMode();
+	const FViewportInputContext& GetRoutedInputContext() const { return RoutedInputContext; }
+	FSelectionManager* GetSelectionManager() const { return SelectionManager; }
+	const FEditorSettings* GetSettings() const { return Settings; }
+	float GetWindowWidth() const { return WindowWidth; }
+	float GetWindowHeight() const { return WindowHeight; }
 
 private:
-	void TickEditorShortcuts();
-	void TickInput(float DeltaTime);
-	void TickInteraction(float DeltaTime);
-	void HandleDragStart(const FRay& Ray); //픽킹 시작
+	bool HandleCommandInput(float DeltaTime);
+	bool HandleNavigationInput(float DeltaTime);
+	bool HandleGizmoInput(float DeltaTime);
+	bool HandleSelectionInput(float DeltaTime);
+	void EnsureInputContextStack();
+	UWorld* ResolveInteractionWorld() const;
 
 private:
 	FViewport* Viewport = nullptr;
@@ -87,4 +120,17 @@ private:
 	bool bIsActive = false;
 	// 뷰포트 슬롯의 스크린 좌표 (ImGui screen space = 윈도우 클라이언트 좌표)
 	FRect ViewportScreenRect;
+	bool bHasRoutedInputContext = false;
+	FViewportInputContext RoutedInputContext;
+	std::unique_ptr<FEditorViewportController> InputController;
+	bool bInputContextStackInitialized = false;
+	TArray<IEditorViewportInputContext*> InputContextStack;
+	std::unique_ptr<IEditorViewportInputContext> CommandInputContext;
+	std::unique_ptr<IEditorViewportInputContext> GizmoInputContext;
+	std::unique_ptr<IEditorViewportInputContext> SelectionInputContext;
+	std::unique_ptr<IEditorViewportInputContext> NavigationInputContext;
+	bool bPIEOutlineFlashActive = false;
+	float PIEOutlineFlashElapsed = 0.0f;
+	float PIEOutlineFlashHoldDuration = 0.5f;
+	float PIEOutlineFlashFadeDuration = 1.0f;
 };

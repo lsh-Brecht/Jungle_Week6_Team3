@@ -5,14 +5,12 @@
 #include "ImGui/imgui.h"
 #include "Component/CameraComponent.h"
 #include "Component/GizmoComponent.h"
-#include "GameFramework/StaticMeshActor.h"
 
 #define SEPARATOR(); ImGui::Spacing(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); ImGui::Spacing();
 
 void FEditorControlWidget::Initialize(UEditorEngine* InEditorEngine)
 {
 	FEditorWidget::Initialize(InEditorEngine);
-	SelectedPrimitiveType = 0;
 }
 
 void FEditorControlWidget::Render(float DeltaTime)
@@ -28,53 +26,12 @@ void FEditorControlWidget::Render(float DeltaTime)
 
 	ImGui::Begin("Jungle Control Panel");
 
-	// Spawn
-	ImGui::Combo("Primitive", &SelectedPrimitiveType, PrimitiveTypes, IM_ARRAYSIZE(PrimitiveTypes));
-
-	if (ImGui::Button("Spawn"))
-	{
-		UWorld* World = EditorEngine->GetWorld();
-		for (int32 i = 0; i < NumberOfSpawnedActors; i++)
-		{
-			switch (SelectedPrimitiveType)
-			{
-			case 0: // Cube
-			{
-				AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
-				Actor->SetActorLocation(CurSpawnPoint);
-				Actor->InitDefaultComponents("Data/BasicShape/Cube.OBJ");
-				World->InsertActorToOctree(Actor);
-				break;
-			}
-			case 1: // Sphere
-			{
-				AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
-				Actor->SetActorLocation(CurSpawnPoint);
-				Actor->InitDefaultComponents("Data/BasicShape/Sphere.OBJ");
-				World->InsertActorToOctree(Actor);
-				break;
-			}
-			}
-		}
-		NumberOfSpawnedActors = 1;
-	}
-	ImGui::InputInt("Number of Spawn", &NumberOfSpawnedActors, 1, 10);
-
-	SEPARATOR();
-
 	// Camera
 	UCameraComponent* Camera = EditorEngine->GetCamera();
-
-	float CameraFOV_Deg = Camera->GetFOV() * RAD_TO_DEG;
-	if (ImGui::DragFloat("Camera FOV", &CameraFOV_Deg, 0.5f, 1.0f, 90.0f))
+	if (!Camera)
 	{
-		Camera->SetFOV(CameraFOV_Deg * DEG_TO_RAD);
-	}
-
-	float OrthoWidth = Camera->GetOrthoWidth();
-	if (ImGui::DragFloat("Ortho Width", &OrthoWidth, 0.1f, 0.1f, 1000.0f))
-	{
-		Camera->SetOrthoWidth(Clamp(OrthoWidth, 0.1f, 1000.0f));
+		ImGui::End();
+		return;
 	}
 
 	FVector CamPos = Camera->GetWorldLocation();
