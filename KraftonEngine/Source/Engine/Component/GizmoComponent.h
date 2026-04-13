@@ -51,6 +51,9 @@ public:
 	void SetTargetRotation(FRotator NewRotation);
 	void SetTargetScale(FVector NewScale);
 
+	void SetTranslateSnap(bool bEnabled, float Step);
+	void SetRotateSnap(bool bEnabled, float DegreesStep);
+	void SetScaleSnap(bool bEnabled, float Step);
 
 	void SetNextMode();
 	void UpdateGizmoMode(EGizmoMode NewMode);
@@ -88,6 +91,7 @@ private:
 
 	void UpdateLinearDrag(const FRay& Ray);
 	void UpdateAngularDrag(const FRay& Ray);
+	float QuantizeDragAmount(float DragAmount);
 
 private:
 	AActor* TargetActor = nullptr;
@@ -103,6 +107,13 @@ private:
 	bool bIsHolding = false;
 	bool bIsWorldSpace = true;
 	bool bPressedOnHandle = false;
+	bool bTranslateSnapEnabled = false;
+	bool bRotateSnapEnabled = false;
+	bool bScaleSnapEnabled = false;
+	float TranslateSnapStep = 1.0f;
+	float RotateSnapStepDegrees = 10.0f;
+	float ScaleSnapStep = 0.1f;
+	float PendingSnapDelta = 0.0f;
 	const FMeshData* MeshData = nullptr;
 	uint32 AxisMask = 0x7; // 비트 0=X, 1=Y, 2=Z — 기본 전부 표시
 	FPrimitiveSceneProxy* InnerProxy = nullptr;	// GizmoInner 전용 프록시

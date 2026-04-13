@@ -10,6 +10,7 @@
 #include "Render/Proxy/GizmoSceneProxy.h"
 #include "Render/Proxy/FScene.h"
 #include <cfloat>
+#include <cmath>
 
 IMPLEMENT_CLASS(UGizmoComponent, UPrimitiveComponent)
 
@@ -48,7 +49,6 @@ void UGizmoComponent::DestroyRenderState()
 	}
 }
 
-#include <cmath>
 UGizmoComponent::UGizmoComponent()
 {
 	MeshData = &FMeshBufferManager::Get().GetMeshData(EMeshShape::TransGizmo);
@@ -74,6 +74,7 @@ void UGizmoComponent::SetHolding(bool bHold)
 
 	if (bHold)
 	{
+		PendingSnapDelta = 0.0f;
 		if (World)
 		{
 			World->BeginDeferredPickingBVHUpdate();
@@ -85,6 +86,72 @@ void UGizmoComponent::SetHolding(bool bHold)
 	}
 
 	bIsHolding = bHold;
+}
+
+void UGizmoComponent::SetTranslateSnap(bool bEnabled, float Step)
+{
+	bTranslateSnapEnabled = bEnabled;
+	if (Step > 0.0f)
+	{
+		TranslateSnapStep = Step;
+	}
+}
+
+void UGizmoComponent::SetRotateSnap(bool bEnabled, float DegreesStep)
+{
+	bRotateSnapEnabled = bEnabled;
+	if (DegreesStep > 0.0f)
+	{
+		RotateSnapStepDegrees = DegreesStep;
+	}
+}
+
+void UGizmoComponent::SetScaleSnap(bool bEnabled, float Step)
+{
+	bScaleSnapEnabled = bEnabled;
+	if (Step > 0.0f)
+	{
+		ScaleSnapStep = Step;
+	}
+}
+
+float UGizmoComponent::QuantizeDragAmount(float DragAmount)
+{
+	float Step = 0.0f;
+	switch (CurMode)
+	{
+	case EGizmoMode::Translate:
+		if (!bTranslateSnapEnabled) return DragAmount;
+		Step = TranslateSnapStep;
+		break;
+	case EGizmoMode::Rotate:
+		if (!bRotateSnapEnabled) return DragAmount;
+		Step = RotateSnapStepDegrees * DEG_TO_RAD;
+		break;
+	case EGizmoMode::Scale:
+		if (!bScaleSnapEnabled) return DragAmount;
+		Step = ScaleSnapStep;
+		break;
+	default:
+		return DragAmount;
+	}
+
+	if (Step <= 1e-6f)
+	{
+		return DragAmount;
+	}
+
+	PendingSnapDelta += DragAmount;
+	const float StepsFloat = PendingSnapDelta / Step;
+	const float StepsWhole = (StepsFloat >= 0.0f) ? std::floor(StepsFloat) : std::ceil(StepsFloat);
+	if (std::abs(StepsWhole) < 1e-6f)
+	{
+		return 0.0f;
+	}
+
+	const float SnappedDelta = StepsWhole * Step;
+	PendingSnapDelta -= SnappedDelta;
+	return SnappedDelta;
 }
 
 bool UGizmoComponent::IntersectRayAxis(const FRay& Ray, FVector AxisEnd, float AxisScale, float& OutRayT)
@@ -180,6 +247,12 @@ bool UGizmoComponent::IntersectRayRotationHandle(const FRay& Ray, int32 Axis, fl
 
 void UGizmoComponent::HandleDrag(float DragAmount)
 {
+	DragAmount = QuantizeDragAmount(DragAmount);
+	if (std::abs(DragAmount) <= 1e-6f)
+	{
+		return;
+	}
+
 	switch (CurMode)
 	{
 	case EGizmoMode::Translate:
@@ -537,6 +610,7 @@ void UGizmoComponent::UpdateDrag(const FRay& Ray)
 void UGizmoComponent::DragEnd()
 {
 	bIsFirstFrameOfDrag = true;
+	PendingSnapDelta = 0.0f;
 	SetHolding(false);
 	SetPressedOnHandle(false);
 }
