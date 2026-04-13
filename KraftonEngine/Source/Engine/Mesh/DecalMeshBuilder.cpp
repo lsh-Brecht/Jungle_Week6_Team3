@@ -48,6 +48,134 @@ namespace
 			P.Y >= -0.5f && P.Y <= 0.5f &&
 			P.Z >= -0.5f && P.Z <= 0.5f;
 	}
+
+	float GetAxisComponent(const FVector& V, int32 Axis)
+	{
+		return Axis == 0 ? V.X : (Axis == 1 ? V.Y : V.Z);
+	}
+
+	float ComputeBoxProjectionRadius(const FVector& Axis, const FVector& HalfExtent)
+	{
+		return
+			std::abs(Axis.X) * HalfExtent.X +
+			std::abs(Axis.Y) * HalfExtent.Y +
+			std::abs(Axis.Z) * HalfExtent.Z;
+	}
+
+	void ProjectTriangleOntoAxis(
+		const FVector& Axis,
+		const FVector& P0,
+		const FVector& P1,
+		const FVector& P2,
+		float& OutMin,
+		float& OutMax)
+	{
+		const float D0 = P0.Dot(Axis);
+		const float D1 = P1.Dot(Axis);
+		const float D2 = P2.Dot(Axis);
+
+		OutMin = (std::min)(D0, (std::min)(D1, D2));
+		OutMax = (std::max)(D0, (std::max)(D1, D2));
+	}
+
+	bool IntersectsOnAxis(
+		const FVector& Axis,
+		const FVector& P0,
+		const FVector& P1,
+		const FVector& P2,
+		const FVector& HalfExtent)
+	{
+		/*
+			cross axis 중에는 길이가 0에 가까운 축이 나올 수 있습니다.
+			그런 축은 separating axis로 의미가 없으므로 통과 처리합니다.
+		*/
+		const float AxisLenSq = Axis.Dot(Axis);
+		if (AxisLenSq <= 0.0000001f)
+		{
+			return true;
+		}
+
+		float TriMin = 0.0f;
+		float TriMax = 0.0f;
+		ProjectTriangleOntoAxis(Axis, P0, P1, P2, TriMin, TriMax);
+
+		const float BoxRadius = ComputeBoxProjectionRadius(Axis, HalfExtent);
+
+		return !(TriMax < -BoxRadius || TriMin > BoxRadius);
+	}
+
+	bool IntersectsOnBoxAxes(
+		const FVector& P0,
+		const FVector& P1,
+		const FVector& P2,
+		const FVector& HalfExtent)
+	{
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			const float A0 = GetAxisComponent(P0, Axis);
+			const float A1 = GetAxisComponent(P1, Axis);
+			const float A2 = GetAxisComponent(P2, Axis);
+
+			const float TriMin = (std::min)(A0, (std::min)(A1, A2));
+			const float TriMax = (std::max)(A0, (std::max)(A1, A2));
+			const float Ext = GetAxisComponent(HalfExtent, Axis);
+
+			if (TriMax < -Ext || TriMin > Ext)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool IntersectsOnTriangleNormal(
+		const FVector& P0,
+		const FVector& P1,
+		const FVector& P2,
+		const FVector& HalfExtent)
+	{
+		const FVector E0 = P1 - P0;
+		const FVector E1 = P2 - P0;
+		const FVector TriangleNormal = E0.Cross(E1);
+
+		return IntersectsOnAxis(TriangleNormal, P0, P1, P2, HalfExtent);
+	}
+
+	bool IntersectsOnEdgeCrossAxes(
+		const FVector& P0,
+		const FVector& P1,
+		const FVector& P2,
+		const FVector& HalfExtent)
+	{
+		const FVector E0 = P1 - P0;
+		const FVector E1 = P2 - P1;
+		const FVector E2 = P0 - P2;
+
+		const FVector BoxAxes[3] =
+		{
+			FVector(1.0f, 0.0f, 0.0f),
+			FVector(0.0f, 1.0f, 0.0f),
+			FVector(0.0f, 0.0f, 1.0f)
+		};
+
+		const FVector Edges[3] = { E0, E1, E2 };
+
+		for (int32 EdgeIndex = 0; EdgeIndex < 3; ++EdgeIndex)
+		{
+			for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+			{
+				const FVector TestAxis = Edges[EdgeIndex].Cross(BoxAxes[AxisIndex]);
+
+				if (!IntersectsOnAxis(TestAxis, P0, P1, P2, HalfExtent))
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
 }
 
 bool FDecalMeshBuilder::PassTargetFilter(
@@ -342,3 +470,66 @@ void FDecalMeshBuilder::GatherCoarseOverlapTriangles(
 		*OutStats = LocalStats;
 	}
 }	
+
+void FDecalMeshBuilder::GatherSATOverlapTriangles(
+	const TArray<FDecalCoarseOverlapTriangle>& CoarseTriangles,
+	TArray<FDecalSATTriangle>& OutSATTriangles,
+	FDecalSATStats* OutStats)
+{
+	OutSATTriangles.clear();
+
+	FDecalSATStats LocalStats;
+	LocalStats.InputTriangleCount = static_cast<int32>(CoarseTriangles.size());
+
+	const FVector CanonicalHalfExtent(0.5f, 0.5f, 0.5f);
+
+	for (const FDecalCoarseOverlapTriangle& CoarseTriangle : CoarseTriangles)
+	{
+		const FVector& P0 = CoarseTriangle.DecalPositions[0];
+		const FVector& P1 = CoarseTriangle.DecalPositions[1];
+		const FVector& P2 = CoarseTriangle.DecalPositions[2];
+
+		if (!IntersectsOnBoxAxes(P0, P1, P2, CanonicalHalfExtent))
+		{
+			++LocalStats.RejectedByBoxAxisCount;
+			continue;
+		}
+		++LocalStats.PassedBoxAxisCount;
+
+		if (!IntersectsOnTriangleNormal(P0, P1, P2, CanonicalHalfExtent))
+		{
+			++LocalStats.RejectedByTriangleNormalCount;
+			continue;
+		}
+		++LocalStats.PassedTriangleNormalCount;
+
+		if (!IntersectsOnEdgeCrossAxes(P0, P1, P2, CanonicalHalfExtent))
+		{
+			++LocalStats.RejectedByEdgeCrossAxisCount;
+			continue;
+		}
+		++LocalStats.PassedEdgeCrossAxisCount;
+
+		FDecalSATTriangle SATTriangle;
+		SATTriangle.OwnerActor = CoarseTriangle.OwnerActor;
+		SATTriangle.StaticMeshComponent = CoarseTriangle.StaticMeshComponent;
+		SATTriangle.TriangleStartIndex = CoarseTriangle.TriangleStartIndex;
+		SATTriangle.MeshToWorld = CoarseTriangle.MeshToWorld;
+		SATTriangle.WorldToMesh = CoarseTriangle.WorldToMesh;
+		SATTriangle.MeshToDecal = CoarseTriangle.MeshToDecal;
+		SATTriangle.DecalPositions[0] = P0;
+		SATTriangle.DecalPositions[1] = P1;
+		SATTriangle.DecalPositions[2] = P2;
+		SATTriangle.DecalFaceNormal = CoarseTriangle.DecalFaceNormal;
+		SATTriangle.DecalLocalTriangleAABB = CoarseTriangle.DecalLocalTriangleAABB;
+		SATTriangle.bAnyVertexInsideBox = CoarseTriangle.bAnyVertexInsideBox;
+
+		OutSATTriangles.push_back(SATTriangle);
+		++LocalStats.PassedSATCount;
+	}
+
+	if (OutStats)
+	{
+		*OutStats = LocalStats;
+	}
+}

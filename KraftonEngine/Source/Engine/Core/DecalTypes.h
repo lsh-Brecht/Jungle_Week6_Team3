@@ -106,3 +106,36 @@ struct FDecalCoarseOverlapStats
 	int32 AnyVertexInsideCount = 0;
 	int32 CoarseAcceptedCount = 0;
 };
+
+struct FDecalSATTriangle
+{
+	AActor* OwnerActor = nullptr;
+	UStaticMeshComponent* StaticMeshComponent = nullptr;
+
+	int32 TriangleStartIndex = -1;
+
+	FMatrix MeshToWorld;
+	FMatrix WorldToMesh;
+	FMatrix MeshToDecal;
+
+	FVector DecalPositions[3];
+	FVector DecalFaceNormal;
+
+	FBoundingBox DecalLocalTriangleAABB;
+	bool bAnyVertexInsideBox = false;
+};
+
+struct FDecalSATStats
+{
+	int32 InputTriangleCount = 0;
+
+	int32 PassedBoxAxisCount = 0;
+	int32 PassedTriangleNormalCount = 0;
+	int32 PassedEdgeCrossAxisCount = 0;
+
+	int32 RejectedByBoxAxisCount = 0;
+	int32 RejectedByTriangleNormalCount = 0;
+	int32 RejectedByEdgeCrossAxisCount = 0;
+
+	int32 PassedSATCount = 0;
+};
