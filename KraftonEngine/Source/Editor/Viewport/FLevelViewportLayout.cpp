@@ -1294,19 +1294,17 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 		if (ImGui::BeginMenu("Place Actor"))
 		{
-			if (Editor && ImGui::MenuItem("Cube"))
+			if (Editor)
 			{
-				Editor->PlaceActorFromScreenPoint(
-					EEditorPlaceActorType::Cube,
-					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
-					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
-			}
-			if (Editor && ImGui::MenuItem("Sphere"))
-			{
-				Editor->PlaceActorFromScreenPoint(
-					EEditorPlaceActorType::Sphere,
-					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
-					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
+				const int32 SpawnX = static_cast<int32>(GPendingPlaceActorSpawnPos.x);
+				const int32 SpawnY = static_cast<int32>(GPendingPlaceActorSpawnPos.y);
+				for (const UEditorEngine::FPlaceableActorEntry& Entry : Editor->GetPlaceableActorEntries())
+				{
+					if (ImGui::MenuItem(Entry.DisplayName.c_str()))
+					{
+						Editor->PlaceActorFromScreenPointById(Entry.Id, SpawnX, SpawnY);
+					}
+				}
 			}
 			ImGui::EndMenu();
 		}

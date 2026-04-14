@@ -112,6 +112,10 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 	{
 		EditorLineBatcher.AddAABB(FBoundingBox{ Entry.AABB.Min, Entry.AABB.Max }, Entry.AABB.Color);
 	}
+	for (const auto& Entry : Bus.GetOBBEntries())
+	{
+		EditorLineBatcher.AddOBB(Entry.OBB.LocalBox, Entry.OBB.Transform, Entry.OBB.Color);
+	}
 	for (const auto& Entry : Bus.GetDebugLineEntries())
 	{
 		EditorLineBatcher.AddLine(Entry.Start, Entry.End, Entry.Color.ToVector4());
@@ -362,10 +366,33 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
-		if (bHasBatcher)
+		ID3D11RenderTargetView* pCurrentRTV = nullptr;
+		ID3D11DepthStencilView* pCurrentDSV = nullptr;
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 1. 현재 바인딩된 RTV와 DSV를 가져옵니다. (가져올 때 내부적으로 Ref Count가 1 증가함)
+			Context->OMGetRenderTargets(1, &pCurrentRTV, &pCurrentDSV);
+
+			// 2. DSV(Depth) 자리에 nullptr을 꽂아서 바인딩을 끊습니다. 
+			// -> 이제 픽셀 셰이더에서 Depth SRV(t1)를 마음껏 읽을 수 있습니다!
+			Context->OMSetRenderTargets(1, &pCurrentRTV, nullptr);
+		}
+
+        if (bHasBatcher)
 			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
 		else
-			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
+			ExecutePass(InRenderBus.GetProxies(CurPass), InRenderBus, Context);
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 3. 다시 원래의 DSV를 연결하여 다음 패스(Translucent 등)가 정상 작동하도록 복구합니다.
+			Context->OMSetRenderTargets(1, &pCurrentRTV, pCurrentDSV);
+
+			// 4. OMGetRenderTargets 호출로 인해 증가했던 메모리 참조 카운트(Ref Count)를 해제합니다. (메모리 누수 방지)
+			if (pCurrentRTV) pCurrentRTV->Release();
+			if (pCurrentDSV) pCurrentDSV->Release();
+		}
 	}
 }
 
@@ -379,7 +406,7 @@ void FRenderer::InitializePassRenderStates()
 
 	//								DepthStencil							Blend						Rasterizer							Topology								WireframeAware
 	S[(uint32)E::Opaque] =			{ EDepthStencilState::Default,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
-	S[(uint32)E::Decal] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+ S[(uint32)E::Decal] =			{ EDepthStencilState::NoDepth,		EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	//	Outline에 대한 Masking 방해로 인해 Patch
 	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
@@ -516,11 +543,12 @@ void FRenderer::DrawPostProcessFog(const FRenderBus& Bus, ID3D11DeviceContext* C
 // ============================================================
 // 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회
 // ============================================================
-void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context)
+void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, const FRenderBus& Bus, ID3D11DeviceContext* Context)
 {
 	SortProxies(Proxies);
 
 	FDrawState State;
+	ActiveDepthSRV = Bus.GetViewportDepthSRV();
 
 	{
 		SCOPE_STAT_CAT("ExecutePass::Draw", "4_ExecutePass");
@@ -541,6 +569,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 	}
 
 	CleanupSRV(Context, State);
+   ActiveDepthSRV = nullptr;
 }
 
 // ============================================================
@@ -639,6 +668,7 @@ bool FRenderer::BindPerObjectCB(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceC
 	if (RawCB != State.LastPerObjectCB)
 	{
 		Ctx->VSSetConstantBuffers(ECBSlot::PerObject, 1, &RawCB);
+      Ctx->PSSetConstantBuffers(ECBSlot::PerObject, 1, &RawCB);
 		State.LastPerObjectCB = RawCB;
 	}
 
@@ -690,6 +720,11 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 		Ctx->PSSetSamplers(0, 1, &Resources.DefaultSampler);
 		State.bSamplerBound = true;
 	}
+
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
+	}
 	
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
@@ -697,6 +732,7 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 	{
 		ID3D11Buffer* b4 = MaterialCB->GetBuffer();
 		Ctx->VSSetConstantBuffers(ECBSlot::Material, 1, &b4);
+        Ctx->PSSetConstantBuffers(ECBSlot::Material, 1, &b4);
 		State.bMaterialBound = true;
 	}
 
@@ -746,12 +782,18 @@ void FRenderer::DrawSingleSection(const FPrimitiveSceneProxy& Proxy, ID3D11Devic
 		State.bSamplerBound = true;
 	}
 
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
+	}
+
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
 	if (!State.bMaterialBound)
 	{
 		ID3D11Buffer* b4 = MaterialCB->GetBuffer();
 		Ctx->VSSetConstantBuffers(ECBSlot::Material, 1, &b4);
+		Ctx->PSSetConstantBuffers(ECBSlot::Material, 1, &b4);
 		State.bMaterialBound = true;
 	}
 
@@ -801,6 +843,9 @@ void FRenderer::CleanupSRV(ID3D11DeviceContext* Ctx, const FDrawState& State)
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 		Ctx->PSSetShaderResources(0, 1, &nullSRV);
 	}
+
+	ID3D11ShaderResourceView* nullDepthSRV = nullptr;
+	Ctx->PSSetShaderResources(1, 1, &nullDepthSRV);
 }
 
 void FRenderer::ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Context, EViewMode CurViewMode)
@@ -842,9 +887,9 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 		return;
 	}
 
-	Context->OMSetRenderTargets(1, &OutlineMaskRTV, DSV);
+	Context->OMSetRenderTargets(1, &OutlineMaskRTV, nullptr);
 
-	ExecutePass(MaskProxies, Context);
+    ExecutePass(MaskProxies, Bus, Context);
 
 	if (FontBatcher.GetSelectedQuadCount() > 0)
 	{
@@ -1067,7 +1112,8 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 	PPConstants.OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
 	PPConstants.OutlineThickness = 7.0f;
 	PPConstants.OutlineFalloff = 1.6f;
-	PPConstants.bOutputLumaToAlpha = (Bus.GetViewMode() == EViewMode::SceneDepth) ? 0.0f : 1.0f;
+    const bool bUseFXAAAfterOutline = IsPostEffectEnabled(EPostEffectType::FXAA) && (Bus.GetViewMode() != EViewMode::SceneDepth);
+	PPConstants.bOutputLumaToAlpha = bUseFXAAAfterOutline ? 1.0f : 0.0f;
 	PPConstants.OutputAlpha = 1.0f;
 	OutlineCB->Update(Context, &PPConstants, sizeof(PPConstants));
 	ID3D11Buffer* cb = OutlineCB->GetBuffer();

@@ -22,9 +22,10 @@ public:
 	float CameraRotateSmoothSpeed = 2.0f;
 	FVector InitViewPos = FVector(10, 0, 5);
 	FVector InitLookAt = FVector(0, 0, 0);
-	int32 FXAAStage = 1; // 0:Low, 1:Medium, 2:High, 3:Ultra, 4:Custom
+	int32 FXAAStage = 1; // 0:Low, 1:Medium, 2:High, 3:Epic, 4:Cinematic, -1:Custom
 	float FXAAEdgeThreshold = 0.063f;
 	float FXAAEdgeThresholdMin = 0.0312f;
+	int32 FXAASearchSteps = 3;
 
 	// Viewport Layout
 	int32 LayoutType = 0; // EViewportLayout

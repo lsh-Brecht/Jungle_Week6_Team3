@@ -182,10 +182,12 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 			continue;
 
 		// Batcher 경유 렌더링 (Font, SubUV)
-		if (Proxy->bBatcherRendered)
-			Proxy->CollectEntries(RenderBus);
-		else
+		Proxy->CollectEntries(RenderBus);
+		
+		if (!Proxy->bBatcherRendered)
+		{
 			RenderBus.AddProxy(Proxy->Pass, Proxy);
+		}
 
 		// 선택된 오브젝트
 		if (Proxy->bSelected)

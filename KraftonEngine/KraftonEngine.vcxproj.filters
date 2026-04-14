@@ -186,6 +186,7 @@
     <FxCompile Include="Shaders\Common\VertexLayouts.hlsl">
       <Filter>Shaders\Common</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Decal.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Editor\EditorEngine.cpp">
@@ -193,30 +194,6 @@
     </ClCompile>
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp">
       <Filter>Source\Editor</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorGizmoTool.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorNavigationTool.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorSelectionTool.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorViewportCommandTool.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorViewportController.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorViewportInputContexts.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorViewportModes.cpp">
-      <Filter>Source\Editor\Input</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Editor\Input\EditorViewportTools.cpp">
-      <Filter>Source\Editor\Input</Filter>
     </ClCompile>
     <ClCompile Include="Source\Editor\Selection\SelectionManager.cpp">
       <Filter>Source\Editor\Selection</Filter>
@@ -580,6 +557,15 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Source\Engine\Components\DecalComponent.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorGizmoTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorNavigationTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorSelectionTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportCommandTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportController.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportInputContexts.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportModes.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportTools.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -587,36 +573,6 @@
     </ClInclude>
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h">
       <Filter>Source\Editor</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorGizmoTool.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorNavigationTool.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorSelectionTool.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportCommandTool.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportController.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportInputContexts.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportInputMapping.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportInputUtils.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportModes.h">
-      <Filter>Source\Editor\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Editor\Input\EditorViewportTools.h">
-      <Filter>Source\Editor\Input</Filter>
     </ClInclude>
     <ClInclude Include="Source\Editor\PIE\PIETypes.h">
       <Filter>Source\Editor\PIE</Filter>
@@ -1092,6 +1048,17 @@
     <ClInclude Include="ThirdParty\SimpleJSON\json.hpp">
       <Filter>ThirdParty\SimpleJSON</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorGizmoTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorNavigationTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorSelectionTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportCommandTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportController.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputContexts.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputMapping.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputUtils.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportModes.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportTools.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\DecalSceneProxy.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />

@@ -137,8 +137,10 @@ struct FOutlinePostProcessConstants
 struct FFXAAConstants
 {
 	FVector2 TexelSize = FVector2(0.0f, 0.0f);
-	float EdgeThreshold = 0.125f;
-	float EdgeThresholdMin = 0.0833f;
+	float EdgeThreshold;
+	float EdgeThresholdMin;
+  int32 SearchSteps = 3;
+	float _pad[3] = { 0.0f, 0.0f, 0.0f };
 };
 
 struct FAABBConstants
@@ -149,6 +151,13 @@ struct FAABBConstants
 	FVector Max;
 	float Padding1;
 
+	FColor Color;
+};
+
+struct FOBBConstants
+{
+	FBoundingBox LocalBox;
+	FMatrix Transform;
 	FColor Color;
 };
 
@@ -212,6 +221,11 @@ struct FBillboardEntry
 struct FAABBEntry
 {
 	FAABBConstants AABB;
+};
+
+struct FOBBEntry
+{
+	FOBBConstants OBB;
 };
 
 struct FGridEntry

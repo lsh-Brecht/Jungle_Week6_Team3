@@ -23,6 +23,7 @@ namespace Key
 	constexpr const char* FXAAStage = "FXAAStage";
 	constexpr const char* FXAAEdgeThreshold = "FXAAEdgeThreshold";
 	constexpr const char* FXAAEdgeThresholdMin = "FXAAEdgeThresholdMin";
+	constexpr const char* FXAASearchSteps = "FXAASearchSteps";
 
 	// Slot Render Options
 	constexpr const char* ViewMode = "ViewMode";
@@ -83,6 +84,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::FXAAStage] = FXAAStage;
 	Viewport[Key::FXAAEdgeThreshold] = FXAAEdgeThreshold;
 	Viewport[Key::FXAAEdgeThresholdMin] = FXAAEdgeThresholdMin;
+	Viewport[Key::FXAASearchSteps] = FXAASearchSteps;
 
 	JSON InitPos = Array(InitViewPos.X, InitViewPos.Y, InitViewPos.Z);
 	Viewport[Key::InitViewPos] = InitPos;
@@ -203,6 +205,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			FXAAEdgeThreshold = static_cast<float>(Viewport[Key::FXAAEdgeThreshold].ToFloat());
 		if (Viewport.hasKey(Key::FXAAEdgeThresholdMin))
 			FXAAEdgeThresholdMin = static_cast<float>(Viewport[Key::FXAAEdgeThresholdMin].ToFloat());
+		if (Viewport.hasKey(Key::FXAASearchSteps))
+			FXAASearchSteps = Viewport[Key::FXAASearchSteps].ToInt();
 
 		if (Viewport.hasKey(Key::InitViewPos))
 		{

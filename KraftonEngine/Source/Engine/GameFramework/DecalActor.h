@@ -6,6 +6,7 @@
 class UBillboardComponent;
 class UBoxComponent;
 class UDecalComponent;
+class UMaterialInterface;
 
 class ADecalActor : public AActor
 {
@@ -18,11 +19,16 @@ public:
 
 	UBillboardComponent* GetSpriteComponent() const { return SpriteComponent; }
 
-	// Component의 함수를 래핑하는 편의성 API
-	//void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
-	//UMaterialInterface* GetDecalMaterial() const;
+  // Component의 함수를 래핑하는 편의성 API
+	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
+   void SetDecalMaterial(const FString& MaterialPath);
+	UMaterialInterface* GetDecalMaterial() const;
+	//void SetDecalSize(const FVector& InDecalSize);
+	FVector GetDecalSize() const;
 
-	//virtual void Serialize(FArchive& Ar) override;
+	void BeginPlay() override;
+
+	virtual void Serialize(FArchive& Ar) override;
 	
 private:
 	

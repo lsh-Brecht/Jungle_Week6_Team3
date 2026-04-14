@@ -31,36 +31,53 @@ struct FFXAAPresetEntry
 	const char* Label;
 	float EdgeThreshold;
 	float EdgeThresholdMin;
+  int32 SearchSteps;
 };
 
 constexpr FFXAAPresetEntry GFXAAPresets[] = {
-	{ "Low",    0.125f, 0.0625f },
-	{ "Medium", 0.063f, 0.0312f },
-	{ "High",   0.0312f, 0.0156f },
-	{ "Ultra",  0.0200f, 0.0080f },
-	{ "Custom", 0.063f, 0.0312f },
+  { "Low",		0.333f, 0.0833f, 2 },
+	{ "Medium",		0.250f, 0.0833f, 3 },
+	{ "High",		0.200f, 0.0625f, 5 },
+	{ "Epic",		0.125f, 0.0312f, 12 },
+	{ "Cinematic",	0.063f, 0.0312f, 20 },
 };
 
 constexpr int32 GFXAAPresetCount = static_cast<int32>(sizeof(GFXAAPresets) / sizeof(GFXAAPresets[0]));
+constexpr int32 GFXAACustomStage = -1;
+
+int32 GetFXAASearchStepsForStage(const FEditorSettings& Settings)
+{
+ const int32 Stage = Settings.FXAAStage;
+	if (Stage >= 0 && Stage < GFXAAPresetCount)
+	{
+		return GFXAAPresets[Stage].SearchSteps;
+	}
+	if (Stage == GFXAACustomStage)
+	{
+      int32 Steps = Settings.FXAASearchSteps;
+		if (Steps < 1) Steps = 1;
+		if (Steps > 20) Steps = 20;
+		return Steps;
+	}
+
+	return GFXAAPresets[1].SearchSteps;
+}
 
 void ApplyFXAAPresetToSettings(FEditorSettings& Settings)
 {
-	if (Settings.FXAAStage < 0)
-	{
-		Settings.FXAAStage = 0;
-	}
-	if (Settings.FXAAStage >= GFXAAPresetCount)
-	{
-		Settings.FXAAStage = GFXAAPresetCount - 1;
-	}
-
-	if (Settings.FXAAStage == GFXAAPresetCount - 1)
+ if (Settings.FXAAStage == GFXAACustomStage)
 	{
 		return;
 	}
 
+	if (Settings.FXAAStage < 0 || Settings.FXAAStage >= GFXAAPresetCount)
+	{
+     Settings.FXAAStage = 1;
+	}
+
 	Settings.FXAAEdgeThreshold = GFXAAPresets[Settings.FXAAStage].EdgeThreshold;
 	Settings.FXAAEdgeThresholdMin = GFXAAPresets[Settings.FXAAStage].EdgeThresholdMin;
+   Settings.FXAASearchSteps = GFXAAPresets[Settings.FXAAStage].SearchSteps;
 }
 
 void PushFXAAConstantsToRenderer(UEditorEngine* EditorEngine, const FEditorSettings& Settings)
@@ -73,6 +90,7 @@ void PushFXAAConstantsToRenderer(UEditorEngine* EditorEngine, const FEditorSetti
 	FFXAAConstants FXAA = {};
 	FXAA.EdgeThreshold = Settings.FXAAEdgeThreshold;
 	FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
+ FXAA.SearchSteps = GetFXAASearchStepsForStage(Settings);
 	EditorEngine->GetRenderer().SetFXAAConstants(FXAA);
 }
 }
@@ -370,18 +388,16 @@ void FEditorMainPanel::RenderEditorToolbar()
 		}
 		if (ImGui::BeginPopup("##PIEBarPlaceActorPopup"))
 		{
-			if (ImGui::MenuItem("Cube"))
+			//	등록된 Placeable 목록을 그대로 메뉴에 노출한다.
+			//	새 타입 추가 시 UI 코드를 수정하지 않고 RegisterPlaceableActor만 호출하면 된다.
+			for (const UEditorEngine::FPlaceableActorEntry& Entry : EditorEngine->GetPlaceableActorEntries())
 			{
-				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Cube))
+				if (ImGui::MenuItem(Entry.DisplayName.c_str()))
 				{
-					FooterLogSystem.Push("Actor placed: Cube");
-				}
-			}
-			if (ImGui::MenuItem("Sphere"))
-			{
-				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Sphere))
-				{
-					FooterLogSystem.Push("Actor placed: Sphere");
+					if (EditorEngine->PlaceActorById(Entry.Id))
+					{
+						FooterLogSystem.Push("Actor placed: " + Entry.DisplayName);
+					}
 				}
 			}
 			ImGui::EndPopup();
@@ -502,7 +518,14 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 	ImGui::Separator();
 	if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		const char* CurrentLabel = GFXAAPresets[Settings.FXAAStage >= 0 && Settings.FXAAStage < GFXAAPresetCount ? Settings.FXAAStage : 1].Label;
+       bool bFXAAEnabled = EditorEngine->GetRenderer().IsPostEffectEnabled(EPostEffectType::FXAA);
+		if (ImGui::Checkbox("FXAA Enabled", &bFXAAEnabled))
+		{
+			EditorEngine->GetRenderer().SetPostEffectEnabled(EPostEffectType::FXAA, bFXAAEnabled);
+		}
+
+       const bool bValidPresetStage = (Settings.FXAAStage >= 0 && Settings.FXAAStage < GFXAAPresetCount);
+		const char* CurrentLabel = bValidPresetStage ? GFXAAPresets[Settings.FXAAStage].Label : "Custom";
 		if (ImGui::BeginCombo("FXAA Stage", CurrentLabel))
 		{
 			for (int32 i = 0; i < GFXAAPresetCount; ++i)
@@ -518,10 +541,20 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 					ImGui::SetItemDefaultFocus();
 				}
 			}
+
+			const bool bCustomSelected = (Settings.FXAAStage == GFXAACustomStage);
+			if (ImGui::Selectable("Custom", bCustomSelected))
+			{
+				Settings.FXAAStage = GFXAACustomStage;
+			}
+			if (bCustomSelected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
 			ImGui::EndCombo();
 		}
 
-		const bool bCustomStage = (Settings.FXAAStage == GFXAAPresetCount - 1);
+     const bool bCustomStage = (Settings.FXAAStage == GFXAACustomStage);
 		ImGui::BeginDisabled(!bCustomStage);
 		if (ImGui::DragFloat("Edge Threshold", &Settings.FXAAEdgeThreshold, 0.0005f, 0.001f, 0.5f, "%.4f"))
 		{
@@ -532,6 +565,11 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 		{
 			if (Settings.FXAAEdgeThresholdMin < 0.001f) Settings.FXAAEdgeThresholdMin = 0.001f;
 			if (Settings.FXAAEdgeThresholdMin > 0.5f) Settings.FXAAEdgeThresholdMin = 0.5f;
+		}
+       if (ImGui::DragInt("Search Steps", &Settings.FXAASearchSteps, 1.0f, 1, 20, "%d"))
+		{
+			if (Settings.FXAASearchSteps < 1) Settings.FXAASearchSteps = 1;
+			if (Settings.FXAASearchSteps > 20) Settings.FXAASearchSteps = 20;
 		}
 		ImGui::EndDisabled();
 
