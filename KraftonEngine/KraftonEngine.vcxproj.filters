@@ -37,9 +37,6 @@
     <Filter Include="Source\Engine\Collision">
       <UniqueIdentifier>{0a1ac0a6-fa86-45a3-c38e-91b60c7ce3cf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source\Engine\Component">
-      <UniqueIdentifier>{22bbd7c0-73bc-1bc4-992f-be08238b1609}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source\Engine\Core">
       <UniqueIdentifier>{aaeb2f3f-eff4-9d0e-a471-82c1372b9aed}</UniqueIdentifier>
     </Filter>
@@ -126,6 +123,9 @@
     </Filter>
     <Filter Include="ThirdParty\SimpleJSON">
       <UniqueIdentifier>{b5b63371-405e-e009-4e4e-e3b5a25ee7bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Engine\Components">
+      <UniqueIdentifier>{22bbd7c0-73bc-1bc4-992f-be08238b1609}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -256,49 +256,49 @@
       <Filter>Source\Engine\Collision</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\ActorComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\BillboardComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\CameraComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\ExponentialHeightFogComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\FireBallComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\GizmoComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\MeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\MovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\PrimitiveComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\ProjectileMovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\RotatingMovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\SceneComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\StaticMeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\SubUVComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Components\TextRenderComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Core\EngineTypes.cpp">
       <Filter>Source\Engine\Core</Filter>
@@ -641,55 +641,55 @@
       <Filter>Source\Engine\Collision</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\ActorComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\BillboardComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\CameraComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\DecalComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\ExponentialHeightFogComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\FireBallComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\GizmoComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\MeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\MovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\PrimitiveComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\ProjectileMovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\RotatingMovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\SceneComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\SceneEffectSource.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\StaticMeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\SubUVComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\TextRenderComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Core\ClassTypes.h">
       <Filter>Source\Engine\Core</Filter>
