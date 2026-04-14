@@ -78,13 +78,18 @@ bool FEditorViewportCommandTool::HandleInput(float DeltaTime)
 
 	const EAction Action = static_cast<EAction>(TriggeredActionId);
 	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
+	const bool bLeftHeldFlyMove =
+		Context.Frame.IsDown(VK_LBUTTON)
+		&& !Context.Frame.IsAltDown()
+		&& !Context.Frame.IsCtrlDown();
 	const bool bMouseNavigationActive =
 		EditorViewportInputMapping::IsTriggered(Context, EAction::NavLookRightDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavLookMiddleDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavOrbitAltLeftDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavDollyAltRightDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EAction::NavPanAltMiddleDown)
-		|| EditorViewportInputUtils::IsLeftNavigationDragActive(Context);
+		|| EditorViewportInputUtils::IsLeftNavigationDragActive(Context)
+		|| bLeftHeldFlyMove;
 
 	if (bMouseNavigationActive
 		&& (Action == EAction::SetModeSelect

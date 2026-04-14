@@ -1598,6 +1598,9 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		const char* TranslateSnapLabels[] = { "1", "5", "10", "50", "100" };
 		const char* RotateSnapLabels[] = { "5", "10", "15", "30", "45" };
 		const char* ScaleSnapLabels[] = { "0.1", "0.25", "0.5", "1.0", "5.0" };
+		const float TranslateSnapValues[] = { 1.0f, 5.0f, 10.0f, 50.0f, 100.0f };
+		const float RotateSnapValues[] = { 5.0f, 10.0f, 15.0f, 30.0f, 45.0f };
+		const float ScaleSnapValues[] = { 0.1f, 0.25f, 0.5f, 1.0f, 5.0f };
 
 		constexpr float ToolbarFallbackIconSize = 14.0f;
 		constexpr float ToolbarMaxIconSize = 16.0f;
@@ -1674,7 +1677,8 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		auto DrawSnapSection = [&](EToolbarIcon SnapIcon, const char* Prefix, bool& bEnabled, int32& ValueIndex, const char* const* Labels, int32 LabelCount)
 		{
 			ImGui::SameLine(0.0f, 6.0f);
-			if (bEnabled)
+			const bool bWasEnabled = bEnabled;
+			if (bWasEnabled)
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.43f, 0.30f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.50f, 0.36f, 1.0f));
@@ -1686,7 +1690,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 			{
 				bEnabled = !bEnabled;
 			}
-			if (bEnabled)
+			if (bWasEnabled)
 			{
 				ImGui::PopStyleColor(3);
 			}
@@ -1721,6 +1725,12 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 			DrawSnapSection(EToolbarIcon::TranslateSnap, "T", GTSnapEnabled[SlotIndex], GTSnapIndex[SlotIndex], TranslateSnapLabels, IM_ARRAYSIZE(TranslateSnapLabels));
 			DrawSnapSection(EToolbarIcon::RotateSnap, "R", GRSnapEnabled[SlotIndex], GRSnapIndex[SlotIndex], RotateSnapLabels, IM_ARRAYSIZE(RotateSnapLabels));
 			DrawSnapSection(EToolbarIcon::ScaleSnap, "S", GSSnapEnabled[SlotIndex], GSSnapIndex[SlotIndex], ScaleSnapLabels, IM_ARRAYSIZE(ScaleSnapLabels));
+		}
+		if (Gizmo && VC == ActiveViewportClient)
+		{
+			Gizmo->SetTranslateSnap(GTSnapEnabled[SlotIndex], TranslateSnapValues[GTSnapIndex[SlotIndex]]);
+			Gizmo->SetRotateSnap(GRSnapEnabled[SlotIndex], RotateSnapValues[GRSnapIndex[SlotIndex]]);
+			Gizmo->SetScaleSnap(GSSnapEnabled[SlotIndex], ScaleSnapValues[GSSnapIndex[SlotIndex]]);
 		}
 
 		ImGui::SameLine();
