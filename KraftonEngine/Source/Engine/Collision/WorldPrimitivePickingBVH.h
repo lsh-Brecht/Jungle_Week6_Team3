@@ -21,6 +21,9 @@ public:
 	//트리를 순회해 가장 가까운 primitive hit 결과를 찾습니다.
 	bool Raycast(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
 
+	// AABB와 겹치는 StaticMeshComponent들을 수집합니다. (Decal BVH Broad Phase용)
+	void QueryAABB(const FBoundingBox& WorldBox, TArray<UStaticMeshComponent*>& OutMeshes) const;
+
 private:
 	struct FLeaf
 	{

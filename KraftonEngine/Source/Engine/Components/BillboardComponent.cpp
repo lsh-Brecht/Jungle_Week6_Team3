@@ -77,7 +77,10 @@ void UBillboardComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 
 FVector UBillboardComponent::GetVisualScale() const
 {
-	return GetWorldScale();
+	// return GetWorldScale();
+	// 아이콘은 Actor의 Transform Scale과 무관하게 고정 크기로 표시한다.
+	// 크기 조절은 Width / Height 프로퍼티로만 제어한다.
+	return FVector(1.0f, 1.0f, 1.0f);
 }
 
 FMatrix UBillboardComponent::ComputeBillboardMatrix(const FVector& CameraForward) const

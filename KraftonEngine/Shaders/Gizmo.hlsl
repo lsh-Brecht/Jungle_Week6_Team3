@@ -14,7 +14,7 @@ PS_Input_Color VS(VS_Input_PC input)
 {
     PS_Input_Color output;
     output.position = ApplyMVP(input.position);
-    output.color = input.color * GizmoColorTint;
+    output.color = input.color;
     return output;
 }
 
@@ -28,7 +28,7 @@ float4 PS(PS_Input_Color input) : SV_TARGET
         discard;
     }
 
-    float4 outColor = input.color;
+    float4 outColor = (bool)bOverrideAxisColor ? GizmoColorTint : (input.color * GizmoColorTint);
 
     if (axis == SelectedAxis)
     {

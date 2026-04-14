@@ -56,7 +56,8 @@ cbuffer GizmoBuffer : register(b2)
     uint SelectedAxis;
     float HoveredAxisOpacity;
     uint AxisMask; // 비트 0=X, 1=Y, 2=Z
-    uint3 _gizmoPad;
+    uint bOverrideAxisColor;
+    uint2 _gizmoPad;
 };
 
 // ── Outline 설정 (b3) ──

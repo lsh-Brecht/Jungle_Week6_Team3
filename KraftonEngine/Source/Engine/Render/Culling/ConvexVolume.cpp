@@ -1,4 +1,4 @@
-#include "Engine/Render/Culling/ConvexVolume.h"
+﻿#include "Engine/Render/Culling/ConvexVolume.h"
 #include "Engine/Core/EngineTypes.h"
 
 void FConvexVolume::UpdateFromMatrix(const FMatrix& InViewProjectionMatrix)
@@ -81,4 +81,42 @@ EAABBFrustumClassify FConvexVolume::ClassifyAABB(const FBoundingBox& Box) const
 
 	return bContained ? EAABBFrustumClassify::Contains
 	                  : EAABBFrustumClassify::Intersects;
+}
+
+bool FConvexVolume::IntersectOBB(const FMatrix& OBBWorldTransform) const
+{
+	// 단위 큐브[-0.5. 0.5]^3의 8개 로컬 코너
+	static constexpr float S = 0.5f;
+	const FVector LocalCorners[8] = {
+		{-S, -S, -S}, {S, -S, -S}, {S, S, -S}, {-S, S, -S},
+		{-S, -S, S}, {S, -S, S}, {S, S, S}, {-S, S, S}
+	};
+
+	// 로컬 코너 -> 월드 공간 변환
+	FVector WorldCorners[8];
+	for (int32 i = 0; i < 8; ++i)
+	{
+		WorldCorners[i] = OBBWorldTransform.TransformPositionWithW(LocalCorners[i]);
+	}
+
+	// SAT: 각 절두체 평면(6개)에 대해 모든 코너가 바깥에 있으면 분리(=외부)
+	// Plane.Dot(FVector4(Corner)) = Plane.X*C.X + Plane.Y*C.Y + Plane.Z*C.Z + Plane.W
+	// >=0 이면 평면 안쪽(inside), <0 이면 바깥쪽(outside)
+	for (const FVector4& Plane : Planes)
+	{
+		bool bAllOutside = true;
+		for (const FVector& Corner : WorldCorners)
+		{
+			if (Plane.Dot(FVector4(Corner)) >= 0.0f)
+			{
+				bAllOutside = false;
+				break;
+			}
+		}
+		if (bAllOutside)
+		{
+			return false; // 이 평면에서 OBB가 완전히 외부 -> 교차 없음
+		}
+	}
+	return true; // 어떤 평면에서도 완전히 분리되지 않음 -> 교차 가능
 }

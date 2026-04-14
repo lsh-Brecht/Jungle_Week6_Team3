@@ -14,6 +14,8 @@ namespace
 {
 	constexpr const wchar_t* ParticleDir = L"Asset\\Particle\\";
 	constexpr const wchar_t* TextureDir = L"Asset\\Textures\\";
+	constexpr const char* DecalSpriteTextureName = "DecalSprite";
+	constexpr const wchar_t* DecalSpriteIconPath = L"Asset\\Editor\\Icons\\DecalActorIcon.png";
 	constexpr const char* DefaultFontName = "Default";
 	constexpr const char* DefaultFontPath = "Asset/Font/FontAtlas.dds";
 
@@ -92,6 +94,14 @@ void FResourceManager::LoadDefaultResources(ID3D11Device* InDevice)
 			continue;
 		}
 		RegisterTexture(FName(Name), ToResourcePath(Path));
+	}
+
+	// DecalActor editor billboard uses the logical "DecalSprite" texture name, but the
+	// actual icon asset lives under the editor icon directory rather than Asset/Textures.
+	const std::filesystem::path DecalSpritePath = std::filesystem::path(FPaths::RootDir()) / DecalSpriteIconPath;
+	if (std::filesystem::exists(DecalSpritePath) && TextureResources.find(DecalSpriteTextureName) == TextureResources.end())
+	{
+		RegisterTexture(FName(DecalSpriteTextureName), ToResourcePath(DecalSpritePath));
 	}
 
 	if (LoadGPUResources(InDevice))

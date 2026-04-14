@@ -75,4 +75,5 @@ void FGizmoSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 		: 0xFFFFFFFFu;
 	G.HoveredAxisOpacity = 0.7f;
 	G.AxisMask = Gizmo->GetAxisMask();
+	G.bOverrideAxisColor = 0;
 }

@@ -312,6 +312,57 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 	return OutActor != nullptr;
 }
 
+void FWorldPrimitivePickingBVH::QueryAABB(const FBoundingBox& WorldBox, TArray<UStaticMeshComponent*>& OutMeshes) const
+{
+	if (Nodes.empty())
+	{
+		return;
+	}
+
+	// 루트 AABB 사전 검사
+	if (!Nodes[0].Bounds.IsIntersected(WorldBox))
+	{
+		return;
+	}
+
+	// 스택 기반 DFS 순회 (Raycast와 동일한 구조, TMin 정렬 불필요)
+	int32 NodeStack[WorldBVHMaxTraversalStack];
+	int32 StackSize = 0;
+	NodeStack[StackSize++] = 0;
+
+	while (StackSize > 0)
+	{
+		const int32 NodeIndex = NodeStack[--StackSize];
+		const FNode& Node = Nodes[NodeIndex];
+
+		if (Node.IsLeaf())
+		{
+			// 리프 노드: 각 Leaf의 AABB와 WorldBox 교차 검사
+			for (int32 LeafIndex = Node.FirstLeaf; LeafIndex < Node.FirstLeaf + Node.LeafCount; ++LeafIndex)
+			{
+				const FLeaf& Leaf = Leaves[LeafIndex];
+				if (Leaf.StaticMeshPrimitive && Leaf.Bounds.IsIntersected(WorldBox))
+				{
+					OutMeshes.push_back(Leaf.StaticMeshPrimitive);
+				}
+			}
+			continue;
+		}
+
+		// 내부 노드: 교차하는 자식 노드를 스택에 추가
+		for (int32 ChildSlot = 0; ChildSlot < Node.ChildCount; ++ChildSlot)
+		{
+			const FBoundingBox ChildBounds(
+				FVector(Node.ChildMinX[ChildSlot], Node.ChildMinY[ChildSlot], Node.ChildMinZ[ChildSlot]),
+				FVector(Node.ChildMaxX[ChildSlot], Node.ChildMaxY[ChildSlot], Node.ChildMaxZ[ChildSlot]));
+			if (ChildBounds.IsIntersected(WorldBox) && StackSize < WorldBVHMaxTraversalStack)
+			{
+				NodeStack[StackSize++] = Node.Children[ChildSlot];
+			}
+		}
+	}
+}
+
 int32 FWorldPrimitivePickingBVH::BuildRecursive(int32 Start, int32 End)
 {
 	const int32 NodeIndex = static_cast<int32>(Nodes.size());
