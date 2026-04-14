@@ -21,6 +21,9 @@ public:
 	// --- SubUV Frame ---
 	void SetFrameIndex(uint32 InIndex) { FrameIndex = InIndex; }
 	uint32 GetFrameIndex() const { return FrameIndex; }
+	uint32 GetColumns() const { return static_cast<uint32>(Columns); }
+	uint32 GetRows() const { return static_cast<uint32>(Rows); }
+	uint32 GetEndFrameIndex() const { return static_cast<uint32>(EndFrameIndex); }
 
 	// --- Playback ---
 	void SetFrameRate(float InFPS) { PlayRate = InFPS; }
@@ -49,6 +52,9 @@ private:
 	FParticleResource* CachedParticle = nullptr; // ResourceManager 소유, 여기선 참조만
 
 	uint32 FrameIndex = 0;
+	int32 Columns = 1;
+	int32 Rows = 1;
+	int32 EndFrameIndex = 0;
 	float  PlayRate = 30.0f; // 초당 프레임 수
 	float  TimeAccumulator = 0.0f;
 

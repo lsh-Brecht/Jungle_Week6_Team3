@@ -797,28 +797,38 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		else if (strcmp(Prop.Name.c_str(), "Texture") == 0)
 			Names = FResourceManager::Get().GetTextureNames();
 
-		if (!Names.empty())
-		{
-			if (ImGui::BeginCombo(Prop.Name.c_str(), Current.c_str()))
+			if (!Names.empty())
 			{
-				for (const auto& Name : Names)
+				if (ImGui::BeginCombo(Prop.Name.c_str(), Current.c_str()))
 				{
-					bool bSelected = (Current == Name);
-					if (ImGui::Selectable(Name.c_str(), bSelected))
+					for (const auto& Name : Names)
 					{
-						*Val = FName(Name);
-						bChanged = true;
+						bool bSelected = (Current == Name);
+						if (ImGui::Selectable(Name.c_str(), bSelected))
+						{
+							*Val = FName(Name);
+							bChanged = true;
+						}
+						if (bSelected)
+							ImGui::SetItemDefaultFocus();
 					}
-					if (bSelected)
-						ImGui::SetItemDefaultFocus();
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
+
+				if (strcmp(Prop.Name.c_str(), "Particle") == 0)
+				{
+					const FParticleResource* Particle = FResourceManager::Get().FindParticle(*Val);
+					if (Particle && Particle->SRV)
+					{
+						ImGui::TextUnformatted("Preview");
+						ImGui::Image((ImTextureID)Particle->SRV, ImVec2(160.0f, 160.0f));
+					}
+				}
 			}
-		}
-		else
-		{
-			char Buf[256];
-			strncpy_s(Buf, sizeof(Buf), Current.c_str(), _TRUNCATE);
+			else
+			{
+				char Buf[256];
+				strncpy_s(Buf, sizeof(Buf), Current.c_str(), _TRUNCATE);
 			if (ImGui::InputText(Prop.Name.c_str(), Buf, sizeof(Buf)))
 			{
 				*Val = FName(Buf);

@@ -1,6 +1,7 @@
 ﻿#include "SubUVComponent.h"
 #include "Object/ObjectFactory.h"
 
+#include <algorithm>
 #include <cstring>
 #include "Render/Resource/MeshBufferManager.h"
 #include "Resource/ResourceManager.h"
@@ -11,6 +12,15 @@
 #include "Serialization/Archive.h"
 
 IMPLEMENT_CLASS(USubUVComponent, UBillboardComponent)
+
+namespace
+{
+	int32 ClampSubUVEndFrame(int32 EndFrameIndex, int32 Columns, int32 Rows)
+	{
+		const int32 TotalFrames = std::max(1, Columns) * std::max(1, Rows);
+		return std::max(0, std::min(EndFrameIndex, TotalFrames - 1));
+	}
+}
 
 FPrimitiveSceneProxy* USubUVComponent::CreateSceneProxy()
 {
@@ -26,8 +36,19 @@ void USubUVComponent::Serialize(FArchive& Ar)
 
 	Ar << ParticleName;
 	Ar << FrameIndex;
+	Ar << Columns;
+	Ar << Rows;
+	Ar << EndFrameIndex;
 	Ar << PlayRate;
 	Ar << bLoop;
+
+	if (Ar.IsLoading())
+	{
+		Columns = std::max(1, Columns);
+		Rows = std::max(1, Rows);
+		EndFrameIndex = ClampSubUVEndFrame(EndFrameIndex, Columns, Rows);
+		FrameIndex = std::min<uint32>(FrameIndex, static_cast<uint32>(EndFrameIndex));
+	}
 }
 
 void USubUVComponent::PostDuplicate()
@@ -57,6 +78,9 @@ void USubUVComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	OutProps.push_back({ "Particle",  EPropertyType::Name,  &ParticleName });
 	OutProps.push_back({ "Width",     EPropertyType::Float, &Width,  0.1f, 100.0f, 0.1f });
 	OutProps.push_back({ "Height",    EPropertyType::Float, &Height, 0.1f, 100.0f, 0.1f });
+	OutProps.push_back({ "Columns",   EPropertyType::Int,   &Columns });
+	OutProps.push_back({ "Rows",      EPropertyType::Int,   &Rows });
+	OutProps.push_back({ "End Frame", EPropertyType::Int,   &EndFrameIndex });
 	OutProps.push_back({ "Play Rate", EPropertyType::Float, &PlayRate, 1.0f, 120.0f, 1.0f });
 	OutProps.push_back({ "bLoop",     EPropertyType::Bool,  &bLoop });
 }
@@ -77,6 +101,14 @@ void USubUVComponent::PostEditProperty(const char* PropertyName)
 	{
 		MarkProxyDirty(EDirtyFlag::Transform);
 		MarkWorldBoundsDirty();
+	}
+	else if (strcmp(PropertyName, "Columns") == 0 || strcmp(PropertyName, "Rows") == 0 || strcmp(PropertyName, "End Frame") == 0)
+	{
+		Columns = std::max(1, Columns);
+		Rows = std::max(1, Rows);
+		EndFrameIndex = ClampSubUVEndFrame(EndFrameIndex, Columns, Rows);
+		FrameIndex = std::min<uint32>(FrameIndex, static_cast<uint32>(EndFrameIndex));
+		MarkProxyDirty(EDirtyFlag::Mesh);
 	}
 }
 
@@ -115,7 +147,7 @@ void USubUVComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	if (!CachedParticle) return;
 	if (!bLoop && bIsExecute) return; // 단발 재생 완료 후 정지
 
-	const uint32 TotalFrames = CachedParticle->Columns * CachedParticle->Rows;
+	const uint32 TotalFrames = static_cast<uint32>(ClampSubUVEndFrame(EndFrameIndex, Columns, Rows) + 1);
 	if (TotalFrames == 0) return;
 
 	TimeAccumulator += DeltaTime;
