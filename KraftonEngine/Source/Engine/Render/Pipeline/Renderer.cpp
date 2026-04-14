@@ -560,6 +560,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 		for (const FPrimitiveSceneProxy* RawProxy : SortedProxyBuffer)
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
+			if (Proxy.Pass == ERenderPass::Decal && !ActiveDepthSRV) continue;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
 			BindShader(Proxy, Context, State);	
 			BindExtraCB(Proxy, Context);

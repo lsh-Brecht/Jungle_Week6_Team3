@@ -122,6 +122,8 @@ bool FResourceManager::LoadGPUResources(ID3D11Device* Device)
 			}
 			Resource.SRV->Release();
 			Resource.SRV = nullptr;
+			Resource.Width = 0;
+			Resource.Height = 0;
 		}
 
 			std::wstring FullPath = FPaths::Combine(FPaths::RootDir(), FPaths::ToWide(Resource.Path));
@@ -170,6 +172,15 @@ bool FResourceManager::LoadGPUResources(ID3D11Device* Device)
 		Resource.TrackedMemoryBytes = MemoryStats::CalculateTextureMemory(TextureResource);
 		if (TextureResource)
 		{
+			ID3D11Texture2D* Texture2D = nullptr;
+			if (SUCCEEDED(TextureResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&Texture2D))) && Texture2D)
+			{
+				D3D11_TEXTURE2D_DESC Desc = {};
+				Texture2D->GetDesc(&Desc);
+				Resource.Width = Desc.Width;
+				Resource.Height = Desc.Height;
+				Texture2D->Release();
+			}
 			TextureResource->Release();
 		}
 

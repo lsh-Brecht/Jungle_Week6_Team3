@@ -40,11 +40,13 @@ public:
 	UMaterialInterface* GetDecalMaterial() const;
 	void SetDecalTexture(const FName& TextureName);
 	const FTextureResource* GetDecalTexture() const;
+	bool FitSizeToTextureAspect();
 
 	void SetDecalSize(const FVector& InSize);
 	FMatrix GetTransformIncludingDecalSize() const;
 
 	void UpdateWorldAABB() const override;
+	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 	FMeshBuffer* GetMeshBuffer() const override;
 	const FMeshData* GetMeshData() const override;
 	FPrimitiveSceneProxy* CreateSceneProxy() override;

@@ -4,6 +4,7 @@
 
 #include "ImGui/imgui.h"
 #include "Components/GizmoComponent.h"
+#include "Components/DecalComponent.h"
 #include "Components/MovementComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -824,8 +825,30 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				const FTextureResource* Texture = FResourceManager::Get().FindTexture(FName(TextureName));
 				if (Texture && Texture->SRV)
 				{
-					ImGui::TextUnformatted("Preview");
-					ImGui::Image((ImTextureID)Texture->SRV, ImVec2(160.0f, 160.0f));
+					ImGui::Text("Preview (%u x %u)", Texture->Width, Texture->Height);
+					ImVec2 PreviewSize(160.0f, 160.0f);
+					if (Texture->Width > 0 && Texture->Height > 0)
+					{
+						const float Aspect = static_cast<float>(Texture->Width) / static_cast<float>(Texture->Height);
+						if (Aspect >= 1.0f)
+						{
+							PreviewSize.y = PreviewSize.x / Aspect;
+						}
+						else
+						{
+							PreviewSize.x = PreviewSize.y * Aspect;
+						}
+					}
+					ImGui::Image((ImTextureID)Texture->SRV, PreviewSize);
+
+					if (Texture->Width > 0 && Texture->Height > 0
+						&& SelectedComponent && SelectedComponent->IsA<UDecalComponent>())
+					{
+						if (ImGui::Button("Fit Size To Texture"))
+						{
+							bChanged = static_cast<UDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+						}
+					}
 				}
 			}
 

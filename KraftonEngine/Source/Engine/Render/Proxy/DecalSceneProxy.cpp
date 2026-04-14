@@ -114,7 +114,7 @@ void FDecalSceneProxy::RebuildSectionDraw()
 		}
     }
 
-    if (MeshBuffer)
+    if (MeshBuffer && Draw.DiffuseSRV)
     {
         Draw.IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
     }

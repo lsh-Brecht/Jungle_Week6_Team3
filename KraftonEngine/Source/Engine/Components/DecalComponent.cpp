@@ -3,12 +3,14 @@
 
 #include <cstring>
 
+#include "Collision/RayUtils.h"
 #include "Mesh/ObjManager.h"
 #include "Materials/MaterialInterface.h"
 #include "Object/ObjectFactory.h"
 #include "Resource/ResourceManager.h"
 #include "Render/Proxy/DecalSceneProxy.h"
 #include "Serialization/Archive.h"
+#include "Texture/Texture2D.h"
 
 IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
 
@@ -90,6 +92,45 @@ const FTextureResource* UDecalComponent::GetDecalTexture() const
 	return DecalTexture;
 }
 
+bool UDecalComponent::FitSizeToTextureAspect()
+{
+	uint32 TextureWidth = 0;
+	uint32 TextureHeight = 0;
+
+	if (DecalTexture)
+	{
+		TextureWidth = DecalTexture->Width;
+		TextureHeight = DecalTexture->Height;
+	}
+	else if (DecalMaterial)
+	{
+		if (UTexture2D* DiffuseTexture = DecalMaterial->GetDiffuseTexture())
+		{
+			TextureWidth = DiffuseTexture->GetWidth();
+			TextureHeight = DiffuseTexture->GetHeight();
+		}
+	}
+
+	if (TextureWidth == 0 || TextureHeight == 0)
+	{
+		return false;
+	}
+
+	if (DecalSize.Y <= 0.0f)
+	{
+		DecalSize.Y = 1.0f;
+	}
+
+	const FVector WorldScale = GetWorldScale();
+	const float SafeWorldScaleY = (WorldScale.Y > 0.001f) ? WorldScale.Y : 1.0f;
+	const float SafeWorldScaleZ = (WorldScale.Z > 0.001f) ? WorldScale.Z : 1.0f;
+	const float TextureAspectYZ = static_cast<float>(TextureHeight) / static_cast<float>(TextureWidth);
+	DecalSize.Z = (DecalSize.Y * SafeWorldScaleY * TextureAspectYZ) / SafeWorldScaleZ;
+	MarkProxyDirty(EDirtyFlag::Transform);
+	MarkWorldBoundsDirty();
+	return true;
+}
+
 void UDecalComponent::SetDecalSize(const FVector& InSize)
 {
 	DecalSize = InSize;
@@ -122,6 +163,32 @@ void UDecalComponent::UpdateWorldAABB() const
 
 	bWorldAABBDirty = false;
 	bHasValidWorldAABB = true;
+}
+
+bool UDecalComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult)
+{
+	const FMeshData* Data = GetMeshData();
+	if (!Data || Data->Indices.empty())
+	{
+		return false;
+	}
+
+	const FMatrix DecalWorldMatrix = GetTransformIncludingDecalSize();
+	const FMatrix DecalWorldInverseMatrix = DecalWorldMatrix.GetInverse();
+	const bool bHit = FRayUtils::RaycastTriangles(
+		Ray,
+		DecalWorldMatrix,
+		DecalWorldInverseMatrix,
+		&Data->Vertices[0].Position,
+		sizeof(FVertex),
+		Data->Indices,
+		OutHitResult);
+
+	if (bHit)
+	{
+		OutHitResult.HitComponent = this;
+	}
+	return bHit;
 }
 
 FMeshBuffer* UDecalComponent::GetMeshBuffer() const
