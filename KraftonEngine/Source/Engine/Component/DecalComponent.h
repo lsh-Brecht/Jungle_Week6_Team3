@@ -1,48 +1,61 @@
 ﻿#pragma once
-#include "Component/SceneComponent.h"
+#include "PrimitiveComponent.h"
+#include "Core/ResourceTypes.h"
+#include "Render/Culling/ConvexVolume.h"
 
-class UMaterialInterface;
-class FDeferredDecalProxy;
+class UStaticMeshComponent;
 
-class UDecalComponent : public USceneComponent
+// class DecalProxy;
+
+class UDecalComponent : public UPrimitiveComponent
 {
 public:
-	DECLARE_CLASS(UDecalComponent, USceneComponent)
+	DECLARE_CLASS(UDecalComponent, UPrimitiveComponent)
 
-	// 렌더링 순서 제어 (겹친 데칼 처리용)
-	//UPROPERTY() int32 SortOrder;
+	UDecalComponent() = default;
+	~UDecalComponent() override = default;
 
-	// 데칼의 크기 (X: 투영 깊이/Forward, Y: 너비, Z: 높이)
-	//UPROPERTY() FVector DecalSize;
+	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
-	// 머티리얼에 넘겨줄 데칼 컬러
-	//UPROPERTY() FLinearColor DecalColor;
+	FPrimitiveSceneProxy* CreateSceneProxy() override;
 
-	// 페이드 아웃 관련 데이터
-	//UPROPERTY() float FadeStartDelay;
-	//UPROPERTY() float FadeDuration;
-	//UPROPERTY() uint8 bDestroyOwnerAfterFade : 1;
+	// Property Editor 지원
+	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
+	void PostEditProperty(const char* PropertyName) override;
 
-	// API
-	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
-	void SetSortOrder(int32 Value);
-	//void SetDecalColor(const FLinearColor& Color);
-	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
-	UMaterialInterface* GetDecalMaterial() const;
+	void Serialize(FArchive& Ar) override;
+	void PostDuplicate() override;
 
-	// 자체 엔진의 OBB 혹은 AABB 기반 Culling을 위한 Bounds 계산
-	//virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
+	// Color (with Color)
+	void SetColor(FVector4 InColor) { Color = InColor; }
+	FVector4 GetColor() const;
 
-	// 데칼 Size가 적용된 최종 Transform 반환 (렌더러/셰이더에서 사용)
-	FTransform GetTransformIncludingDecalSize() const;
+	// --- Texture ---
+	void SetTexture(const FName& InTextureName);
+	const FTextureResource* GetTexture() const { return CachedTexture; }
+	const FName& GetTextureName() const { return TextureName; }
 
-	// 렌더 스레드에 보낼 프록시 생성
-	virtual FDeferredDecalProxy* CreateSceneProxy();
+	const FConvexVolume GetDecalVolume() { return ConvexVolume; }
+	void UpdateDecalVolumeFromTransform();
+	void OnTransformDirty() override;
 
-	// 직렬화 (FArchive를 통한 저장/로드)
-	virtual void Serialize(FArchive& Ar) override;
+	const TArray<UStaticMeshComponent*>& GetReceivers() const { return Receivers; }
 
-protected:
+private:
+	void HandleFade(float DeltaTime);
+	void UpdateReceivers();
+	void DrawDebugBox();
 
-	UMaterialInterface* DecalMaterial;
+private:
+	FConvexVolume ConvexVolume;
+	TArray<UStaticMeshComponent*> Receivers;
+	FName TextureName;
+	FVector4 Color = { 1,1,1,1 };
+	float FadeInDelay = 0;
+	float FadeInDuration = 0;
+	float FadeOutDelay = 0;
+	float FadeOutDuration = 0;
+	float FadeTimer = 0;
+	float FadeOpacity = 1.0f;
+	FTextureResource* CachedTexture = nullptr;
 };
