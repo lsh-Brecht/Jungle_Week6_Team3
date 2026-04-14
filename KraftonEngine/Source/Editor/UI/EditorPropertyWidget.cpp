@@ -20,6 +20,7 @@
 
 #include <Windows.h>
 #include <commdlg.h>
+#include <cstring>
 #include <filesystem>
 
 #define SEPARATOR(); ImGui::Spacing(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); ImGui::Spacing();
@@ -39,6 +40,34 @@ static FString GetStemFromPath(const FString& Path)
 	size_t SlashPos = Path.find_last_of("/\\");
 	FString FileName = (SlashPos == FString::npos) ? Path : Path.substr(SlashPos + 1);
 	return RemoveExtension(FileName);
+}
+
+static constexpr const char* DecalTextureMaterialPrefix = "Texture:";
+
+static bool IsDecalTextureMaterialPath(const FString& Path)
+{
+	return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
+}
+
+static FString MakeDecalTextureMaterialPath(const FString& TextureName)
+{
+	return FString(DecalTextureMaterialPrefix) + TextureName;
+}
+
+static FString GetDecalTextureNameFromMaterialPath(const FString& Path)
+{
+	return IsDecalTextureMaterialPath(Path)
+		? Path.substr(std::strlen(DecalTextureMaterialPrefix))
+		: FString();
+}
+
+static FString GetMaterialSlotPreviewName(const FString& Path)
+{
+	if (Path.empty() || Path == "None")
+	{
+		return "None";
+	}
+	return IsDecalTextureMaterialPath(Path) ? GetDecalTextureNameFromMaterialPath(Path) : GetStemFromPath(Path);
 }
 
 static FString GetComponentDisplayLabel(UActorComponent* Comp)
@@ -745,32 +774,60 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::BeginGroup();
 		ImGui::SetNextItemWidth(-1);
 
-		FString Preview = (Slot->Path.empty() || Slot->Path == "None") ? "None" : GetStemFromPath(Slot->Path);
-		if (ImGui::BeginCombo("##Mat", Preview.c_str()))
-		{
-			// "None" 선택지 기본 제공
-			bool bSelectedNone = (Slot->Path == "None" || Slot->Path.empty());
-			if (ImGui::Selectable("None", bSelectedNone))
+			const bool bDecalMaterialSlot = !bElementSlot && Prop.Name == "Decal Material";
+			FString Preview = GetMaterialSlotPreviewName(Slot->Path);
+			if (ImGui::BeginCombo("##Mat", Preview.c_str()))
 			{
-				Slot->Path = "None";
+				// "None" 선택지 기본 제공
+				bool bSelectedNone = (Slot->Path == "None" || Slot->Path.empty());
+				if (ImGui::Selectable("None", bSelectedNone))
+				{
+					Slot->Path = "None";
 				bChanged = true;
 			}
 			if (bSelectedNone) ImGui::SetItemDefaultFocus();
 
-			// TObjectIterator 대신 FObjManager 파일 목록 스캔 데이터 사용
-			const TArray<FMaterialAssetListItem>& MatFiles = FObjManager::GetAvailableMaterialFiles();
-			for (const FMaterialAssetListItem& Item : MatFiles)
-			{
-				bool bSelected = (Slot->Path == Item.FullPath);
-				if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+				// TObjectIterator 대신 FObjManager 파일 목록 스캔 데이터 사용
+				const TArray<FMaterialAssetListItem>& MatFiles = FObjManager::GetAvailableMaterialFiles();
+				for (const FMaterialAssetListItem& Item : MatFiles)
 				{
-					Slot->Path = Item.FullPath; // 데이터는 전체 경로로 저장
-					bChanged = true;
+					bool bSelected = (Slot->Path == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+					{
+						Slot->Path = Item.FullPath; // 데이터는 전체 경로로 저장
+						bChanged = true;
+					}
+					if (bSelected) ImGui::SetItemDefaultFocus();
 				}
-				if (bSelected) ImGui::SetItemDefaultFocus();
+
+				if (bDecalMaterialSlot)
+				{
+					for (const FString& TextureName : FResourceManager::Get().GetTextureNames())
+					{
+						const FString TextureMaterialPath = MakeDecalTextureMaterialPath(TextureName);
+						const FString DisplayName = TextureName + " (Texture)";
+						bool bSelected = (Slot->Path == TextureMaterialPath);
+						if (ImGui::Selectable(DisplayName.c_str(), bSelected))
+						{
+							Slot->Path = TextureMaterialPath;
+							bChanged = true;
+						}
+						if (bSelected) ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
 			}
-			ImGui::EndCombo();
-		}
+
+			if (bDecalMaterialSlot && IsDecalTextureMaterialPath(Slot->Path))
+			{
+				const FString TextureName = GetDecalTextureNameFromMaterialPath(Slot->Path);
+				const FTextureResource* Texture = FResourceManager::Get().FindTexture(FName(TextureName));
+				if (Texture && Texture->SRV)
+				{
+					ImGui::TextUnformatted("Preview");
+					ImGui::Image((ImTextureID)Texture->SRV, ImVec2(160.0f, 160.0f));
+				}
+			}
 
       // UVScroll은 StaticMesh element 슬롯에서만 노출
 		if (bElementSlot)

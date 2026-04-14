@@ -6,10 +6,33 @@
 #include "Mesh/ObjManager.h"
 #include "Materials/MaterialInterface.h"
 #include "Object/ObjectFactory.h"
+#include "Resource/ResourceManager.h"
 #include "Render/Proxy/DecalSceneProxy.h"
 #include "Serialization/Archive.h"
 
 IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
+
+namespace
+{
+	constexpr const char* DecalTextureMaterialPrefix = "Texture:";
+
+	bool IsDecalTextureMaterialPath(const FString& Path)
+	{
+		return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
+	}
+
+	FString GetDecalTextureNameFromMaterialPath(const FString& Path)
+	{
+		return IsDecalTextureMaterialPath(Path)
+			? Path.substr(std::strlen(DecalTextureMaterialPrefix))
+			: FString();
+	}
+
+	FString MakeDecalTextureMaterialPath(const FName& TextureName)
+	{
+		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
+	}
+}
 
 UDecalComponent::UDecalComponent()
 {
@@ -41,14 +64,30 @@ void UDecalComponent::SetDecalColor(const FLinearColor& Color)
 
 void UDecalComponent::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
 {
-    DecalMaterial = NewDecalMaterial;
-    DecalMaterialSlot.Path = (DecalMaterial != nullptr) ? DecalMaterial->GetAssetPathFileName() : "None";
-    MarkProxyDirty(EDirtyFlag::Material);
+	DecalMaterial = NewDecalMaterial;
+	DecalTextureName = FName();
+	DecalTexture = nullptr;
+	DecalMaterialSlot.Path = (DecalMaterial != nullptr) ? DecalMaterial->GetAssetPathFileName() : "None";
+	MarkProxyDirty(EDirtyFlag::Material);
 }
 
 UMaterialInterface* UDecalComponent::GetDecalMaterial() const
 {
-    return DecalMaterial;
+	return DecalMaterial;
+}
+
+void UDecalComponent::SetDecalTexture(const FName& TextureName)
+{
+	DecalMaterial = nullptr;
+	DecalTextureName = TextureName;
+	DecalTexture = FResourceManager::Get().FindTexture(TextureName);
+	DecalMaterialSlot.Path = DecalTexture ? MakeDecalTextureMaterialPath(TextureName) : "None";
+	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+const FTextureResource* UDecalComponent::GetDecalTexture() const
+{
+	return DecalTexture;
 }
 
 void UDecalComponent::SetDecalSize(const FVector& InSize)
@@ -119,14 +158,22 @@ void UDecalComponent::PostDuplicate()
 {
     UPrimitiveComponent::PostDuplicate();
 
-    if (!DecalMaterialSlot.Path.empty() && DecalMaterialSlot.Path != "None")
-    {
-        DecalMaterial = FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path);
-    }
-    else
-    {
-        DecalMaterial = nullptr;
-    }
+	if (IsDecalTextureMaterialPath(DecalMaterialSlot.Path))
+	{
+		SetDecalTexture(FName(GetDecalTextureNameFromMaterialPath(DecalMaterialSlot.Path)));
+	}
+	else if (!DecalMaterialSlot.Path.empty() && DecalMaterialSlot.Path != "None")
+	{
+		DecalMaterial = FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path);
+		DecalTextureName = FName();
+		DecalTexture = nullptr;
+	}
+	else
+	{
+		DecalMaterial = nullptr;
+		DecalTextureName = FName();
+		DecalTexture = nullptr;
+	}
 
     MarkRenderStateDirty();
 }
@@ -154,14 +201,18 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
     }
     else if (std::strcmp(PropertyName, "Decal Material") == 0 || std::strcmp(PropertyName, "Element 0") == 0)
     {
-        if (DecalMaterialSlot.Path.empty() || DecalMaterialSlot.Path == "None")
-        {
-            SetDecalMaterial(nullptr);
-        }
-        else
-        {
-            SetDecalMaterial(FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path));
-        }
+		if (DecalMaterialSlot.Path.empty() || DecalMaterialSlot.Path == "None")
+		{
+			SetDecalMaterial(nullptr);
+		}
+		else if (IsDecalTextureMaterialPath(DecalMaterialSlot.Path))
+		{
+			SetDecalTexture(FName(GetDecalTextureNameFromMaterialPath(DecalMaterialSlot.Path)));
+		}
+		else
+		{
+			SetDecalMaterial(FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path));
+		}
     }
 }
 
