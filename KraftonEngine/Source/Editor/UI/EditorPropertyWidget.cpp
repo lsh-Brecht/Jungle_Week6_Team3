@@ -824,6 +824,15 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 						ImGui::Image((ImTextureID)Particle->SRV, ImVec2(160.0f, 160.0f));
 					}
 				}
+				else if (strcmp(Prop.Name.c_str(), "Texture") == 0)
+				{
+					const FTextureResource* Texture = FResourceManager::Get().FindTexture(*Val);
+					if (Texture && Texture->SRV)
+					{
+						ImGui::TextUnformatted("Preview");
+						ImGui::Image((ImTextureID)Texture->SRV, ImVec2(160.0f, 160.0f));
+					}
+				}
 			}
 			else
 			{
