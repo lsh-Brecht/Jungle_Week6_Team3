@@ -89,6 +89,9 @@ void FRenderBus::SetCameraInfo(const UCameraComponent* Camera)
 	FarPlane = Camera->GetFarPlane();
 	bIsOrtho = Camera->IsOrthogonal();
 	OrthoWidth = Camera->GetOrthoWidth();
+
+	// View * Proj 로부터 절두체 평면 갱신 - OBB 컬링(IntersectOBB)에 사용
+	CachedConvexVolume.UpdateFromMatrix(View * Proj);
 }
 
 void FRenderBus::SetViewportInfo(const FViewport* VP)

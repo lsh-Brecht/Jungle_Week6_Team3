@@ -63,6 +63,7 @@ FDecalSceneProxy::FDecalSceneProxy(UDecalComponent* InComponent)
 {
 	bShowAABB = false;
 	bSupportsOutline = false;
+	bPerViewportUpdate = true; // OBB-Frustum 컬링을 위해 매 프레임 UpdatePerViewport 호출
 }
 
 void FDecalSceneProxy::UpdateMesh()
@@ -125,6 +126,24 @@ void FDecalSceneProxy::CollectEntries(FRenderBus& Bus)
 		// 렌더 버스에 OBB 엔트리를 추가하여 LineBatcher가 그리도록 전달!
 		Bus.AddOBBEntry(std::move(Entry));
 	}
+}
+
+void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
+{
+	UDecalComponent* DecalComp = GetDecalComponent();
+
+	// 컴포넌트 유효성 및 가시성 체크
+	if (!DecalComp || !DecalComp->IsVisible())
+	{
+		bVisible = false;
+		return;
+	}
+
+	// OBB-Frustum SAT 컬링
+	// Decal의 OBB (단위 큐브를 DecalSize + 회전 + 위치로 변환한 행렬)를
+	// 절두체 6개 평면에 대해 8코너 테스트 - 어떤 평면에서 모든 코너가 외부면 false
+	const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
+	bVisible = Bus.GetConvexVolume().IntersectOBB(OBBTransform);
 }
 
 UDecalComponent* FDecalSceneProxy::GetDecalComponent() const

@@ -2,6 +2,7 @@
 #include "Core/CoreTypes.h"
 #include "Render/Pipeline/RenderConstants.h"
 #include "Render/Types/ViewTypes.h"
+#include "Render/Culling/ConvexVolume.h"
 
 class UCameraComponent;
 class FViewport;
@@ -86,6 +87,9 @@ public:
 	void SetLODContext(const FLODUpdateContext& InCtx) { LODContext = InCtx; }
 	const FLODUpdateContext& GetLODContext() const { return LODContext; }
 
+	// Frustum - SetCameraInfo 시 View*Proj로 자동 갱신, UpdatePerViewport에서 OBB 컬링 사용
+	const FConvexVolume& GetConvexVolume() const { return CachedConvexVolume; }
+
 private:
 	// 프록시 패스 큐 — 포인터만 저장, 데이터는 프록시 소유
 	TArray<const FPrimitiveSceneProxy*> ProxyQueues[(uint32)ERenderPass::MAX];
@@ -132,6 +136,9 @@ private:
 
 	// LOD
 	FLODUpdateContext LODContext;
+
+	// Frustum (View*Proj로부터 매 프레임 갱신)
+	FConvexVolume CachedConvexVolume;
 
 	//Editor Settings
 	EViewMode ViewMode;

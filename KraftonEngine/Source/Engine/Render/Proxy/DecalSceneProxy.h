@@ -14,6 +14,9 @@ public:
 
 	void CollectEntries(FRenderBus& Bus) override;
 
+	// 매 프레임 카메라 기준 OBB-Frustum 컬링 수행 (bPerViewportUpdate = true)
+	void UpdatePerViewport(const FRenderBus& Bus) override;
+
 private:
     UDecalComponent* GetDecalComponent() const;
     void RebuildSectionDraw();
