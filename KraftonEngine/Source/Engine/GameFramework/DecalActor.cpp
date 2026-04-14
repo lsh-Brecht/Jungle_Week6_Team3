@@ -57,9 +57,12 @@ void ADecalActor::BeginPlay()
 {
 	AActor::BeginPlay();
 
-	if (SpriteComponent)
+    for (UActorComponent* Component : GetComponents())
 	{
-		SpriteComponent->SetVisibility(false);
+		if (UBillboardComponent* Billboard = Cast<UBillboardComponent>(Component))
+		{
+			Billboard->SetVisibility(false);
+		}
 	}
 }
 

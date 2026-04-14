@@ -103,6 +103,10 @@ void FDecalSceneProxy::RebuildSectionDraw()
             }
             Draw.DiffuseColor = Material->GetDiffuseColor();
         }
+		else
+		{
+			Draw.DiffuseColor = DecalComp->DecalColor.ToVector4();
+		}
     }
 
     if (MeshBuffer)

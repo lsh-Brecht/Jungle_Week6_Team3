@@ -53,5 +53,5 @@ public:
 
 protected:
 	UMaterialInterface* DecalMaterial = nullptr;
- FMaterialSlot DecalMaterialSlot;
+	FMaterialSlot DecalMaterialSlot;
 };

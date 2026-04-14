@@ -329,6 +329,11 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
+		if (CurPass == ERenderPass::Decal && !InRenderBus.GetShowFlags().bDecal)
+		{
+			continue;
+		}
+
 		const uint32 PassIndex = static_cast<uint32>(CurPass);
 		const auto& Batcher = PassBatchers[PassIndex];
 		const bool bHasBatcher = static_cast<bool>(Batcher);

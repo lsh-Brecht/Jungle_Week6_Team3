@@ -1801,6 +1801,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 			ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
 			ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
 			ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
+			ImGui::Checkbox("Decal", &Opts.ShowFlags.bDecal);
 			ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
 			ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
 			ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);

@@ -29,6 +29,7 @@ namespace Key
 	constexpr const char* ViewMode = "ViewMode";
 	constexpr const char* bPrimitives = "bPrimitives";
 	constexpr const char* bGrid = "bGrid";
+	constexpr const char* bDecal = "bDecal";
 	constexpr const char* bWorldAxis = "bWorldAxis";
 	constexpr const char* bGizmo = "bGizmo";
 	constexpr const char* bBillboardText = "bBillboardText";
@@ -113,6 +114,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 		SlotObj[Key::ViewportType] = static_cast<int32>(Opts.ViewportType);
 		SlotObj[Key::bPrimitives] = Opts.ShowFlags.bPrimitives;
 		SlotObj[Key::bGrid] = Opts.ShowFlags.bGrid;
+		SlotObj[Key::bDecal] = Opts.ShowFlags.bDecal;
 		SlotObj[Key::bWorldAxis] = Opts.ShowFlags.bWorldAxis;
 		SlotObj[Key::bGizmo] = Opts.ShowFlags.bGizmo;
 		SlotObj[Key::bBillboardText] = Opts.ShowFlags.bBillboardText;
@@ -259,6 +261,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 					Opts.ShowFlags.bPrimitives = S[Key::bPrimitives].ToBool();
 				if (S.hasKey(Key::bGrid))
 					Opts.ShowFlags.bGrid = S[Key::bGrid].ToBool();
+				if(S.hasKey(Key::bDecal))
+					Opts.ShowFlags.bDecal = S[Key::bDecal].ToBool();
 				if (S.hasKey(Key::bWorldAxis))
 					Opts.ShowFlags.bWorldAxis = S[Key::bWorldAxis].ToBool();
 				if (S.hasKey(Key::bGizmo))
