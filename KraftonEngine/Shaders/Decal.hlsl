@@ -41,7 +41,7 @@ float4 PS(PS_Input_Decal input) : SV_TARGET
     DepthTex.GetDimensions(width, height);
 
     const float2 invSize = 1.0f / float2(width, height);
-    const float2 uv = (input.position.xy + 0.5f) * invSize;
+    const float2 uv = (input.position.xy) * invSize;
 
     const float depth = DepthTex.Load(int3(input.position.xy, 0));
     if (depth >= 1.0f)
@@ -52,7 +52,7 @@ float4 PS(PS_Input_Decal input) : SV_TARGET
     const float3 worldPos = ReconstructWorldPosition(uv, depth);
     const float4 localDecalPos = mul(float4(worldPos, 1.0f), InverseDecalModel);
 
-    if (abs(localDecalPos.x) > 0.5f || abs(localDecalPos.y) > 0.5f || abs(localDecalPos.z) > 0.5f)
+    if (abs(localDecalPos.x) > 0.55f || abs(localDecalPos.y) > 0.5f || abs(localDecalPos.z) > 0.5f)
     {
         discard;
     }
