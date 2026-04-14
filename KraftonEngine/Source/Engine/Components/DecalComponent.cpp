@@ -55,11 +55,34 @@ void UDecalComponent::SetDecalSize(const FVector& InSize)
 {
 	DecalSize = InSize;
 	MarkProxyDirty(EDirtyFlag::Transform);
+	MarkWorldBoundsDirty();
 }
 
 FMatrix UDecalComponent::GetTransformIncludingDecalSize() const
 {
     return FMatrix::MakeScaleMatrix(DecalSize) * GetWorldMatrix();
+}
+
+void UDecalComponent::UpdateWorldAABB() const
+{
+	// 1. DecalSize가 반영된 로컬 Extent(반지름)를 계산합니다.
+	// 렌더링에 쓰이는 큐브 메쉬가 크기 1(-0.5 ~ 0.5)이므로 0.5를 곱해줍니다.
+	FVector LExt = DecalSize * 0.5f;
+
+	// 2. 부모(UPrimitiveComponent)의 투영 공식을 그대로 사용하여 OBB의 꼭짓점들을 AABB로 변환합니다.
+	FMatrix worldMatrix = GetWorldMatrix();
+
+	float NewEx = std::abs(worldMatrix.M[0][0]) * LExt.X + std::abs(worldMatrix.M[1][0]) * LExt.Y + std::abs(worldMatrix.M[2][0]) * LExt.Z;
+	float NewEy = std::abs(worldMatrix.M[0][1]) * LExt.X + std::abs(worldMatrix.M[1][1]) * LExt.Y + std::abs(worldMatrix.M[2][1]) * LExt.Z;
+	float NewEz = std::abs(worldMatrix.M[0][2]) * LExt.X + std::abs(worldMatrix.M[1][2]) * LExt.Y + std::abs(worldMatrix.M[2][2]) * LExt.Z;
+
+	// 3. 엔진 AABB 변수에 갱신
+	FVector WorldCenter = GetWorldLocation();
+	WorldAABBMinLocation = WorldCenter - FVector(NewEx, NewEy, NewEz);
+	WorldAABBMaxLocation = WorldCenter + FVector(NewEx, NewEy, NewEz);
+
+	bWorldAABBDirty = false;
+	bHasValidWorldAABB = true;
 }
 
 FMeshBuffer* UDecalComponent::GetMeshBuffer() const
@@ -123,6 +146,7 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
     if (std::strcmp(PropertyName, "Decal Size") == 0)
     {
         MarkProxyDirty(EDirtyFlag::Transform);
+		MarkWorldBoundsDirty();
     }
     else if (std::strcmp(PropertyName, "Decal Color") == 0)
     {
