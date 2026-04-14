@@ -11,9 +11,9 @@
 #include "Engine/Profiling/PlatformTime.h"
 #include "Engine/Runtime/WindowsWindow.h"
 
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Collision/RayUtils.h"
 #include "Object/Object.h"
 #include "Editor/Selection/SelectionManager.h"

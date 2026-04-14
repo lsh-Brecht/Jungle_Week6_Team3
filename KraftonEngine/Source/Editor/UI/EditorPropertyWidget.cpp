@@ -3,11 +3,11 @@
 #include "Editor/EditorEngine.h"
 
 #include "ImGui/imgui.h"
-#include "Component/GizmoComponent.h"
-#include "Component/MovementComponent.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
-#include "Component/SceneComponent.h"
+#include "Components/GizmoComponent.h"
+#include "Components/MovementComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "Core/PropertyTypes.h"
 #include "Core/ClassTypes.h"
 #include "Resource/ResourceManager.h"
@@ -712,7 +712,8 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 	case EPropertyType::MaterialSlot:
 	{
 		FMaterialSlot* Slot = static_cast<FMaterialSlot*>(Prop.ValuePtr);
-		int32          ElemIdx = (strncmp(Prop.Name.c_str(), "Element ", 8) == 0) ? atoi(&Prop.Name[8]) : -1;
+       const bool bElementSlot = (strncmp(Prop.Name.c_str(), "Element ", 8) == 0);
+		int32 ElemIdx = bElementSlot ? atoi(&Prop.Name[8]) : -1;
 
 		FString SlotName = "None";
 		if (ElemIdx != -1 && SelectedComponent && SelectedComponent->IsA<UStaticMeshComponent>())
@@ -722,13 +723,20 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				SlotName = SMC->GetStaticMesh()->GetStaticMaterials()[ElemIdx].MaterialSlotName;
 		}
 
-		// 좌측: Element 인덱스 + 슬롯 이름
+      // 좌측: Element 인덱스 + 슬롯 이름 (일반 머티리얼 슬롯) 또는 프로퍼티 이름(전용 슬롯)
 		ImGui::BeginGroup();
-		ImGui::Text("Element %d", ElemIdx);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-		ImGui::TextUnformatted(SlotName.c_str());
-		ImGui::PopStyleColor();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", SlotName.c_str());
+     if (bElementSlot)
+		{
+			ImGui::Text("Element %d", ElemIdx);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::TextUnformatted(SlotName.c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", SlotName.c_str());
+		}
+		else
+		{
+			ImGui::TextUnformatted(Prop.Name.c_str());
+		}
 		ImGui::EndGroup();
 
 		ImGui::SameLine(120);
@@ -764,10 +772,13 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 			ImGui::EndCombo();
 		}
 
-		// UVScroll 체크박스 — 렌더러가 매 프레임 직접 읽으므로 PostEditProperty 불필요
-		bool bScroll = (Slot->bUVScroll != 0);
-		if (ImGui::Checkbox("Scroll", &bScroll))
-			Slot->bUVScroll = bScroll ? 1 : 0;
+      // UVScroll은 StaticMesh element 슬롯에서만 노출
+		if (bElementSlot)
+		{
+			bool bScroll = (Slot->bUVScroll != 0);
+			if (ImGui::Checkbox("Scroll", &bScroll))
+				Slot->bUVScroll = bScroll ? 1 : 0;
+		}
 
 		ImGui::EndGroup();
 		break;

@@ -2,7 +2,7 @@
 
 #include "Math/Transform.h"
 #include "Math/Rotator.h"
-#include "Component/ActorComponent.h"
+#include "Components/ActorComponent.h"
 #include "Math/MathUtils.h"
 
 class AActor;

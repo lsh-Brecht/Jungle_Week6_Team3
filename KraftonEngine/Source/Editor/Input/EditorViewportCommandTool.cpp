@@ -1,6 +1,6 @@
-#include "Editor/Input/EditorViewportCommandTool.h"
+﻿#include "Editor/Input/EditorViewportCommandTool.h"
 
-#include "Component/GizmoComponent.h"
+#include "Components/GizmoComponent.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/Input/EditorNavigationTool.h"
 #include "Editor/Input/EditorViewportController.h"

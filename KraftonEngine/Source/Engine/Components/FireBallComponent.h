@@ -1,8 +1,8 @@
 ﻿#pragma once
 
-#include "PrimitiveComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Core/EngineTypes.h"
-#include "Component/SceneEffectSource.h"
+#include "Components/SceneEffectSource.h"
 
 // 복잡한 lighting 계산 대신, 월드 내 특정 위치 주변에 색을 더하는 간단한 반경 기반 효과용 컴포넌트.
 // FSceneEffectConstants에 데이터를 채워 FScene에 전달하는 형태로 구현되어 있습니다.

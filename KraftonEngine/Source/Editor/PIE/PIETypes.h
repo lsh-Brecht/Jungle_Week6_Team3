@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Core/EngineTypes.h"
 #include "Math/Rotator.h"
 #include "Math/Vector.h"

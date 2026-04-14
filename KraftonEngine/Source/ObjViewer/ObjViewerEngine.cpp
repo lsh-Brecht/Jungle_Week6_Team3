@@ -5,7 +5,7 @@
 #include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
 #include "Mesh/ObjManager.h"
-#include "Component/StaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "Viewport/Viewport.h"
 

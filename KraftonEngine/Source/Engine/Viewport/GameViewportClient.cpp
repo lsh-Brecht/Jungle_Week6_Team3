@@ -1,8 +1,8 @@
-#include "Viewport/GameViewportClient.h"
+﻿#include "Viewport/GameViewportClient.h"
 
-#include "Component/CameraComponent.h"
-#include "Component/SceneComponent.h"
-#include "Component/StaticMeshComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Engine/Input/InputSystem.h"

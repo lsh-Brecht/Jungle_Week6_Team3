@@ -1,5 +1,5 @@
 ﻿#include "Render/Proxy/SubUVSceneProxy.h"
-#include "Component/SubUVComponent.h"
+#include "Components/SubUVComponent.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ShaderManager.h"
 

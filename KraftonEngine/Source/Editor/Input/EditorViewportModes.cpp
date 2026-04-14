@@ -1,9 +1,9 @@
-#include "Editor/Input/EditorViewportModes.h"
+﻿#include "Editor/Input/EditorViewportModes.h"
 
 #include "Editor/Input/EditorGizmoTool.h"
 #include "Editor/Input/EditorSelectionTool.h"
 #include "Editor/Viewport/EditorViewportClient.h"
-#include "Component/GizmoComponent.h"
+#include "Components/GizmoComponent.h"
 
 FEditorTransformMode::FEditorTransformMode(FEditorViewportClient* InOwner, EEditorViewportModeType InModeType)
 	: Owner(InOwner)

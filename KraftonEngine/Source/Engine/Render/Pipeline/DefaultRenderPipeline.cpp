@@ -1,9 +1,9 @@
-#include "DefaultRenderPipeline.h"
+﻿#include "DefaultRenderPipeline.h"
 
 #include "Renderer.h"
 #include "SceneRenderSetup.h"
 #include "Engine/Runtime/Engine.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "GameFramework/World.h"
 
 FDefaultRenderPipeline::FDefaultRenderPipeline(UEngine* InEngine, FRenderer& InRenderer)

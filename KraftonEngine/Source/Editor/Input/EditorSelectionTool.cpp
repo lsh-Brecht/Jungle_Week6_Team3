@@ -1,4 +1,4 @@
-#include "Editor/Input/EditorSelectionTool.h"
+﻿#include "Editor/Input/EditorSelectionTool.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,8 +7,8 @@
 #include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "Editor/Selection/SelectionManager.h"
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Math/Matrix.h"

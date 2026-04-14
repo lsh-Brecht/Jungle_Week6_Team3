@@ -12,6 +12,8 @@ cbuffer FXAAParams : register(b9)
     float2 TexelSize; // 1.0f / ViewportWidth, 1.0f / ViewportHeight
     float EdgeThreshold; // 기본값: 0.125f
     float EdgeThresholdMin; // 기본값: 0.0312f
+    int SearchSteps; // Low:2, Medium:3, High:5, Epic:12, Cinematic:20
+    float3 FXAAPad;
 };
 
 // ── VS: Fullscreen Triangle (OutlinePostProcess.hlsl 구조 활용) ──
@@ -101,12 +103,23 @@ float4 PS(PS_Input_Tex input) : SV_TARGET
     float lumaEndN = 0.0f;
     bool doneP = false, doneN = false;
 
-    // Step 1~3: 1.0 간격
-    // Step 4~5: 1.5 간격
-    // Step 6: 2.0 간격, Step 7: 4.0 간격 ...
-    float stepSizes[7] = { 1.0, 1.0, 1.0, 1.5, 2.0, 4.0, 8.0 };
-    
-    for (int i = 0; i < 7; i++)
+    static const int MaxSearchSteps = 20;
+    int searchSteps = min(max(SearchSteps, 1), MaxSearchSteps);
+
+    // 단계별 반복 횟수에 맞춰 점진적으로 탐색 반경 확장
+    // Low(2):       1.0, 1.0
+    // Medium(3):    +1.0
+    // High(5):      +1.5, +2.0
+    // Epic(12):     +2.0 구간 확장
+    // Cinematic(20):+4.0/8.0/12.0/16.0까지 확장
+    float stepSizes[MaxSearchSteps] = {
+        1.0, 1.0, 1.0, 1.5, 2.0,
+        2.0, 2.0, 2.0, 2.0, 2.0,
+        2.0, 2.0, 4.0, 4.0, 4.0,
+        4.0, 8.0, 8.0, 12.0, 16.0
+    };
+
+    for (int i = 0; i < searchSteps; i++)
     {
         if (!doneP)
         {

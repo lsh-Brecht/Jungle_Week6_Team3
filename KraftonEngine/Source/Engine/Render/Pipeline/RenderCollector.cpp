@@ -139,6 +139,7 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 	if (!RenderBus.GetShowFlags().bPrimitives) return;
 
 	const bool bShowBoundingVolume = RenderBus.GetShowFlags().bBoundingVolume;
+ const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
 	SCOPE_STAT_CAT("CollectVisibleProxy", "3_Collect");
 
 	const FGPUOcclusionCulling* Occlusion = RenderBus.GetOcclusionCulling();
@@ -173,6 +174,8 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 
 		if (!Proxy->bVisible) continue;
 
+		if (!bShowDecal && Proxy->Pass == ERenderPass::Decal) continue;
+
 		// AABB 수집 — 오클루전 체크 전에 수집해야 다음 프레임에 재평가 가능
 		if (OcclusionMut)
 			OcclusionMut->GatherAABB(Proxy);
@@ -182,10 +185,12 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 			continue;
 
 		// Batcher 경유 렌더링 (Font, SubUV)
-		if (Proxy->bBatcherRendered)
-			Proxy->CollectEntries(RenderBus);
-		else
+		Proxy->CollectEntries(RenderBus);
+		
+		if (!Proxy->bBatcherRendered)
+		{
 			RenderBus.AddProxy(Proxy->Pass, Proxy);
+		}
 
 		// 선택된 오브젝트
 		if (Proxy->bSelected)

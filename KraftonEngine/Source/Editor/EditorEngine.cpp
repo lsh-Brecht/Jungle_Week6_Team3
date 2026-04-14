@@ -2,7 +2,7 @@
 
 #include "Engine/Runtime/WindowsWindow.h"
 #include "Engine/Serialization/SceneSaveManager.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "GameFramework/World.h"
 #include "Editor/EditorRenderPipeline.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
@@ -11,6 +11,7 @@
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/StaticMeshActor.h"
+#include "GameFramework/DecalActor.h"
 #include "Viewport/GameViewportClient.h"
 #include "Viewport/Viewport.h"
 #include "Platform/Paths.h"
@@ -23,6 +24,7 @@
 #include <commdlg.h>
 #include <shellapi.h>
 #include <filesystem>
+#include <utility>
 #include "ImGui/imgui.h"
 
 IMPLEMENT_CLASS(UEditorEngine, UEngine)
@@ -102,6 +104,47 @@ bool TryComputeSpawnLocationFromViewportPoint(FLevelEditorViewportClient* InView
 	const float LocalY = static_cast<float>(InClientY) - ViewRect.Y;
 	return TryComputeSpawnLocationFromViewportLocal(InViewportClient, LocalX, LocalY, InDistance, OutLocation);
 }
+
+constexpr const char* GPlaceableIdCube = "basic_shape_cube";
+constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
+constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
+
+bool SpawnPlacedActors(
+	UWorld* InWorld,
+	const FVector& InBaseLocation,
+	int32 InCount,
+	const UEditorEngine::FActorSpawnFactory& InSpawnFactory,
+	const UEditorEngine::FActorPostSpawnInitializer& InInitializer)
+{
+	if (!InWorld || !InSpawnFactory)
+	{
+		return false;
+	}
+
+	const int32 SpawnCount = (std::max)(1, InCount);
+	bool bSpawnedAny = false;
+	for (int32 i = 0; i < SpawnCount; ++i)
+	{
+		AActor* Actor = InSpawnFactory(InWorld);
+		if (!Actor)
+		{
+			continue;
+		}
+
+		if (InInitializer && !InInitializer(Actor))
+		{
+			InWorld->DestroyActor(Actor);
+			continue;
+		}
+
+		const FVector SpawnLocation = InBaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+		Actor->SetActorLocation(SpawnLocation);
+		InWorld->InsertActorToOctree(Actor);
+		bSpawnedAny = true;
+	}
+
+	return bSpawnedAny;
+}
 }
 
 void UEditorEngine::Init(FWindowsWindow* InWindow)
@@ -111,6 +154,7 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 
 	FObjManager::ScanMeshAssets();
 	FObjManager::ScanMaterialAssets();
+	RegisterDefaultPlaceableActors();
 
 	// 에디터 전용 초기화
 	FEditorSettings::Get().LoadFromFile(FEditorSettings::GetDefaultSettingsPath());
@@ -118,25 +162,36 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 		FEditorSettings& Settings = FEditorSettings::Get();
 		switch (Settings.FXAAStage)
 		{
-		case 0: Settings.FXAAEdgeThreshold = 0.125f; Settings.FXAAEdgeThresholdMin = 0.0625f; break;
-		case 1: Settings.FXAAEdgeThreshold = 0.063f; Settings.FXAAEdgeThresholdMin = 0.0312f; break;
-		case 2: Settings.FXAAEdgeThreshold = 0.0312f; Settings.FXAAEdgeThresholdMin = 0.0156f; break;
-		case 3: Settings.FXAAEdgeThreshold = 0.0200f; Settings.FXAAEdgeThresholdMin = 0.0080f; break;
-		case 4: break; // Custom
+      case -1: break; // Custom
+		case 0: Settings.FXAAEdgeThreshold = 0.333f; Settings.FXAAEdgeThresholdMin = 0.0833f; Settings.FXAASearchSteps = 2; break;
+		case 1: Settings.FXAAEdgeThreshold = 0.250f; Settings.FXAAEdgeThresholdMin = 0.0833f; Settings.FXAASearchSteps = 3; break;
+		case 2: Settings.FXAAEdgeThreshold = 0.200f; Settings.FXAAEdgeThresholdMin = 0.0625f; Settings.FXAASearchSteps = 5; break;
+		case 3: Settings.FXAAEdgeThreshold = 0.125f; Settings.FXAAEdgeThresholdMin = 0.0312f; Settings.FXAASearchSteps = 12; break;
+		case 4: Settings.FXAAEdgeThreshold = 0.063f; Settings.FXAAEdgeThresholdMin = 0.0312f; Settings.FXAASearchSteps = 20; break;
 		default:
 			Settings.FXAAStage = 1;
-			Settings.FXAAEdgeThreshold = 0.063f;
-			Settings.FXAAEdgeThresholdMin = 0.0312f;
+            Settings.FXAAEdgeThreshold = 0.250f;
+			Settings.FXAAEdgeThresholdMin = 0.0833f;
+          Settings.FXAASearchSteps = 3;
 			break;
 		}
 		if (Settings.FXAAEdgeThresholdMin > Settings.FXAAEdgeThreshold)
 		{
 			Settings.FXAAEdgeThresholdMin = Settings.FXAAEdgeThreshold;
 		}
+		if (Settings.FXAASearchSteps < 1)
+		{
+			Settings.FXAASearchSteps = 1;
+		}
+		if (Settings.FXAASearchSteps > 20)
+		{
+			Settings.FXAASearchSteps = 20;
+		}
 
 		FFXAAConstants FXAA = {};
 		FXAA.EdgeThreshold = Settings.FXAAEdgeThreshold;
 		FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
+     FXAA.SearchSteps = Settings.FXAASearchSteps;
 		Renderer.SetFXAAConstants(FXAA);
 	}
 
@@ -822,7 +877,121 @@ bool UEditorEngine::OpenAssetFolder() const
 	return reinterpret_cast<INT_PTR>(Result) > 32;
 }
 
-bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
+bool UEditorEngine::RegisterPlaceableActor(FPlaceableActorEntry InEntry)
+{
+	if (InEntry.Id.empty() || InEntry.DisplayName.empty() || !InEntry.SpawnFactory)
+	{
+		return false;
+	}
+
+	if (FindPlaceableActorEntryById(InEntry.Id))
+	{
+		return false;
+	}
+
+	PlaceableActorEntries.push_back(std::move(InEntry));
+	return true;
+}
+
+const UEditorEngine::FPlaceableActorEntry* UEditorEngine::FindPlaceableActorEntryById(const FString& InPlaceableId) const
+{
+	for (const FPlaceableActorEntry& Entry : PlaceableActorEntries)
+	{
+		if (Entry.Id == InPlaceableId)
+		{
+			return &Entry;
+		}
+	}
+
+	return nullptr;
+}
+
+bool UEditorEngine::PlaceActorById(const FString& InPlaceableId, int32 InCount)
+{
+	const FPlaceableActorEntry* Entry = FindPlaceableActorEntryById(InPlaceableId);
+	if (!Entry)
+	{
+		return false;
+	}
+
+	return PlaceActor(Entry->SpawnFactory, Entry->Initializer, InCount);
+}
+
+bool UEditorEngine::PlaceActorFromScreenPointById(const FString& InPlaceableId, int32 InClientX, int32 InClientY, int32 InCount)
+{
+	const FPlaceableActorEntry* Entry = FindPlaceableActorEntryById(InPlaceableId);
+	if (!Entry)
+	{
+		return false;
+	}
+
+	return PlaceActorFromScreenPoint(Entry->SpawnFactory, Entry->Initializer, InClientX, InClientY, InCount);
+}
+
+void UEditorEngine::RegisterDefaultPlaceableActors()
+{
+	PlaceableActorEntries.clear();
+
+	RegisterPlaceableActor({
+		GPlaceableIdCube,
+		"Cube",
+		[](UWorld* World) -> AActor*
+		{
+			return World ? static_cast<AActor*>(World->SpawnActor<AStaticMeshActor>()) : nullptr;
+		},
+		[](AActor* Actor) -> bool
+		{
+			AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Actor);
+			if (!StaticMeshActor)
+			{
+				return false;
+			}
+			StaticMeshActor->InitDefaultComponents("Data/BasicShape/Cube.OBJ");
+			return true;
+		}
+	});
+
+	RegisterPlaceableActor({
+		GPlaceableIdSphere,
+		"Sphere",
+		[](UWorld* World) -> AActor*
+		{
+			return World ? static_cast<AActor*>(World->SpawnActor<AStaticMeshActor>()) : nullptr;
+		},
+		[](AActor* Actor) -> bool
+		{
+			AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Actor);
+			if (!StaticMeshActor)
+			{
+				return false;
+			}
+			StaticMeshActor->InitDefaultComponents("Data/BasicShape/Sphere.OBJ");
+			return true;
+		}
+	});
+
+	RegisterPlaceableActor({
+		GPlaceableIdDecal,
+		"Decal",
+		[](UWorld* World) -> AActor*
+		{
+			// ADecalActor 클래스가 구현되어 있다고 가정합니다.
+			return World ? static_cast<AActor*>(World->SpawnActor<ADecalActor>()) : nullptr;
+		},
+		[](AActor* Actor) -> bool
+		{
+			ADecalActor* DecalActor = Cast<ADecalActor>(Actor);
+			if (!DecalActor)
+			{
+				return false;
+			}
+
+			return true;
+		}
+		});
+}
+
+bool UEditorEngine::PlaceActor(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InCount)
 {
 	FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport();
 	if (ActiveVC)
@@ -840,27 +1009,7 @@ bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
 				{
 					return false;
 				}
-
-				InCount = (std::max)(1, InCount);
-				const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
-					? "Data/BasicShape/Sphere.OBJ"
-					: "Data/BasicShape/Cube.OBJ";
-
-				bool bSpawnedAny = false;
-				for (int32 i = 0; i < InCount; ++i)
-				{
-					AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
-					if (!Actor)
-					{
-						continue;
-					}
-					const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
-					Actor->InitDefaultComponents(MeshPath);
-					Actor->SetActorLocation(SpawnLocation);
-					World->InsertActorToOctree(Actor);
-					bSpawnedAny = true;
-				}
-				return bSpawnedAny;
+				return SpawnPlacedActors(World, BaseLocation, InCount, InSpawnFactory, InInitializer);
 			}
 		}
 	}
@@ -872,33 +1021,11 @@ bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
 		return false;
 	}
 
-	InCount = (std::max)(1, InCount);
 	FVector BaseLocation = GetCamera()->GetWorldLocation() + GetCamera()->GetForwardVector() * 50.0f;
-
-	const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
-		? "Data/BasicShape/Sphere.OBJ"
-		: "Data/BasicShape/Cube.OBJ";
-
-	bool bSpawnedAny = false;
-	for (int32 i = 0; i < InCount; ++i)
-	{
-		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
-		if (!Actor)
-		{
-			continue;
-		}
-
-		const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
-		Actor->InitDefaultComponents(MeshPath);
-		Actor->SetActorLocation(SpawnLocation);
-		World->InsertActorToOctree(Actor);
-		bSpawnedAny = true;
-	}
-
-	return bSpawnedAny;
+	return SpawnPlacedActors(World, BaseLocation, InCount, InSpawnFactory, InInitializer);
 }
 
-bool UEditorEngine::PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType, int32 InClientX, int32 InClientY, int32 InCount)
+bool UEditorEngine::PlaceActorFromScreenPoint(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InClientX, int32 InClientY, int32 InCount)
 {
 	UWorld* World = GetWorld();
 	FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport();
@@ -921,28 +1048,7 @@ bool UEditorEngine::PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType,
 		}
 	}
 
-	InCount = (std::max)(1, InCount);
-	const char* MeshPath = (InActorType == EEditorPlaceActorType::Sphere)
-		? "Data/BasicShape/Sphere.OBJ"
-		: "Data/BasicShape/Cube.OBJ";
-
-	bool bSpawnedAny = false;
-	for (int32 i = 0; i < InCount; ++i)
-	{
-		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
-		if (!Actor)
-		{
-			continue;
-		}
-
-		const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
-		Actor->InitDefaultComponents(MeshPath);
-		Actor->SetActorLocation(SpawnLocation);
-		World->InsertActorToOctree(Actor);
-		bSpawnedAny = true;
-	}
-
-	return bSpawnedAny;
+	return SpawnPlacedActors(World, BaseLocation, InCount, InSpawnFactory, InInitializer);
 }
 
 void UEditorEngine::ClearScene()

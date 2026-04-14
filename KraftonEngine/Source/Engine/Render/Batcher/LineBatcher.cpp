@@ -125,6 +125,38 @@ void FLineBatcher::AddAABB(const FBoundingBox& Box, const FColor& InColor)
 	}
 }
 
+void FLineBatcher::AddOBB(const FBoundingBox& LocalBox, const FMatrix& Transform, const FColor& InColor)
+{
+	const FVector4 BoxColor = InColor.ToVector4();
+	const uint32 BaseVertex = static_cast<uint32>(IndexedVertices.size());
+
+	// 1. 외부에서 전달받은 로컬 박스(LocalBox)의 8개 꼭짓점을 추출합니다.
+	// (이제 하드코딩된 -0.5 ~ 0.5 큐브가 아니라, 오브젝트마다 다른 형태의 박스를 처리할 수 있습니다.)
+	FVector Corners[8];
+	LocalBox.GetCorners(Corners);
+
+	// 2. Transform 행렬을 곱해 월드 좌표로 변환 후 버텍스 버퍼에 삽입합니다.
+	for (int i = 0; i < 8; ++i)
+	{
+		Corners[i] = Transform.TransformPositionWithW(Corners[i]);
+		IndexedVertices.emplace_back(Corners[i], BoxColor);
+	}
+
+	// 3. 12개 선분을 구성하는 인덱스 
+	static constexpr uint32 OBBEdgeIndices[] =
+	{
+		0, 1, 1, 3, 3, 2, 2, 0,
+		4, 5, 5, 7, 7, 6, 6, 4,
+		0, 4, 1, 5, 2, 6, 3, 7
+	};
+
+	// 4. 인덱스 버퍼에 추가
+	for (uint32 EdgeIndex : OBBEdgeIndices)
+	{
+		Indices.push_back(BaseVertex + EdgeIndex);
+	}
+}
+
 void FLineBatcher::AddWorldHelpers(const FShowFlags& ShowFlags, float GridSpacing, int32 GridHalfLineCount, const FVector& CameraPosition, const FVector& CameraForward, bool bIsOrtho)
 {
 	const float Spacing = GridSpacing;

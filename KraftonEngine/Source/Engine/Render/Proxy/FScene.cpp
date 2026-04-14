@@ -1,7 +1,7 @@
 ﻿#include "Render/Proxy/FScene.h"
-#include "Component/SceneEffectSource.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/ExponentialHeightFogComponent.h"
+#include "Components/SceneEffectSource.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
 

@@ -1,5 +1,5 @@
 ﻿#include "Render/Proxy/TextRenderSceneProxy.h"
-#include "Component/TextRenderComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ShaderManager.h"
 

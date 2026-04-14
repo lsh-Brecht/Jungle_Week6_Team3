@@ -23,11 +23,13 @@ namespace Key
 	constexpr const char* FXAAStage = "FXAAStage";
 	constexpr const char* FXAAEdgeThreshold = "FXAAEdgeThreshold";
 	constexpr const char* FXAAEdgeThresholdMin = "FXAAEdgeThresholdMin";
+	constexpr const char* FXAASearchSteps = "FXAASearchSteps";
 
 	// Slot Render Options
 	constexpr const char* ViewMode = "ViewMode";
 	constexpr const char* bPrimitives = "bPrimitives";
 	constexpr const char* bGrid = "bGrid";
+	constexpr const char* bDecal = "bDecal";
 	constexpr const char* bWorldAxis = "bWorldAxis";
 	constexpr const char* bGizmo = "bGizmo";
 	constexpr const char* bBillboardText = "bBillboardText";
@@ -83,6 +85,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::FXAAStage] = FXAAStage;
 	Viewport[Key::FXAAEdgeThreshold] = FXAAEdgeThreshold;
 	Viewport[Key::FXAAEdgeThresholdMin] = FXAAEdgeThresholdMin;
+	Viewport[Key::FXAASearchSteps] = FXAASearchSteps;
 
 	JSON InitPos = Array(InitViewPos.X, InitViewPos.Y, InitViewPos.Z);
 	Viewport[Key::InitViewPos] = InitPos;
@@ -111,6 +114,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 		SlotObj[Key::ViewportType] = static_cast<int32>(Opts.ViewportType);
 		SlotObj[Key::bPrimitives] = Opts.ShowFlags.bPrimitives;
 		SlotObj[Key::bGrid] = Opts.ShowFlags.bGrid;
+		SlotObj[Key::bDecal] = Opts.ShowFlags.bDecal;
 		SlotObj[Key::bWorldAxis] = Opts.ShowFlags.bWorldAxis;
 		SlotObj[Key::bGizmo] = Opts.ShowFlags.bGizmo;
 		SlotObj[Key::bBillboardText] = Opts.ShowFlags.bBillboardText;
@@ -203,6 +207,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			FXAAEdgeThreshold = static_cast<float>(Viewport[Key::FXAAEdgeThreshold].ToFloat());
 		if (Viewport.hasKey(Key::FXAAEdgeThresholdMin))
 			FXAAEdgeThresholdMin = static_cast<float>(Viewport[Key::FXAAEdgeThresholdMin].ToFloat());
+		if (Viewport.hasKey(Key::FXAASearchSteps))
+			FXAASearchSteps = Viewport[Key::FXAASearchSteps].ToInt();
 
 		if (Viewport.hasKey(Key::InitViewPos))
 		{
@@ -255,6 +261,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 					Opts.ShowFlags.bPrimitives = S[Key::bPrimitives].ToBool();
 				if (S.hasKey(Key::bGrid))
 					Opts.ShowFlags.bGrid = S[Key::bGrid].ToBool();
+				if(S.hasKey(Key::bDecal))
+					Opts.ShowFlags.bDecal = S[Key::bDecal].ToBool();
 				if (S.hasKey(Key::bWorldAxis))
 					Opts.ShowFlags.bWorldAxis = S[Key::bWorldAxis].ToBool();
 				if (S.hasKey(Key::bGizmo))

@@ -1,9 +1,9 @@
-#include "Editor/Input/EditorGizmoTool.h"
+﻿#include "Editor/Input/EditorGizmoTool.h"
 
 #include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Viewport/EditorViewportClient.h"
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
 #include "Collision/RayUtils.h"
 #include "GameFramework/World.h"
 #include "Viewport/Viewport.h"

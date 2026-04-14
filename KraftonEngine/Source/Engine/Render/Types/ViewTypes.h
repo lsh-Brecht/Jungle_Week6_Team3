@@ -16,6 +16,7 @@ struct FShowFlags
 {
 	bool bPrimitives = true;
 	bool bGrid = true;
+	bool bDecal = true;
 	bool bWorldAxis = true;
 	bool bGizmo = true;
 	bool bBillboardText = true;

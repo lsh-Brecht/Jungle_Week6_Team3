@@ -2,7 +2,7 @@
 
 #include "Engine/Input/InputSystem.h"
 #include "Engine/Runtime/WindowsWindow.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Viewport/Viewport.h"
 #include "Math/MathUtils.h"
 #include "ImGui/imgui.h"

@@ -2,8 +2,8 @@
 
 #include "Collision/RayUtils.h"
 #include "Collision/RayUtilsSIMD.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
 
 #include <algorithm>

@@ -4,7 +4,7 @@
 #include "Engine/Core/Common.h"
 
 #include "ImGui/imgui.h"
-#include "Component/GizmoComponent.h"
+#include "Components/GizmoComponent.h"
 #include "Profiling/Stats.h"
 
 void FEditorSceneWidget::Initialize(UEditorEngine* InEditorEngine)

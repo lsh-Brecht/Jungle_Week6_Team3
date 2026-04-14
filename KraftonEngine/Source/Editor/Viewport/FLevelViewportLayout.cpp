@@ -19,8 +19,8 @@
 #include "GameFramework/World.h"
 #include "ImGui/imgui.h"
 #include "WICTextureLoader.h"
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -1294,19 +1294,17 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 		if (ImGui::BeginMenu("Place Actor"))
 		{
-			if (Editor && ImGui::MenuItem("Cube"))
+			if (Editor)
 			{
-				Editor->PlaceActorFromScreenPoint(
-					EEditorPlaceActorType::Cube,
-					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
-					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
-			}
-			if (Editor && ImGui::MenuItem("Sphere"))
-			{
-				Editor->PlaceActorFromScreenPoint(
-					EEditorPlaceActorType::Sphere,
-					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
-					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
+				const int32 SpawnX = static_cast<int32>(GPendingPlaceActorSpawnPos.x);
+				const int32 SpawnY = static_cast<int32>(GPendingPlaceActorSpawnPos.y);
+				for (const UEditorEngine::FPlaceableActorEntry& Entry : Editor->GetPlaceableActorEntries())
+				{
+					if (ImGui::MenuItem(Entry.DisplayName.c_str()))
+					{
+						Editor->PlaceActorFromScreenPointById(Entry.Id, SpawnX, SpawnY);
+					}
+				}
 			}
 			ImGui::EndMenu();
 		}
@@ -1803,6 +1801,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 			ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
 			ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
 			ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
+			ImGui::Checkbox("Decal", &Opts.ShowFlags.bDecal);
 			ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
 			ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
 			ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);

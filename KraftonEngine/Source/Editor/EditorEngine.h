@@ -10,6 +10,7 @@
 #include "Editor/PIE/PIETypes.h"
 #include "Engine/Input/InputRouter.h"
 #include <optional>
+#include <functional>
 #if STATS
 #include "Editor/EditorRenderPipeline.h"
 #endif
@@ -19,12 +20,6 @@ class FLevelEditorViewportClient;
 class FEditorViewportClient;
 class FOverlayStatSystem;
 class UGameViewportClient;
-
-enum class EEditorPlaceActorType : uint8
-{
-	Cube,
-	Sphere
-};
 
 class UEditorEngine : public UEngine
 {
@@ -54,8 +49,21 @@ public:
 	bool SaveSceneAsWithDialog();
 	bool SaveSceneAs(const FString& InSceneName);
 	bool OpenAssetFolder() const;
-	bool PlaceActor(EEditorPlaceActorType InActorType, int32 InCount = 1);
-	bool PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType, int32 InClientX, int32 InClientY, int32 InCount = 1);
+	using FActorSpawnFactory = std::function<AActor*(UWorld*)>;
+	using FActorPostSpawnInitializer = std::function<bool(AActor*)>;
+	struct FPlaceableActorEntry
+	{
+		FString Id;
+		FString DisplayName;
+		FActorSpawnFactory SpawnFactory;
+		FActorPostSpawnInitializer Initializer;
+	};
+	bool RegisterPlaceableActor(FPlaceableActorEntry InEntry);
+	const TArray<FPlaceableActorEntry>& GetPlaceableActorEntries() const { return PlaceableActorEntries; }
+	bool PlaceActorById(const FString& InPlaceableId, int32 InCount = 1);
+	bool PlaceActorFromScreenPointById(const FString& InPlaceableId, int32 InClientX, int32 InClientY, int32 InCount = 1);
+	bool PlaceActor(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer = {}, int32 InCount = 1);
+	bool PlaceActorFromScreenPoint(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InClientX, int32 InClientY, int32 InCount = 1);
 	bool HasCurrentLevelFilePath() const { return !CurrentLevelFilePath.empty(); }
 	const FString& GetCurrentLevelFilePath() const { return CurrentLevelFilePath; }
 
@@ -121,6 +129,8 @@ private:
 	bool EnterPIEEjectedMode();
 	EInteractionDomain GetCurrentInteractionDomain() const;
 	bool HandleGlobalShortcuts(const FViewportInputContext& InputContext);
+	void RegisterDefaultPlaceableActors();
+	const FPlaceableActorEntry* FindPlaceableActorEntryById(const FString& InPlaceableId) const;
 
 	FSelectionManager SelectionManager;
 	FEditorMainPanel MainPanel;
@@ -140,4 +150,5 @@ private:
 	bool bHadAnyPopupOpenLastFrame = false;
 	bool bSuppressViewportMouseUntilButtonsReleased = false;
 	FString CurrentLevelFilePath;
+	TArray<FPlaceableActorEntry> PlaceableActorEntries;
 };

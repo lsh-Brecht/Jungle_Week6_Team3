@@ -1,4 +1,4 @@
-﻿#include "Component/StaticMeshComponent.h"
+﻿#include "Components/StaticMeshComponent.h"
 #include <algorithm>
 #include <cmath>
 #include "Object/ObjectFactory.h"
