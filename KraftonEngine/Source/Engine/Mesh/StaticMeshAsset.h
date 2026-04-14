@@ -26,8 +26,8 @@ struct FStaticMeshSection
 {
 	int32 MaterialIndex = -1; // Index into UStaticMesh's FStaticMaterial array. Cached to avoid per-frame string comparison.
 	FString MaterialSlotName;
-	uint32 FirstIndex;
-	uint32 NumTriangles;
+	uint32 FirstIndex = 0;
+	uint32 NumTriangles = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FStaticMeshSection& Section)
 	{
@@ -39,7 +39,7 @@ struct FStaticMeshSection
 struct FStaticMaterial
 {
 	// std::shared_ptr<class UMaterialInterface> MaterialInterface;
-   UMaterialInterface* MaterialInterface;
+   UMaterialInterface* MaterialInterface = nullptr;
 	FString MaterialSlotName = "None"; // "None"은 특별한 슬롯 이름으로, OBJ 파일에서 머티리얼이 지정되지 않은 섹션에 할당됩니다.
 	bool bIsUVScroll = false;
 

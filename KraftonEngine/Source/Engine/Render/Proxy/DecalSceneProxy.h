@@ -18,6 +18,6 @@ public:
 private:
 	UDecalComponent* GetDecalComponent() const;
 
-	FConstantBuffer DecalCB;
+	ID3D11ShaderResourceView* DecalSRV = nullptr;
 	const FTextureResource* DecalTexture = nullptr;
 };

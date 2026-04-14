@@ -10,7 +10,11 @@ class ADecalActor : public AActor
 public:
 	DECLARE_CLASS(ADecalActor, AActor)
 
-	UDecalComponent* GetDecal() const { return Decal; }
+	ADecalActor() = default;
+
+	void InitDefaultComponents();
+
+	UDecalComponent* GetDecal() const;
 
 	// Component의 함수를 래핑하는 편의성 API
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
@@ -20,5 +24,5 @@ public:
 	
 private:
 	
-	UDecalComponent* Decal;
+	mutable UDecalComponent* Decal = nullptr;
 };

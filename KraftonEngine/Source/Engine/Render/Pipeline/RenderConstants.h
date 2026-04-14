@@ -28,6 +28,7 @@ namespace ECBSlot
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
 	constexpr uint32 Fog = 6;			// b6: fog post-process params
+	constexpr uint32 PerShader0 = 7;		// b7: pass/proxy specific params
 
 
 	constexpr uint32 PostProcess_FXAA = 9;    // b9: FXAA effect params
@@ -243,7 +244,7 @@ struct FConstantBufferBinding
 	uint32 Size = 0;					// 업로드할 바이트 수
 	uint32 Slot = 0;					// VS/PS CB 슬롯
 
-	static constexpr size_t kMaxDataSize = 64;
+	static constexpr size_t kMaxDataSize = 128;
 	alignas(16) uint8 Data[kMaxDataSize] = {};
 
 	// Buffer/Size/Slot

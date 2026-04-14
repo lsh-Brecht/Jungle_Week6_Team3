@@ -384,6 +384,13 @@ void FEditorMainPanel::RenderEditorToolbar()
 					FooterLogSystem.Push("Actor placed: Sphere");
 				}
 			}
+			if (ImGui::MenuItem("Decal"))
+			{
+				if (EditorEngine->PlaceActor(EEditorPlaceActorType::Decal))
+				{
+					FooterLogSystem.Push("Actor placed: Decal");
+				}
+			}
 			ImGui::EndPopup();
 		}
 

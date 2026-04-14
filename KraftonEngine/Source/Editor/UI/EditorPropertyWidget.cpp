@@ -8,8 +8,10 @@
 #include "Component/PrimitiveComponent.h"
 #include "Component/StaticMeshComponent.h"
 #include "Component/SceneComponent.h"
+#include "Component/DecalComponent.h"
 #include "Core/PropertyTypes.h"
 #include "Core/ClassTypes.h"
+#include "GameFramework/DecalActor.h"
 #include "Resource/ResourceManager.h"
 #include "Object/FName.h"
 #include "Object/ObjectIterator.h"
@@ -134,9 +136,17 @@ void FEditorPropertyWidget::Render(float DeltaTime)
 	// Actor 선택이 바뀌면 초기화
 	if (PrimaryActor != LastSelectedActor)
 	{
-		SelectedComponent = nullptr;
 		LastSelectedActor = PrimaryActor;
-		bActorSelected = true;
+		if (ADecalActor* DecalActor = Cast<ADecalActor>(PrimaryActor))
+		{
+			SelectedComponent = DecalActor->GetDecal();
+			bActorSelected = (SelectedComponent == nullptr);
+		}
+		else
+		{
+			SelectedComponent = nullptr;
+			bActorSelected = true;
+		}
 	}
 
 	const TArray<AActor*>& SelectedActors = Selection.GetSelectedActors();

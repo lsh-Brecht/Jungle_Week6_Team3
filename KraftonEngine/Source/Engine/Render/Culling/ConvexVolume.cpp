@@ -25,6 +25,42 @@ void FConvexVolume::UpdateFromMatrix(const FMatrix& InViewProjectionMatrix)
 	}
 }
 
+void FConvexVolume::UpdateAsOBB(const FMatrix& InWorldMatrix)
+{
+	const FVector Center = InWorldMatrix.GetLocation();
+	const FVector Axes[3] = {
+		InWorldMatrix.TransformVector(FVector(1.0f, 0.0f, 0.0f)),
+		InWorldMatrix.TransformVector(FVector(0.0f, 1.0f, 0.0f)),
+		InWorldMatrix.TransformVector(FVector(0.0f, 0.0f, 1.0f))
+	};
+
+	auto MakePlane = [](const FVector& Normal, const FVector& Point) -> FVector4
+	{
+		const float D = -(Normal.Dot(Point));
+		return FVector4(Normal.X, Normal.Y, Normal.Z, D);
+	};
+
+	for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+	{
+		FVector Axis = Axes[AxisIndex];
+		const float Extent = Axis.Length() * 0.5f;
+		if (Extent <= 0.00001f)
+		{
+			Axis = FVector(0.0f, 0.0f, 0.0f);
+			Axis.Data[AxisIndex] = 1.0f;
+		}
+		else
+		{
+			Axis /= (Extent * 2.0f);
+		}
+
+		const FVector PositiveFace = Center + Axis * Extent;
+		const FVector NegativeFace = Center - Axis * Extent;
+		Planes[AxisIndex * 2] = MakePlane(Axis * -1.0f, PositiveFace);
+		Planes[AxisIndex * 2 + 1] = MakePlane(Axis, NegativeFace);
+	}
+}
+
 bool FConvexVolume::IntersectAABB(const FBoundingBox& Box) const
 {
 	for (const auto& P : Planes) {

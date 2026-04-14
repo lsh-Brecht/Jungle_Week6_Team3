@@ -43,6 +43,9 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	Shaders[(uint32)EShaderType::Billboard].Create(InDevice, L"Shaders/ShaderBillboard.hlsl",
 		"VS", "PS", FTextureVertexInputLayout, ARRAYSIZE(FTextureVertexInputLayout));
 
+	Shaders[(uint32)EShaderType::Decal].Create(InDevice, L"Shaders/Decal.hlsl",
+		"VS", "PS", FVertexInputLayout, ARRAYSIZE(FVertexInputLayout));
+
 	bIsInitialized = true;
 }
 

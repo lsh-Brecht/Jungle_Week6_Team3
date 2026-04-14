@@ -10,6 +10,7 @@
 #include "Mesh/ObjManager.h"
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/DecalActor.h"
 #include "GameFramework/StaticMeshActor.h"
 #include "Viewport/GameViewportClient.h"
 #include "Viewport/Viewport.h"
@@ -849,6 +850,25 @@ bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
 				bool bSpawnedAny = false;
 				for (int32 i = 0; i < InCount; ++i)
 				{
+					if (InActorType == EEditorPlaceActorType::Decal)
+					{
+						ADecalActor* Actor = World->SpawnActor<ADecalActor>();
+						if (!Actor)
+						{
+							continue;
+						}
+						const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+						Actor->InitDefaultComponents();
+						Actor->SetActorLocation(SpawnLocation);
+						if (UCameraComponent* Camera = ActiveVC->GetCamera())
+						{
+							Actor->SetActorRotation(Camera->GetRelativeRotation());
+						}
+						World->InsertActorToOctree(Actor);
+						bSpawnedAny = true;
+						continue;
+					}
+
 					AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
 					if (!Actor)
 					{
@@ -882,6 +902,23 @@ bool UEditorEngine::PlaceActor(EEditorPlaceActorType InActorType, int32 InCount)
 	bool bSpawnedAny = false;
 	for (int32 i = 0; i < InCount; ++i)
 	{
+		if (InActorType == EEditorPlaceActorType::Decal)
+		{
+			ADecalActor* Actor = World->SpawnActor<ADecalActor>();
+			if (!Actor)
+			{
+				continue;
+			}
+
+			const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+			Actor->InitDefaultComponents();
+			Actor->SetActorLocation(SpawnLocation);
+			Actor->SetActorRotation(GetCamera()->GetRelativeRotation());
+			World->InsertActorToOctree(Actor);
+			bSpawnedAny = true;
+			continue;
+		}
+
 		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
 		if (!Actor)
 		{
@@ -929,6 +966,26 @@ bool UEditorEngine::PlaceActorFromScreenPoint(EEditorPlaceActorType InActorType,
 	bool bSpawnedAny = false;
 	for (int32 i = 0; i < InCount; ++i)
 	{
+		if (InActorType == EEditorPlaceActorType::Decal)
+		{
+			ADecalActor* Actor = World->SpawnActor<ADecalActor>();
+			if (!Actor)
+			{
+				continue;
+			}
+
+			const FVector SpawnLocation = BaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
+			Actor->InitDefaultComponents();
+			Actor->SetActorLocation(SpawnLocation);
+			if (UCameraComponent* Camera = ActiveVC->GetCamera())
+			{
+				Actor->SetActorRotation(Camera->GetRelativeRotation());
+			}
+			World->InsertActorToOctree(Actor);
+			bSpawnedAny = true;
+			continue;
+		}
+
 		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
 		if (!Actor)
 		{

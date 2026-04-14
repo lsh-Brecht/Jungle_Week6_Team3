@@ -7,6 +7,7 @@
 #include "Profiling/Stats.h"
 #include "Render/DebugDraw/DrawDebugHelpers.h"
 #include "Render/Proxy/DecalSceneProxy.h"
+#include "Render/Resource/MeshBufferManager.h"
 #include "Resource/ResourceManager.h"
 
 #include <algorithm>
@@ -28,6 +29,16 @@ void UDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
 {
 	return new FDecalSceneProxy(this);
+}
+
+FMeshBuffer* UDecalComponent::GetMeshBuffer() const
+{
+	return &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::Cube);
+}
+
+const FMeshData* UDecalComponent::GetMeshData() const
+{
+	return &FMeshBufferManager::Get().GetMeshData(EMeshShape::Cube);
 }
 
 void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)

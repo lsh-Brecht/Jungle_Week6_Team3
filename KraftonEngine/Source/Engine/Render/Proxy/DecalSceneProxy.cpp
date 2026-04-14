@@ -1,6 +1,7 @@
 ﻿#include "Render/Proxy/DecalSceneProxy.h"
 
 #include "Component/DecalComponent.h"
+#include "Render/Resource/ConstantBufferPool.h"
 #include "Render/Resource/ShaderManager.h"
 
 namespace
@@ -21,7 +22,6 @@ FDecalSceneProxy::FDecalSceneProxy(UDecalComponent* InComponent)
 
 FDecalSceneProxy::~FDecalSceneProxy()
 {
-	DecalCB.Release();
 }
 
 UDecalComponent* FDecalSceneProxy::GetDecalComponent() const
@@ -38,9 +38,16 @@ void FDecalSceneProxy::UpdateMaterial()
 	}
 
 	DecalTexture = DecalComp->GetTexture();
-	DiffuseSRV = DecalTexture ? DecalTexture->SRV : nullptr;
+	DecalSRV = DecalTexture ? DecalTexture->SRV : nullptr;
+	if (!SectionDraws.empty())
+	{
+		SectionDraws[0].DiffuseSRV = DecalSRV;
+		UpdateSortKey();
+	}
 
-	auto& CB = ExtraCB.Bind<FDecalConstants>(&DecalCB, ECBSlot::PerShader0);
+	auto& CB = ExtraCB.Bind<FDecalConstants>(
+		FConstantBufferPool::Get().GetBuffer(ECBSlot::PerShader0, sizeof(FDecalConstants)),
+		ECBSlot::PerShader0);
 	CB.WorldToDecal = DecalComp->GetWorldMatrix().GetInverse();
 	CB.Color = DecalComp->GetColor();
 }
@@ -49,9 +56,19 @@ void FDecalSceneProxy::UpdateMesh()
 {
 	UpdateMaterial();
 
-	MeshBuffer = nullptr;
+	MeshBuffer = Owner->GetMeshBuffer();
 	SectionDraws.clear();
+	if (MeshBuffer)
+	{
+		FMeshSectionDraw Draw;
+		Draw.DiffuseSRV = DecalSRV;
+		Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+		Draw.FirstIndex = 0;
+		Draw.IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		SectionDraws.push_back(Draw);
+	}
 	Shader = FShaderManager::Get().GetShader(EShaderType::Decal);
 	Pass = ERenderPass::Decal;
 	bSupportsOutline = false;
+	UpdateSortKey();
 }

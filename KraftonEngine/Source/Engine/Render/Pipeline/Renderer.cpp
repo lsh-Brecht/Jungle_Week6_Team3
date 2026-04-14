@@ -364,6 +364,8 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 
 		if (bHasBatcher)
 			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
+		else if (CurPass == ERenderPass::Decal)
+			ExecuteDecalPass(InRenderBus, Context);
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
 	}
@@ -541,6 +543,25 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 	}
 
 	CleanupSRV(Context, State);
+}
+
+void FRenderer::ExecuteDecalPass(const FRenderBus& Bus, ID3D11DeviceContext* Context)
+{
+	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
+	ID3D11ShaderResourceView* DepthSRV = Bus.GetViewportDepthSRV();
+	if (!ViewportRTV || !DepthSRV)
+	{
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &ViewportRTV, nullptr);
+	Context->PSSetShaderResources(1, 1, &DepthSRV);
+	ExecutePass(Bus.GetProxies(ERenderPass::Decal), Context);
+
+	ID3D11ShaderResourceView* NullSRV = nullptr;
+	Context->PSSetShaderResources(1, 1, &NullSRV);
+	ID3D11DepthStencilView* ViewportDSV = Bus.GetViewportDSV();
+	Context->OMSetRenderTargets(1, &ViewportRTV, ViewportDSV);
 }
 
 // ============================================================

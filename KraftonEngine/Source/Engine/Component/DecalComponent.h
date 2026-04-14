@@ -18,6 +18,9 @@ public:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
+	FMeshBuffer* GetMeshBuffer() const override;
+	const FMeshData* GetMeshData() const override;
+	bool SupportsOutline() const override { return false; }
 
 	// Property Editor 지원
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;

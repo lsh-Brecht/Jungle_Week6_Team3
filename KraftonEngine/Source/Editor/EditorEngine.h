@@ -23,7 +23,8 @@ class UGameViewportClient;
 enum class EEditorPlaceActorType : uint8
 {
 	Cube,
-	Sphere
+	Sphere,
+	Decal
 };
 
 class UEditorEngine : public UEngine

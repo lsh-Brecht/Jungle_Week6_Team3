@@ -1308,6 +1308,13 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
 					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
 			}
+			if (Editor && ImGui::MenuItem("Decal"))
+			{
+				Editor->PlaceActorFromScreenPoint(
+					EEditorPlaceActorType::Decal,
+					static_cast<int32>(GPendingPlaceActorSpawnPos.x),
+					static_cast<int32>(GPendingPlaceActorSpawnPos.y));
+			}
 			ImGui::EndMenu();
 		}
 		const bool bCanDeleteSelection = SelectionManager && !SelectionManager->IsEmpty();

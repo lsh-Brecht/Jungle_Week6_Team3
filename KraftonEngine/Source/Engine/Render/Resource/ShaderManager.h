@@ -22,6 +22,7 @@ enum class EShaderType : uint32
 	OverlayFont,
 	SubUV,
 	Billboard,
+	Decal,
 	MAX,
 };
 
