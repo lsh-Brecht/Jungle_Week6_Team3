@@ -38,6 +38,16 @@ public:
 	void EndDeferredPickingBVHUpdate();
 	void WarmupPickingData() const;
 	bool RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
+	
+	//// Decal GeometryChecker가 Broad Phase BVH 쿼리에 사용 (EnsureBuilt 선행 필요)
+	//const FWorldPrimitivePickingBVH& GetWorldPrimitivePickingBVH() const { return WorldPrimitivePickingBVH; }
+	// Decal GeometryChecker용: EnsureBuilt 후 BVH 참조 반환
+	// (dirty일 때만 재빌드하므로 매 프레임 호출해도 안전)
+	const FWorldPrimitivePickingBVH& EnsureAndGetWorldPrimitivePickingBVH() const
+	{
+		WorldPrimitivePickingBVH.EnsureBuilt(GetActors());
+		return WorldPrimitivePickingBVH;
+	}
 	void InvalidateVisibleSet();
 
 	const TArray<AActor*>& GetActors() const { return PersistentLevel->GetActors(); }

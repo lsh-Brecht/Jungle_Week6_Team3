@@ -375,6 +375,7 @@
     <ClCompile Include="Source\Engine\Render\Pipeline\RenderCollector.cpp" />
     <ClCompile Include="Source\Engine\Render\Pipeline\Renderer.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\BillboardSceneProxy.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\DecalGeometryChecker.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\FScene.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp" />
@@ -537,6 +538,7 @@
     <ClInclude Include="Source\Engine\Render\Pipeline\Renderer.h" />
     <ClInclude Include="Source\Engine\Render\Pipeline\SceneRenderSetup.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\BillboardSceneProxy.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\DecalGeometryChecker.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\DecalSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\DirtyFlag.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\FScene.h" />

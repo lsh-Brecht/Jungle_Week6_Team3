@@ -1,4 +1,12 @@
 ﻿#include "Render/Proxy/DecalSceneProxy.h"
+//#include "Render/Pipeline/RenderBus.h"
+//#include "Components/DecalComponent.h"
+//#include "Materials/MaterialInterface.h"
+//#include "Render/Resource/ConstantBufferPool.h"
+//#include "Render/Resource/MeshBufferManager.h"
+//#include "Render/Resource/ShaderManager.h"
+//#include "Texture/Texture2D.h"
+#include "Render/Proxy/DecalGeometryChecker.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Components/DecalComponent.h"
 #include "Materials/MaterialInterface.h"
@@ -6,6 +14,7 @@
 #include "Render/Resource/MeshBufferManager.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Texture/Texture2D.h"
+#include "GameFramework/World.h"
 
 namespace
 {
@@ -139,11 +148,35 @@ void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 		return;
 	}
 
-	// OBB-Frustum SAT 컬링
-	// Decal의 OBB (단위 큐브를 DecalSize + 회전 + 위치로 변환한 행렬)를
-	// 절두체 6개 평면에 대해 8코너 테스트 - 어떤 평면에서 모든 코너가 외부면 false
+	//// OBB-Frustum SAT 컬링
+	//// Decal의 OBB (단위 큐브를 DecalSize + 회전 + 위치로 변환한 행렬)를
+	//// 절두체 6개 평면에 대해 8코너 테스트 - 어떤 평면에서 모든 코너가 외부면 false
+	//const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
+	//bVisible = Bus.GetConvexVolume().IntersectOBB(OBBTransform);
+	// ---- Stage 0: OBB-Frustum SAT 컬링 ----
+	// Decal OBB의 8코너를 6개 절두체 평면에 대해 테스트
+	// 어떤 평면에서 모든 코너가 외부면 → 절두체 밖 → 스킵
 	const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
-	bVisible = Bus.GetConvexVolume().IntersectOBB(OBBTransform);
+	if (!Bus.GetConvexVolume().IntersectOBB(OBBTransform))
+	{
+		bVisible = false;
+		return;
+	}
+
+	// ---- Stage 1~5: 지오메트리 교차 판별 ----
+	// BVH Broad/Narrow Phase → 로컬 변환 → Coarse AABB → SAT
+	// 씬에 지오메트리가 하나도 없으면 Draw Call 생략
+	UWorld* World = DecalComp->GetWorld();
+	if (World)
+	{
+		FDecalGeometryChecker Checker;
+		bVisible = Checker.HasOverlappingGeometry(DecalComp, *World);
+	}
+	else
+	{
+		// World 접근 불가 시 Stage 0 통과 결과만 사용 (Draw Call 허용)
+		bVisible = true;
+	}
 }
 
 UDecalComponent* FDecalSceneProxy::GetDecalComponent() const
