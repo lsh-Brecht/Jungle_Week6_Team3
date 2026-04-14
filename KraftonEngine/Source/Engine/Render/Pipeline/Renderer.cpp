@@ -349,41 +349,19 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
 		if (CurPass == ERenderPass::PostProcess)
 		{
-         ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
+            ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
 			ExecuteSelectionMaskPass(InRenderBus, Context);
 			ApplyPassRenderState(ERenderPass::PostProcess, Context, InRenderBus.GetViewMode());
 
-			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+			const bool bIsSceneDepth = (InRenderBus.GetViewMode() == EViewMode::SceneDepth);
+			if (bIsSceneDepth)
 			{
 				DrawScenenDepthVisualize(InRenderBus, Context);
 			}
 			ExecutePostProcessChain(InRenderBus, Context);
-
-			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+			if (bIsSceneDepth)
 			{
-				if (InRenderBus.GetShowFlags().bGizmo)
-				{
-					const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
-					if (!GizmoOuterProxies.empty())
-					{
-						ApplyPassRenderState(ERenderPass::GizmoOuter, Context, InRenderBus.GetViewMode());
-						ExecutePass(GizmoOuterProxies, InRenderBus, Context);
-					}
-
-					const auto& GizmoInnerProxies = InRenderBus.GetProxies(ERenderPass::GizmoInner);
-					if (!GizmoInnerProxies.empty())
-					{
-						ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
-						ExecutePass(GizmoInnerProxies, InRenderBus, Context);
-					}
-				}
-
-				ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
-				const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
-				if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))
-				{
-					FontBatcher.DrawBatch(ERenderPass::Font, InRenderBus, Context);
-				}
+				DrawSceneDepthOverlays(InRenderBus, Context);
 			}
 			continue;
 		}
@@ -969,7 +947,9 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 	for (EPostEffectType Type : Order)
 	{
 		const uint32 Idx = static_cast<uint32>(Type);
-		if (ViewMode == EViewMode::SceneDepth && Type != EPostEffectType::Outline)
+		// SceneDepth 모드에서는 Outline만 허용하고 나머지(Fog, FXAA)는 건너뜀
+		const bool bSkipForSceneDepth = (ViewMode == EViewMode::SceneDepth) && (Type != EPostEffectType::Outline);
+		if (bSkipForSceneDepth)
 		{
 			continue;
 		}
@@ -1225,6 +1205,34 @@ void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceCont
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 	Context->PSSetShaderResources(0, 1, &nullSRV);
 	Context->OMSetRenderTargets(1, &RTV, DSV);
+}
+
+// SceneDepth 모드에서 PostProcess 이후 기즈모 및 폰트 오버레이를 렌더링한다.
+void FRenderer::DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context)
+{
+	if (InRenderBus.GetShowFlags().bGizmo)
+	{
+		const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
+		if (!GizmoOuterProxies.empty())
+		{
+			ApplyPassRenderState(ERenderPass::GizmoOuter, Context, InRenderBus.GetViewMode());
+			ExecutePass(GizmoOuterProxies, InRenderBus, Context);
+		}
+
+		const auto& GizmoInnerProxies = InRenderBus.GetProxies(ERenderPass::GizmoInner);
+		if (!GizmoInnerProxies.empty())
+		{
+			ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
+			ExecutePass(GizmoInnerProxies, InRenderBus, Context);
+		}
+	}
+
+	ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
+	const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
+	if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))
+	{
+		FontBatcher.DrawBatch(ERenderPass::Font, InRenderBus, Context);
+	}
 }
 
 //	Present the rendered frame to the screen. 반드시 Render 이후에 호출되어야 함.
