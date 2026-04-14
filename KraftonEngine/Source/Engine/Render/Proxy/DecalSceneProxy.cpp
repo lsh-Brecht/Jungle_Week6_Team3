@@ -111,13 +111,38 @@ void FDecalSceneProxy::CollectEntries(FRenderBus& Bus)
 	// 1. 부모 클래스의 기본 수집 로직 호출 (필수)
 	FPrimitiveSceneProxy::CollectEntries(Bus);
 
+	//if (!bVisible)
+	//{
+	//	return;
+	//}
+
+	//// 2. 에디터 뷰포트 판별: FShowFlags의 bGizmo가 켜져 있거나, 현재 데칼이 선택(bSelected)되었을 때만 OBB를 그립니다.
+	//// (ViewTypes.h 에 정의된 플래그를 활용하여 게임 모드에서는 자연스럽게 숨겨지도록 처리)
+	//if (bSelected)
+	//{
+	//	FOBBEntry Entry;
+
+	//	// 크기가 1인 로컬 단위 육면체 정의 (-0.5 ~ 0.5)
+	//	// 데칼의 투영 범위를 나타냅니다.
+	//	Entry.OBB.LocalBox = FBoundingBox(FVector(-0.5f, -0.5f, -0.5f), FVector(0.5f, 0.5f, 0.5f));
+
+	//	// UpdateTransform()에서 캐싱해둔 최신 데칼 월드 변환 행렬 (스케일, 회전, 위치 모두 포함)
+	//	Entry.OBB.Transform = PerObjectConstants.Model;
+
+	//	// 엔진에 구현된 FColor::Green()을 사용하여 깔끔한 초록색 지정
+	//	Entry.OBB.Color = FColor::Green();
+
+	//	// 렌더 버스에 OBB 엔트리를 추가하여 LineBatcher가 그리도록 전달!
+	//	Bus.AddOBBEntry(std::move(Entry));
+	//}
+	
+	// 2. 선택 상태이면 bVisible과 무관하게 항상 OBB 박스를 그린다.
+	// (geometry 교차 여부와 상관없이 DecalActor를 클릭했을 때 박스가 보여야 함)
 	if (!bVisible)
 	{
 		return;
 	}
-
-	// 2. 에디터 뷰포트 판별: FShowFlags의 bGizmo가 켜져 있거나, 현재 데칼이 선택(bSelected)되었을 때만 OBB를 그립니다.
-	// (ViewTypes.h 에 정의된 플래그를 활용하여 게임 모드에서는 자연스럽게 숨겨지도록 처리)
+	
 	if (bSelected)
 	{
 		FOBBEntry Entry;
@@ -135,6 +160,7 @@ void FDecalSceneProxy::CollectEntries(FRenderBus& Bus)
 		// 렌더 버스에 OBB 엔트리를 추가하여 LineBatcher가 그리도록 전달!
 		Bus.AddOBBEntry(std::move(Entry));
 	}
+
 }
 
 void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
@@ -153,9 +179,34 @@ void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	//// 절두체 6개 평면에 대해 8코너 테스트 - 어떤 평면에서 모든 코너가 외부면 false
 	//const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
 	//bVisible = Bus.GetConvexVolume().IntersectOBB(OBBTransform);
+	
+	//// ---- Stage 0: OBB-Frustum SAT 컬링 ----
+	//// Decal OBB의 8코너를 6개 절두체 평면에 대해 테스트
+	//// 어떤 평면에서 모든 코너가 외부면 → 절두체 밖 → 스킵
+	//const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
+	//if (!Bus.GetConvexVolume().IntersectOBB(OBBTransform))
+	//{
+	//	bVisible = false;
+	//	return;
+	//}
+
+	//// ---- Stage 1~5: 지오메트리 교차 판별 ----
+	//// BVH Broad/Narrow Phase → 로컬 변환 → Coarse AABB → SAT
+	//// 씬에 지오메트리가 하나도 없으면 Draw Call 생략
+	//UWorld* World = DecalComp->GetWorld();
+	//if (World)
+	//{
+	//	FDecalGeometryChecker Checker;
+	//	bVisible = Checker.HasOverlappingGeometry(DecalComp, *World);
+	//}
+	//else
+	//{
+	//	// World 접근 불가 시 Stage 0 통과 결과만 사용 (Draw Call 허용)
+	//	bVisible = true;
+	//}
+
 	// ---- Stage 0: OBB-Frustum SAT 컬링 ----
-	// Decal OBB의 8코너를 6개 절두체 평면에 대해 테스트
-	// 어떤 평면에서 모든 코너가 외부면 → 절두체 밖 → 스킵
+	// 절두체 밖이면 선택 상태여도 렌더링 대상 제외
 	const FMatrix OBBTransform = DecalComp->GetTransformIncludingDecalSize();
 	if (!Bus.GetConvexVolume().IntersectOBB(OBBTransform))
 	{
@@ -165,18 +216,28 @@ void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 
 	// ---- Stage 1~5: 지오메트리 교차 판별 ----
 	// BVH Broad/Narrow Phase → 로컬 변환 → Coarse AABB → SAT
-	// 씬에 지오메트리가 하나도 없으면 Draw Call 생략
+	bool bHasGeometry = true;
 	UWorld* World = DecalComp->GetWorld();
 	if (World)
 	{
 		FDecalGeometryChecker Checker;
-		bVisible = Checker.HasOverlappingGeometry(DecalComp, *World);
+		bHasGeometry = Checker.HasOverlappingGeometry(DecalComp, *World);
 	}
-	else
+
+	// 지오메트리 상태가 바뀐 경우에만 SectionDraws 재구성
+	// - 교차 O → SectionDraws 복원 (실제 데칼 프로젝션 활성화)
+	// - 교차 X → SectionDraws 비움 (프로젝션 억제, OBB 박스만 남김)
+	if (bHasGeometry != bDecalProjectionVisible)
 	{
-		// World 접근 불가 시 Stage 0 통과 결과만 사용 (Draw Call 허용)
-		bVisible = true;
+		bDecalProjectionVisible = bHasGeometry;
+		if (bDecalProjectionVisible)
+			RebuildSectionDraw();
+		else
+			SectionDraws.clear();
 	}
+
+	// 선택 상태이면 OBB 박스를 위해 CollectEntries가 호출되도록 bVisible = true 유지
+	bVisible = bSelected || bDecalProjectionVisible;
 }
 
 UDecalComponent* FDecalSceneProxy::GetDecalComponent() const
