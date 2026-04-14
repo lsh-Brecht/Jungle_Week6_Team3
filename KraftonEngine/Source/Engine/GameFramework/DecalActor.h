@@ -16,21 +16,21 @@ public:
 	ADecalActor();
 
 	UDecalComponent* GetDecal() const { return Decal; }
-
 	UBillboardComponent* GetSpriteComponent() const { return SpriteComponent; }
 
-  // Component의 함수를 래핑하는 편의성 API
+	// Component의 함수를 래핑하는 편의성 API
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
-   void SetDecalMaterial(const FString& MaterialPath);
+	void SetDecalMaterial(const FString& MaterialPath);
 	UMaterialInterface* GetDecalMaterial() const;
-	//void SetDecalSize(const FVector& InDecalSize);
+
+	void SetDecalSize(const FVector& InDecalSize);
 	FVector GetDecalSize() const;
 
 	void BeginPlay() override;
-
 	virtual void Serialize(FArchive& Ar) override;
 	
 private:
+	void ResolveComponentReferences();
 	
 	UDecalComponent* Decal = nullptr;
 	UBillboardComponent* SpriteComponent = nullptr; // Editor에서 데칼 위치/회전 편집용 시각적 가이드. 게임에서는 숨김.

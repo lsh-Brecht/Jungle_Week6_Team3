@@ -37,6 +37,8 @@ public:
 	void SetDecalColor(const FLinearColor& Color);
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
 	UMaterialInterface* GetDecalMaterial() const;
+
+	void SetDecalSize(const FVector& InSize);
 	FMatrix GetTransformIncludingDecalSize() const;
 
 	FMeshBuffer* GetMeshBuffer() const override;
@@ -45,7 +47,6 @@ public:
 
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;
-
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
 	void PostEditProperty(const char* PropertyName) override;
 

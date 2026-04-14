@@ -4,21 +4,6 @@
 #include "Components/BillboardComponent.h"
 #include "Mesh/ObjManager.h"
 
-namespace
-{
-	UMaterialInterface* ResolveDefaultDecalMaterial()
-	{
-		FObjManager::ScanMaterialAssets();
-		const TArray<FMaterialAssetListItem>& MaterialFiles = FObjManager::GetAvailableMaterialFiles();
-		if (!MaterialFiles.empty())
-		{
-			return FObjManager::GetOrLoadMaterial(MaterialFiles[0].FullPath);
-		}
-
-		return nullptr;
-	}
-}
-
 IMPLEMENT_CLASS(ADecalActor, AActor)
 
 ADecalActor::ADecalActor()
@@ -29,8 +14,6 @@ ADecalActor::ADecalActor()
 	SpriteComponent = AddComponent<UBillboardComponent>();
 	SpriteComponent->AttachToComponent(Decal);
 	SpriteComponent->SetTexture(FName("DecalSprite"));
-
-   SetDecalMaterial(ResolveDefaultDecalMaterial());
 }
 
 void ADecalActor::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
@@ -57,14 +40,13 @@ UMaterialInterface* ADecalActor::GetDecalMaterial() const
 	return Decal ? Decal->GetDecalMaterial() : nullptr;
 }
 
-//void ADecalActor::SetDecalSize(const FVector& InDecalSize)
-//{
-//	if (Decal)
-//	{
-//		Decal->DecalSize = InDecalSize;
-//		Decal->MarkProxyDirty(EDirtyFlag::Transform);
-//	}
-//}
+void ADecalActor::SetDecalSize(const FVector& InDecalSize)
+{
+	if (Decal)
+	{
+		Decal->SetDecalSize(InDecalSize);
+	}
+}
 
 FVector ADecalActor::GetDecalSize() const
 {

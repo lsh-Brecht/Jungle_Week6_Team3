@@ -24,8 +24,8 @@ FDecalSceneProxy::FDecalSceneProxy(UDecalComponent* InComponent)
 void FDecalSceneProxy::UpdateMesh()
 {
     MeshBuffer = Owner->GetMeshBuffer();
-   Shader = FShaderManager::Get().GetShader(EShaderType::Decal);
-   Pass = ERenderPass::Decal;
+	Shader = FShaderManager::Get().GetShader(EShaderType::Decal);
+	Pass = ERenderPass::Decal;
     RebuildSectionDraw();
 }
 

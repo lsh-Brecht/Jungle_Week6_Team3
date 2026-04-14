@@ -15,25 +15,10 @@ UDecalComponent::UDecalComponent()
 {
 }
 
-float UDecalComponent::GetFadeStartDelay() const
-{
-    return FadeStartDelay;
-}
-
-float UDecalComponent::GetFadeDuration() const
-{
-    return FadeDuration;
-}
-
-float UDecalComponent::GetFadeInStartDelay() const
-{
-    return FadeInStartDelay;
-}
-
-float UDecalComponent::GetFadeInDuration() const
-{
-    return FadeInDuration;
-}
+float UDecalComponent::GetFadeStartDelay() const { return FadeStartDelay; }
+float UDecalComponent::GetFadeDuration() const { return FadeDuration; }
+float UDecalComponent::GetFadeInStartDelay() const { return FadeInStartDelay; }
+float UDecalComponent::GetFadeInDuration() const { return FadeInDuration; }
 
 void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
 {
@@ -64,6 +49,12 @@ void UDecalComponent::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
 UMaterialInterface* UDecalComponent::GetDecalMaterial() const
 {
     return DecalMaterial;
+}
+
+void UDecalComponent::SetDecalSize(const FVector& InSize)
+{
+	DecalSize = InSize;
+	MarkProxyDirty(EDirtyFlag::Transform);
 }
 
 FMatrix UDecalComponent::GetTransformIncludingDecalSize() const
