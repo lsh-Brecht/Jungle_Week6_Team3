@@ -63,7 +63,6 @@ protected:
 	FMaterialSlot DecalMaterialSlot;
 	FName DecalTextureName;
 	FTextureResource* DecalTexture = nullptr;
-};
 	FPrimitiveSceneProxy* ArrowOuterProxy = nullptr;
 	FPrimitiveSceneProxy* ArrowInnerProxy = nullptr;
 };
