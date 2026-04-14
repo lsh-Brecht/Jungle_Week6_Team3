@@ -41,10 +41,10 @@ float4 PS(PS_Input_Decal input) : SV_TARGET
     DepthTex.GetDimensions(width, height);
 
     const float2 invSize = 1.0f / float2(width, height);
-    const float2 uv = (input.position.xy + 0.5f) * invSize;
+    const float2 uv = (input.position.xy) * invSize;
 
     const float depth = DepthTex.Load(int3(input.position.xy, 0));
-    if (depth >= 1.0f)
+    if (depth <= 0.0f || depth >= 1.0f)
     {
         discard;
     }
@@ -57,7 +57,7 @@ float4 PS(PS_Input_Decal input) : SV_TARGET
         discard;
     }
 
-    const float2 decalUV = localDecalPos.yz + 0.5f;
+    const float2 decalUV = float2(localDecalPos.y + 0.5f, 0.5f - localDecalPos.z);
     if (decalUV.x < 0.0f || decalUV.x > 1.0f || decalUV.y < 0.0f || decalUV.y > 1.0f)
     {
         discard;
@@ -66,7 +66,7 @@ float4 PS(PS_Input_Decal input) : SV_TARGET
     float4 texColor = g_txColor.Sample(g_Sample, decalUV);
     if (texColor.a < 0.001f)
     {
-        texColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+        discard;
     }
 
     float4 finalColor = texColor * SectionColor * PrimitiveColor;

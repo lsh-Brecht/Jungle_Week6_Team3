@@ -197,8 +197,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Bus.GetCameraUp(),
 					Entry.PerObject.Model.GetScale(),
 					Entry.SubUV.FrameIndex,
-					Entry.SubUV.Particle->Columns,
-					Entry.SubUV.Particle->Rows,
+					Entry.SubUV.Columns,
+					Entry.SubUV.Rows,
 					Entry.SubUV.Width,
                   Entry.SubUV.Height,
 					Entry.bSelected
@@ -555,6 +555,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 		for (const FPrimitiveSceneProxy* RawProxy : SortedProxyBuffer)
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
+			if (Proxy.Pass == ERenderPass::Decal && !ActiveDepthSRV) continue;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
 			BindShader(Proxy, Context, State);	
 			BindExtraCB(Proxy, Context);
