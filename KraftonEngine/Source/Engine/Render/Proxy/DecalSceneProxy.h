@@ -18,3 +18,17 @@ private:
     UDecalComponent* GetDecalComponent() const;
     void RebuildSectionDraw();
 };
+
+class FDecalArrowSceneProxy : public FPrimitiveSceneProxy
+{
+public:
+	explicit FDecalArrowSceneProxy(UDecalComponent* InComponent, bool bInner = false);
+
+	void UpdateMesh() override;
+	void UpdatePerViewport(const FRenderBus& Bus) override;
+
+private:
+	UDecalComponent* GetDecalComponent() const;
+
+	bool bIsInner = false;
+};

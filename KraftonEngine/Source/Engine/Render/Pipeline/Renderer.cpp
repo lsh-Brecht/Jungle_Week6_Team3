@@ -361,6 +361,23 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 
 			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
 			{
+				if (InRenderBus.GetShowFlags().bGizmo)
+				{
+					const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
+					if (!GizmoOuterProxies.empty())
+					{
+						ApplyPassRenderState(ERenderPass::GizmoOuter, Context, InRenderBus.GetViewMode());
+						ExecutePass(GizmoOuterProxies, InRenderBus, Context);
+					}
+
+					const auto& GizmoInnerProxies = InRenderBus.GetProxies(ERenderPass::GizmoInner);
+					if (!GizmoInnerProxies.empty())
+					{
+						ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
+						ExecutePass(GizmoInnerProxies, InRenderBus, Context);
+					}
+				}
+
 				ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
 				const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
 				if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))

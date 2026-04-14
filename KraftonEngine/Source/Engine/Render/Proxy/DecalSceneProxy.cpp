@@ -3,15 +3,59 @@
 #include "Components/DecalComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Render/Resource/ConstantBufferPool.h"
+#include "Render/Resource/MeshBufferManager.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Texture/Texture2D.h"
 
 namespace
 {
+	constexpr float DecalArrowScreenScale = 0.12f;
+	constexpr float DecalArrowMinScale = 0.01f;
+	constexpr float DecalArrowInnerOpacity = 0.35f;
+	const FVector4 DecalArrowColorTint(0.31f, 0.31f, 0.78f, 1.0f);
+
     struct FDecalObjectConstants
     {
         FGPUFloat4x4 InverseDecalModel;
     };
+
+	float ComputeDecalArrowScale(const FRenderBus& Bus, const FVector& WorldLocation)
+	{
+		if (Bus.IsOrtho())
+		{
+			const float Scale = Bus.GetOrthoWidth() * DecalArrowScreenScale;
+			return (Scale < DecalArrowMinScale) ? DecalArrowMinScale : Scale;
+		}
+
+		const float Distance = FVector::Distance(Bus.GetCameraPosition(), WorldLocation);
+		const float Scale = Distance * DecalArrowScreenScale;
+		return (Scale < DecalArrowMinScale) ? DecalArrowMinScale : Scale;
+	}
+
+	FMatrix BuildUnitRotationMatrix(const UDecalComponent* DecalComp)
+	{
+		FMatrix Rotation = DecalComp->GetWorldMatrix();
+
+		for (int32 Row = 0; Row < 3; ++Row)
+		{
+			FVector Axis(Rotation.M[Row][0], Rotation.M[Row][1], Rotation.M[Row][2]);
+			if (Axis.Dot(Axis) > 1e-8f)
+			{
+				Axis.Normalize();
+			}
+
+			Rotation.M[Row][0] = Axis.X;
+			Rotation.M[Row][1] = Axis.Y;
+			Rotation.M[Row][2] = Axis.Z;
+			Rotation.M[Row][3] = 0.0f;
+		}
+
+		Rotation.M[3][0] = 0.0f;
+		Rotation.M[3][1] = 0.0f;
+		Rotation.M[3][2] = 0.0f;
+		Rotation.M[3][3] = 1.0f;
+		return Rotation;
+	}
 }
 
 FDecalSceneProxy::FDecalSceneProxy(UDecalComponent* InComponent)
@@ -116,4 +160,78 @@ void FDecalSceneProxy::RebuildSectionDraw()
 
     SectionDraws.push_back(Draw);
     UpdateSortKey();
+}
+
+FDecalArrowSceneProxy::FDecalArrowSceneProxy(UDecalComponent* InComponent, bool bInner)
+	: FPrimitiveSceneProxy(InComponent)
+	, bIsInner(bInner)
+{
+	bPerViewportUpdate = true;
+	bNeverCull = true;
+	bShowAABB = false;
+	bSupportsOutline = false;
+	Pass = bInner ? ERenderPass::GizmoInner : ERenderPass::GizmoOuter;
+}
+
+void FDecalArrowSceneProxy::UpdateMesh()
+{
+	MeshBuffer = &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::TransGizmo);
+	Shader = FShaderManager::Get().GetShader(EShaderType::Gizmo);
+
+	SectionDraws.clear();
+
+	FMeshSectionDraw Draw = {};
+	Draw.IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+	SectionDraws.push_back(Draw);
+
+	UpdateSortKey();
+}
+
+void FDecalArrowSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
+{
+	UDecalComponent* DecalComp = GetDecalComponent();
+	FPrimitiveSceneProxy* DecalProxy = DecalComp ? DecalComp->GetSceneProxy() : nullptr;
+	if (!DecalComp
+		|| !DecalProxy
+		|| !DecalComp->IsVisible()
+		|| !DecalProxy->bVisible
+		|| !DecalProxy->bSelected
+		|| !DecalProxy->bInVisibleSet
+		|| !Bus.GetShowFlags().bGizmo
+		|| !Bus.GetShowFlags().bDecal)
+	{
+		bVisible = false;
+		return;
+	}
+
+	bVisible = true;
+
+	const FVector WorldLocation = DecalComp->GetWorldLocation();
+	const float PerViewScale = ComputeDecalArrowScale(Bus, WorldLocation);
+	const FMatrix RotationMatrix = BuildUnitRotationMatrix(DecalComp);
+
+	PerObjectConstants = FPerObjectConstants{
+		FMatrix::MakeScaleMatrix(FVector(PerViewScale, PerViewScale, PerViewScale))
+			* RotationMatrix
+			* FMatrix::MakeTranslationMatrix(WorldLocation),
+		DecalArrowColorTint
+	};
+	CachedWorldPos = WorldLocation;
+	MarkPerObjectCBDirty();
+
+	auto& G = ExtraCB.Bind<FGizmoConstants>(
+		FConstantBufferPool::Get().GetBuffer(ECBSlot::Gizmo, sizeof(FGizmoConstants)),
+		ECBSlot::Gizmo);
+	G.ColorTint = DecalArrowColorTint;
+	G.bIsInnerGizmo = bIsInner ? 1u : 0u;
+	G.bClicking = 0u;
+	G.SelectedAxis = 0xFFFFFFFFu;
+	G.HoveredAxisOpacity = DecalArrowInnerOpacity;
+	G.AxisMask = 0x1u;
+	G.bOverrideAxisColor = 1u;
+}
+
+UDecalComponent* FDecalArrowSceneProxy::GetDecalComponent() const
+{
+	return static_cast<UDecalComponent*>(Owner);
 }

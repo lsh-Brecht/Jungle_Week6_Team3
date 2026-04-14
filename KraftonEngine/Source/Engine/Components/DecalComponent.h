@@ -45,6 +45,8 @@ public:
 	FMeshBuffer* GetMeshBuffer() const override;
 	const FMeshData* GetMeshData() const override;
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
+	void CreateRenderState() override;
+	void DestroyRenderState() override;
 
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;
@@ -54,4 +56,6 @@ public:
 protected:
 	UMaterialInterface* DecalMaterial = nullptr;
 	FMaterialSlot DecalMaterialSlot;
+	FPrimitiveSceneProxy* ArrowOuterProxy = nullptr;
+	FPrimitiveSceneProxy* ArrowInnerProxy = nullptr;
 };

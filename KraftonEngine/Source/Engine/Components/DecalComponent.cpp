@@ -6,7 +6,10 @@
 #include "Mesh/ObjManager.h"
 #include "Materials/MaterialInterface.h"
 #include "Object/ObjectFactory.h"
+#include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Render/Proxy/DecalSceneProxy.h"
+#include "Render/Proxy/FScene.h"
 #include "Serialization/Archive.h"
 
 IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
@@ -98,6 +101,57 @@ const FMeshData* UDecalComponent::GetMeshData() const
 FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
 {
     return new FDecalSceneProxy(this);
+}
+
+void UDecalComponent::CreateRenderState()
+{
+	if (SceneProxy)
+	{
+		return;
+	}
+
+	UPrimitiveComponent::CreateRenderState();
+	if (!SceneProxy)
+	{
+		return;
+	}
+
+	FScene* Scene = nullptr;
+	if (Owner && Owner->GetWorld())
+	{
+		Scene = &Owner->GetWorld()->GetScene();
+	}
+
+	if (!Scene)
+	{
+		return;
+	}
+
+	ArrowOuterProxy = new FDecalArrowSceneProxy(this, false);
+	Scene->RegisterProxy(ArrowOuterProxy);
+
+	ArrowInnerProxy = new FDecalArrowSceneProxy(this, true);
+	Scene->RegisterProxy(ArrowInnerProxy);
+}
+
+void UDecalComponent::DestroyRenderState()
+{
+	if (Owner && Owner->GetWorld())
+	{
+		FScene& Scene = Owner->GetWorld()->GetScene();
+		if (ArrowInnerProxy)
+		{
+			Scene.RemovePrimitive(ArrowInnerProxy);
+			ArrowInnerProxy = nullptr;
+		}
+		if (ArrowOuterProxy)
+		{
+			Scene.RemovePrimitive(ArrowOuterProxy);
+			ArrowOuterProxy = nullptr;
+		}
+	}
+
+	UPrimitiveComponent::DestroyRenderState();
 }
 
 void UDecalComponent::Serialize(FArchive& Ar)
