@@ -182,6 +182,8 @@ struct FSubUVConstants
 {
 	const FParticleResource* Particle = nullptr;
 	uint32 FrameIndex = 0;
+	uint32 Columns = 1;
+	uint32 Rows = 1;
 	float Width = 1.0f;
 	float Height = 1.0f;
 };

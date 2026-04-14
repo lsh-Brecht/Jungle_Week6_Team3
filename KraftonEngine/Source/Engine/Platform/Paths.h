@@ -19,7 +19,6 @@ public:
 
 	// 주요 파일 경로
 	static std::wstring SettingsFilePath();  // Settings/Editor.ini
-	static std::wstring ResourceFilePath();  // Settings/Resource.ini
 
 	// 경로 결합: FPaths::Combine(L"Asset/Scene", L"Default.Scene")
 	static std::wstring Combine(const std::wstring& Base, const std::wstring& Child);

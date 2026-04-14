@@ -4,6 +4,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Core/EngineTypes.h"
 #include "Core/PropertyTypes.h"
+#include "Core/ResourceTypes.h"
 #include "Render/Resource/MeshBufferManager.h"
 
 class UMaterialInterface;
@@ -37,11 +38,15 @@ public:
 	void SetDecalColor(const FLinearColor& Color);
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
 	UMaterialInterface* GetDecalMaterial() const;
+	void SetDecalTexture(const FName& TextureName);
+	const FTextureResource* GetDecalTexture() const;
+	bool FitSizeToTextureAspect();
 
 	void SetDecalSize(const FVector& InSize);
 	FMatrix GetTransformIncludingDecalSize() const;
 
 	void UpdateWorldAABB() const override;
+	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 	FMeshBuffer* GetMeshBuffer() const override;
 	const FMeshData* GetMeshData() const override;
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
@@ -54,4 +59,6 @@ public:
 protected:
 	UMaterialInterface* DecalMaterial = nullptr;
 	FMaterialSlot DecalMaterialSlot;
+	FName DecalTextureName;
+	FTextureResource* DecalTexture = nullptr;
 };

@@ -92,24 +92,29 @@ void FDecalSceneProxy::RebuildSectionDraw()
 {
     SectionDraws.clear();
 
-    FMeshSectionDraw Draw = {};
-    if (UDecalComponent* DecalComp = GetDecalComponent())
-    {
-        if (UMaterialInterface* Material = DecalComp->GetDecalMaterial())
-        {
-            if (UTexture2D* DiffuseTexture = Material->GetDiffuseTexture())
-            {
-                Draw.DiffuseSRV = DiffuseTexture->GetSRV();
-            }
-            Draw.DiffuseColor = Material->GetDiffuseColor();
-        }
+	FMeshSectionDraw Draw = {};
+	if (UDecalComponent* DecalComp = GetDecalComponent())
+	{
+		if (const FTextureResource* Texture = DecalComp->GetDecalTexture())
+		{
+			Draw.DiffuseSRV = Texture->SRV;
+			Draw.DiffuseColor = DecalComp->DecalColor.ToVector4();
+		}
+		else if (UMaterialInterface* Material = DecalComp->GetDecalMaterial())
+		{
+			if (UTexture2D* DiffuseTexture = Material->GetDiffuseTexture())
+			{
+				Draw.DiffuseSRV = DiffuseTexture->GetSRV();
+			}
+			Draw.DiffuseColor = Material->GetDiffuseColor();
+		}
 		else
 		{
 			Draw.DiffuseColor = DecalComp->DecalColor.ToVector4();
 		}
     }
 
-    if (MeshBuffer)
+    if (MeshBuffer && Draw.DiffuseSRV)
     {
         Draw.IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
     }

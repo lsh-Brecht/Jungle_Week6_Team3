@@ -32,7 +32,6 @@ std::wstring FPaths::DumpDir() { return RootDir() + L"Saves\\Dump\\"; }
 std::wstring FPaths::SettingsDir() { return RootDir() + L"Settings\\"; }
 
 std::wstring FPaths::SettingsFilePath() { return RootDir() + L"Settings\\Editor.ini"; }
-std::wstring FPaths::ResourceFilePath() { return RootDir() + L"Settings\\Resource.ini"; }
 
 std::wstring FPaths::Combine(const std::wstring& Base, const std::wstring& Child)
 {
