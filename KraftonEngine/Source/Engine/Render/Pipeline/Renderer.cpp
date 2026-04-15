@@ -315,8 +315,6 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		ERenderPass::Billboard,
 		ERenderPass::Editor,
 		ERenderPass::Grid,
-		ERenderPass::GizmoOuter,
-		ERenderPass::GizmoInner,
 		ERenderPass::Font,
 		ERenderPass::PostProcess,
 		ERenderPass::OverlayFont
@@ -359,10 +357,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 				DrawScenenDepthVisualize(InRenderBus, Context);
 			}
 			ExecutePostProcessChain(InRenderBus, Context);
-			if (bIsSceneDepth)
-			{
-				DrawSceneDepthOverlays(InRenderBus, Context);
-			}
+			DrawPostProcessOverlays(InRenderBus, Context, bIsSceneDepth);
 			continue;
 		}
 
@@ -422,8 +417,8 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
-	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
-	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutsideDepthWrite, EBlendState::Opaque,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInsideDepthWrite, EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 
 }
@@ -1208,11 +1203,17 @@ void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceCont
 	Context->OMSetRenderTargets(1, &RTV, DSV);
 }
 
-// SceneDepth 모드에서 PostProcess 이후 기즈모 및 폰트 오버레이를 렌더링한다.
-void FRenderer::DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context)
+// PostProcess 이후 fog 영향을 받지 않아야 하는 에디터 오버레이를 렌더링한다.
+void FRenderer::DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context, bool bDrawFontOverlay)
 {
 	if (InRenderBus.GetShowFlags().bGizmo)
 	{
+		ID3D11DepthStencilView* DSV = InRenderBus.GetViewportDSV();
+		if (DSV)
+		{
+			Context->ClearDepthStencilView(DSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
+		}
+
 		const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
 		if (!GizmoOuterProxies.empty())
 		{
@@ -1226,6 +1227,11 @@ void FRenderer::DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11Devi
 			ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
 			ExecutePass(GizmoInnerProxies, InRenderBus, Context);
 		}
+	}
+
+	if (!bDrawFontOverlay)
+	{
+		return;
 	}
 
 	ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());

@@ -19,6 +19,8 @@ private:
 	ID3D11DepthStencilState* NoDepth = nullptr;
 	ID3D11DepthStencilState* GizmoInside = nullptr;
 	ID3D11DepthStencilState* GizmoOutside = nullptr;
+	ID3D11DepthStencilState* GizmoInsideDepthWrite = nullptr;
+	ID3D11DepthStencilState* GizmoOutsideDepthWrite = nullptr;
 
 	EDepthStencilState CurrentState = EDepthStencilState::Default;
 };
