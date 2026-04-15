@@ -132,7 +132,7 @@ private:
 	void DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
 	
 	void DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context);
-	void DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context);
+	void DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context, bool bDrawFontOverlay);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 

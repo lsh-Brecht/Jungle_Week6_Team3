@@ -315,8 +315,6 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		ERenderPass::Billboard,
 		ERenderPass::Editor,
 		ERenderPass::Grid,
-		ERenderPass::GizmoOuter,
-		ERenderPass::GizmoInner,
 		ERenderPass::Font,
 		ERenderPass::PostProcess,
 		ERenderPass::OverlayFont
@@ -359,10 +357,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 				DrawScenenDepthVisualize(InRenderBus, Context);
 			}
 			ExecutePostProcessChain(InRenderBus, Context);
-			if (bIsSceneDepth)
-			{
-				DrawSceneDepthOverlays(InRenderBus, Context);
-			}
+			DrawPostProcessOverlays(InRenderBus, Context, bIsSceneDepth);
 			continue;
 		}
 
@@ -1208,8 +1203,8 @@ void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceCont
 	Context->OMSetRenderTargets(1, &RTV, DSV);
 }
 
-// SceneDepth 모드에서 PostProcess 이후 기즈모 및 폰트 오버레이를 렌더링한다.
-void FRenderer::DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context)
+// PostProcess 이후 fog 영향을 받지 않아야 하는 에디터 오버레이를 렌더링한다.
+void FRenderer::DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context, bool bDrawFontOverlay)
 {
 	if (InRenderBus.GetShowFlags().bGizmo)
 	{
@@ -1226,6 +1221,11 @@ void FRenderer::DrawSceneDepthOverlays(const FRenderBus& InRenderBus, ID3D11Devi
 			ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
 			ExecutePass(GizmoInnerProxies, InRenderBus, Context);
 		}
+	}
+
+	if (!bDrawFontOverlay)
+	{
+		return;
 	}
 
 	ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
