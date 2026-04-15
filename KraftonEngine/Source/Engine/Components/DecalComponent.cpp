@@ -44,7 +44,7 @@ UDecalComponent::UDecalComponent()
 	bTickEnable = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
-   OriginalAlpha = DecalColor.A;
+	OriginalAlpha = DecalColor.A;
 }
 
 float UDecalComponent::GetFadeStartDelay() const { return FadeStartDelay; }
@@ -91,14 +91,37 @@ void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 
 void UDecalComponent::RestartFadePreviewSequence()
 {
-	bPendingFadeOutAfterFadeIn = true;
-	SetFadeIn(FadeInStartDelay, FadeInDuration);
+  const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig)
+	{
+		bPendingFadeOutAfterFadeIn = bHasFadeOutConfig;
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		bPendingFadeOutAfterFadeIn = false;
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
+	else
+	{
+		bPendingFadeOutAfterFadeIn = false;
+		bIsFadeInActive = false;
+		bIsFadeOutActive = false;
+		FadeInTimeElapsed = 0.0f;
+		FadeOutTimeElapsed = 0.0f;
+		DecalColor.A = OriginalAlpha;
+		SetVisibility(true);
+		SetComponentTickEnabled(false);
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 void UDecalComponent::SetDecalColor(const FLinearColor& Color)
 {
     DecalColor = Color;
-  if (!bIsFadeInActive && !bIsFadeOutActive)
+	if (!bIsFadeInActive && !bIsFadeOutActive)
 	{
 		OriginalAlpha = Color.A;
 	}
@@ -405,7 +428,7 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 		|| std::strcmp(PropertyName, "Fade In Duration") == 0
 		|| std::strcmp(PropertyName, "Fade In Start Delay") == 0)
 	{
-       if (Owner && Owner->HasActorBegunPlay())
+		if (Owner && Owner->HasActorBegunPlay())
 		{
 			RestartFadePreviewSequence();
 		}
@@ -443,7 +466,7 @@ void UDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
 			{
 				bIsFadeInActive = false;
-               if (bPendingFadeOutAfterFadeIn)
+				if (bPendingFadeOutAfterFadeIn)
 				{
 					SetFadeOut(FadeStartDelay, FadeDuration, false);
 				}
