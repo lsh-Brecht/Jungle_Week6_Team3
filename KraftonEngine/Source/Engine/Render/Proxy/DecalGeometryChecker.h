@@ -40,7 +40,7 @@ public:
 	 * @param World     씬 월드 (BVH EnsureBuilt 포함)
 	 * @return          실제로 겹치는 삼각형이 있으면 true, 없으면 false
 	 */
-	bool HasOverlappingGeometry(UDecalComponent* Decal, const UWorld& World);
+	bool HasOverlappingGeometry(UDecalComponent* Decal, const UWorld& World, int32* OutOverlappingObjectCount = nullptr);
 
 private:
 	// ---------- Stage 1 ----------
@@ -77,6 +77,11 @@ private:
 	bool GatherSATOverlapTriangles(
 		const TArray<FVector>& LocalTriVerts,
 		const TArray<int32>& CoarseTriIndices);
+
+	bool HasOverlapWithCandidate(
+		UStaticMeshComponent* Candidate,
+		const FBoundingBox& DecalWorldAABB,
+		const FMatrix& InvDecalModel);
 
 	// SAT 헬퍼: 단위 OBB([-0.5,0.5]^3)와 삼각형의 SAT 13축 검사
 	static bool SATTriangleVsUnitOBB(const FVector& V0, const FVector& V1, const FVector& V2);

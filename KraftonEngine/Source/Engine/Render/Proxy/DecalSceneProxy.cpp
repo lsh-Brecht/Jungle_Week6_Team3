@@ -197,7 +197,13 @@ void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	if (World)
 	{
 		FDecalGeometryChecker Checker;
-		bHasGeometry = Checker.HasOverlappingGeometry(DecalComp, *World);
+       int32 OverlappingObjectCount = 0;
+		bHasGeometry = Checker.HasOverlappingGeometry(DecalComp, *World, &OverlappingObjectCount);
+        LastOverlappingObjectCount = (OverlappingObjectCount > 0) ? static_cast<uint32>(OverlappingObjectCount) : 0;
+	}
+	else
+	{
+		LastOverlappingObjectCount = 0;
 	}
 
 	// 지오메트리 상태가 바뀐 경우에만 SectionDraws 재구성
