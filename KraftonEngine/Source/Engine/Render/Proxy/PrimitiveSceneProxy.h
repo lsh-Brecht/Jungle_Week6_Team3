@@ -78,6 +78,7 @@ public:
 	// --- Sort Keys (Shader|MeshBuffer + Material layout) ---
 	uint64 SortKey = 0;
 	uint32 MaterialSortKey = 0;
+	int32 SortOrder = 0;
 	void UpdateSortKey();
 
 	// 섹션별 드로우 정보 (메시/머티리얼 변경 시만 재구축)

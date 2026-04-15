@@ -99,6 +99,7 @@ void FDecalSceneProxy::UpdateTransform()
         PerObjectConstants.Model = DecalComp->GetTransformIncludingDecalSize();
         CachedWorldPos = PerObjectConstants.Model.GetLocation();
         PerObjectConstants.Color = DecalComp->DecalColor.ToVector4();
+        SortOrder = DecalComp->GetDecalSortOrder();
 
         auto& DecalCB = ExtraCB.Bind<FDecalObjectConstants>(
             FConstantBufferPool::Get().GetBuffer(ECBSlot::Gizmo, sizeof(FDecalObjectConstants)),

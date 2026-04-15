@@ -599,6 +599,7 @@ void FRenderer::SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies)
 {
 	SCOPE_STAT_CAT("ExecutePass::Sort", "4_ExecutePass");
 
+	const bool bSortByDecalOrder = !Proxies.empty() && Proxies[0] && Proxies[0]->Pass == ERenderPass::Decal;
 	const auto ProxyLess = [](const FPrimitiveSceneProxy* A, const FPrimitiveSceneProxy* B)
 	{
 		if (A->SortKey != B->SortKey)
@@ -614,6 +615,34 @@ void FRenderer::SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies)
 	SortedProxyBuffer.insert(SortedProxyBuffer.end(), Proxies.begin(), Proxies.end());
 
 	if (SortedProxyBuffer.size() <= 1) return;
+
+	if (bSortByDecalOrder)
+	{
+		const auto DecalProxyLess = [](const FPrimitiveSceneProxy* A, const FPrimitiveSceneProxy* B)
+		{
+			if (A->SortOrder != B->SortOrder)
+			{
+				return A->SortOrder < B->SortOrder;
+			}
+
+			return A->ProxyId < B->ProxyId;
+		};
+
+		bool bAlreadySortedByDecalOrder = true;
+		for (size_t i = 1; i < SortedProxyBuffer.size(); ++i)
+		{
+			if (DecalProxyLess(SortedProxyBuffer[i], SortedProxyBuffer[i - 1]))
+			{
+				bAlreadySortedByDecalOrder = false;
+				break;
+			}
+		}
+		if (!bAlreadySortedByDecalOrder)
+		{
+			std::sort(SortedProxyBuffer.begin(), SortedProxyBuffer.end(), DecalProxyLess);
+		}
+		return;
+	}
 
 	// B: 이미 정렬되어 있으면 O(N) 체크 후 skip
 	bool bAlreadySorted = true;

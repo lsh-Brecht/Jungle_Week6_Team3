@@ -1,0 +1,418 @@
+{
+  "Actors" : [{
+      "ClassName" : "AStaticMeshActor",
+      "NonSceneComponents" : [],
+      "PrimitiveKey" : "8",
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UTextRenderComponent",
+            "Properties" : {
+              "Font" : "Default",
+              "Font Size" : 1.000000,
+              "Location" : [0.000000, 0.000000, 1.300000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Text" : "UUID : 17",
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UStaticMeshComponent",
+        "Properties" : {
+          "Element 0" : {
+            "Path" : "BasicShapeMaterial",
+            "UVScroll" : false
+          },
+          "Location" : [0.000000, 5.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [2.000000, 2.000000, 2.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }, {
+      "ClassName" : "AStaticMeshActor",
+      "NonSceneComponents" : [{
+          "ClassName" : "URotatingMovementComponent",
+          "Properties" : {
+            "Auto Register Updated" : false,
+            "Pivot Translation" : [-1.200000, 0.000000, 0.000000],
+            "Rotation In Local Space" : false,
+            "Rotation Rate" : [0.000000, 90.000000, 0.000000],
+            "Updated Component" : "Root/1",
+            "bTickEnable" : true
+          }
+        }],
+      "PrimitiveKey" : "14",
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UTextRenderComponent",
+            "Properties" : {
+              "Font" : "Default",
+              "Font Size" : 1.000000,
+              "Location" : [0.000000, 0.000000, 1.300000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Text" : "UUID : 6",
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UDecalComponent",
+            "Properties" : {
+              "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+              "Decal Material" : {
+                "Path" : "Texture:cyberpunk",
+                "UVScroll" : false
+              },
+              "Decal Size" : [1.000000, 1.000000, 1.407692],
+              "Decal Sort Order" : 0,
+              "Destroy Owner After Fade" : true,
+              "Fade Duration" : 0.000000,
+              "Fade In Duration" : 0.000000,
+              "Fade In Start Delay" : 0.000000,
+              "Fade Start Delay" : 0.000000,
+              "Location" : [-0.600000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UStaticMeshComponent",
+        "Properties" : {
+          "Element 0" : {
+            "Path" : "BasicShapeMaterial",
+            "UVScroll" : false
+          },
+          "Location" : [0.000000, 0.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [2.000000, 2.000000, 2.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }, {
+      "ClassName" : "ADecalActor",
+      "NonSceneComponents" : [{
+          "ClassName" : "UProjectileMovementComponent",
+          "Properties" : {
+            "Auto Register Updated" : true,
+            "Initial Speed" : 0.100000,
+            "Max Speed" : 1.000000,
+            "Updated Component" : "",
+            "Velocity" : [1.000000, 1.000000, 1.000000],
+            "bTickEnable" : true
+          }
+        }],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Texture" : "DecalIcon",
+              "Visible" : false,
+              "Width" : 1.000000,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UDecalComponent",
+            "Properties" : {
+              "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+              "Decal Material" : {
+                "Path" : "Texture:girlface1",
+                "UVScroll" : false
+              },
+              "Decal Size" : [1.000000, 1.000000, 1.000000],
+              "Decal Sort Order" : 10,
+              "Destroy Owner After Fade" : true,
+              "Fade Duration" : 0.000000,
+              "Fade In Duration" : 0.000000,
+              "Fade In Start Delay" : 0.000000,
+              "Fade Start Delay" : 0.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [2.000000, 2.000000, 2.000000],
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UDecalComponent",
+        "Properties" : {
+          "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Decal Material" : {
+            "Path" : "None",
+            "UVScroll" : false
+          },
+          "Decal Size" : [1.000000, 1.000000, 1.000000],
+          "Decal Sort Order" : 0,
+          "Destroy Owner After Fade" : true,
+          "Fade Duration" : 0.000000,
+          "Fade In Duration" : 0.000000,
+          "Fade In Start Delay" : 0.000000,
+          "Fade Start Delay" : 0.000000,
+          "Location" : [-1.000000, 5.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }, {
+      "ClassName" : "ADecalActor",
+      "NonSceneComponents" : [{
+          "ClassName" : "UProjectileMovementComponent",
+          "Properties" : {
+            "Auto Register Updated" : true,
+            "Initial Speed" : 0.100000,
+            "Max Speed" : 1.000000,
+            "Updated Component" : "",
+            "Velocity" : [1.000000, -1.000000, 1.000000],
+            "bTickEnable" : true
+          }
+        }],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Texture" : "DecalIcon",
+              "Visible" : false,
+              "Width" : 1.000000,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UDecalComponent",
+            "Properties" : {
+              "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+              "Decal Material" : {
+                "Path" : "Texture:girlface2",
+                "UVScroll" : false
+              },
+              "Decal Size" : [1.000000, 1.000000, 1.000000],
+              "Decal Sort Order" : 0,
+              "Destroy Owner After Fade" : true,
+              "Fade Duration" : 0.000000,
+              "Fade In Duration" : 0.000000,
+              "Fade In Start Delay" : 0.000000,
+              "Fade Start Delay" : 0.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [2.000000, 2.000000, 2.000000],
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UDecalComponent",
+        "Properties" : {
+          "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Decal Material" : {
+            "Path" : "None",
+            "UVScroll" : false
+          },
+          "Decal Size" : [1.000000, 1.000000, 1.000000],
+          "Decal Sort Order" : 0,
+          "Destroy Owner After Fade" : true,
+          "Fade Duration" : 0.000000,
+          "Fade In Duration" : 0.000000,
+          "Fade In Start Delay" : 0.000000,
+          "Fade Start Delay" : 0.000000,
+          "Location" : [-1.000000, 5.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }, {
+      "ClassName" : "ADecalActor",
+      "NonSceneComponents" : [{
+          "ClassName" : "UProjectileMovementComponent",
+          "Properties" : {
+            "Auto Register Updated" : true,
+            "Initial Speed" : 0.200000,
+            "Max Speed" : 1.000000,
+            "Updated Component" : "",
+            "Velocity" : [-1.000000, -1.000000, 0.000000],
+            "bTickEnable" : true
+          }
+        }],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Texture" : "DecalIcon",
+              "Visible" : false,
+              "Width" : 1.000000,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UDecalComponent",
+            "Properties" : {
+              "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+              "Decal Material" : {
+                "Path" : "Texture:girlface3",
+                "UVScroll" : false
+              },
+              "Decal Size" : [1.000000, 1.000000, 1.000000],
+              "Decal Sort Order" : 0,
+              "Destroy Owner After Fade" : true,
+              "Fade Duration" : 0.000000,
+              "Fade In Duration" : 0.000000,
+              "Fade In Start Delay" : 0.000000,
+              "Fade Start Delay" : 0.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UDecalComponent",
+        "Properties" : {
+          "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Decal Material" : {
+            "Path" : "None",
+            "UVScroll" : false
+          },
+          "Decal Size" : [1.000000, 1.000000, 1.000000],
+          "Decal Sort Order" : 0,
+          "Destroy Owner After Fade" : true,
+          "Fade Duration" : 0.000000,
+          "Fade In Duration" : 0.000000,
+          "Fade In Start Delay" : 0.000000,
+          "Fade Start Delay" : 0.000000,
+          "Location" : [-1.000000, 5.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }, {
+      "ClassName" : "ADecalActor",
+      "NonSceneComponents" : [{
+          "ClassName" : "UProjectileMovementComponent",
+          "Properties" : {
+            "Auto Register Updated" : true,
+            "Initial Speed" : 0.100000,
+            "Max Speed" : 1.000000,
+            "Updated Component" : "",
+            "Velocity" : [-1.000000, -1.000000, -1.000000],
+            "bTickEnable" : true
+          }
+        }],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Texture" : "DecalIcon",
+              "Visible" : false,
+              "Width" : 1.000000,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UDecalComponent",
+            "Properties" : {
+              "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+              "Decal Material" : {
+                "Path" : "Texture:girlface4",
+                "UVScroll" : false
+              },
+              "Decal Size" : [1.000000, 1.000000, 1.000000],
+              "Decal Sort Order" : 0,
+              "Destroy Owner After Fade" : true,
+              "Fade Duration" : 0.000000,
+              "Fade In Duration" : 0.000000,
+              "Fade In Start Delay" : 0.000000,
+              "Fade Start Delay" : 0.000000,
+              "Location" : [0.000000, 0.000000, -0.150000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Visible" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UDecalComponent",
+        "Properties" : {
+          "Decal Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Decal Material" : {
+            "Path" : "None",
+            "UVScroll" : false
+          },
+          "Decal Size" : [1.000000, 1.000000, 1.000000],
+          "Decal Sort Order" : 0,
+          "Destroy Owner After Fade" : true,
+          "Fade Duration" : 0.000000,
+          "Fade In Duration" : 0.000000,
+          "Fade In Start Delay" : 0.000000,
+          "Fade Start Delay" : 0.000000,
+          "Location" : [-1.000000, 5.000000, 2.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Visible" : true,
+          "bTickEnable" : true
+        }
+      },
+      "bVisible" : true
+    }],
+  "ClassName" : "UWorld",
+  "ContextHandle" : "Default",
+  "ContextName" : "Default",
+  "Name" : "ForDemo",
+  "PerspectiveCamera" : {
+    "FOV" : 1.047198,
+    "FarClip" : 1000.000000,
+    "Location" : [-8.376139, 3.379097, 4.050970],
+    "NearClip" : 0.100000,
+    "Rotation" : [0.000000, 19.267702, 4.858765]
+  },
+  "Primitives" : {
+    "14" : {
+      "Location" : [0.000000, 0.000000, 2.000000],
+      "ObjStaticMeshAsset" : "Data/BasicShape/Cylinder.obj",
+      "Rotation" : [0.000000, -0.000000, 0.000000],
+      "Scale" : [2.000000, 2.000000, 2.000000],
+      "Type" : "StaticMeshComp"
+    },
+    "8" : {
+      "Location" : [0.000000, 5.000000, 2.000000],
+      "ObjStaticMeshAsset" : "Data/BasicShape/Cylinder.obj",
+      "Rotation" : [0.000000, -0.000000, 0.000000],
+      "Scale" : [2.000000, 2.000000, 2.000000],
+      "Type" : "StaticMeshComp"
+    }
+  },
+  "Version" : 2,
+  "WorldType" : "Editor"
+}

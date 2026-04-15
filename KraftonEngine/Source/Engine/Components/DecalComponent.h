@@ -32,10 +32,13 @@ public:
 
 	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
 	FLinearColor DecalColor = FLinearColor::White();
+	int32 DecalSortOrder = 0;
 	
 	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
 	void SetFadeIn(float StartDelay, float Duration);
 	void SetDecalColor(const FLinearColor& Color);
+	void SetDecalSortOrder(int32 InSortOrder);
+	int32 GetDecalSortOrder() const { return DecalSortOrder; }
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
 	UMaterialInterface* GetDecalMaterial() const;
 	void SetDecalTexture(const FName& TextureName);

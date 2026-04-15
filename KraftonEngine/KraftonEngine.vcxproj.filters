@@ -560,7 +560,6 @@
       <Filter>ThirdParty\ImGui</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Source\Engine\Components\DecalComponent.cpp" />
     <ClCompile Include="Source\Engine\Components\ProjectionDecalComponent.cpp">
       <Filter>Source\Engine\Components</Filter>
     </ClCompile>
@@ -581,6 +580,9 @@
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\SpotLightActor.cpp" />
+    <ClCompile Include="Source\Engine\Components\DecalComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -1099,4 +1101,3 @@
     <None Include="packages.config" />
   </ItemGroup>
 </Project>
-

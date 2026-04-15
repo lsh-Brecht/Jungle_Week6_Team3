@@ -105,6 +105,12 @@ void UDecalComponent::SetDecalColor(const FLinearColor& Color)
     MarkProxyDirty(EDirtyFlag::Transform);
 }
 
+void UDecalComponent::SetDecalSortOrder(int32 InSortOrder)
+{
+	DecalSortOrder = InSortOrder;
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
 void UDecalComponent::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
 {
 	DecalMaterial = NewDecalMaterial;
@@ -311,6 +317,7 @@ void UDecalComponent::Serialize(FArchive& Ar)
     Ar << DecalColor;
     Ar << DecalMaterialSlot.Path;
     Ar << DecalMaterialSlot.bUVScroll;
+    Ar << DecalSortOrder;
 }
 
 void UDecalComponent::PostDuplicate()
@@ -366,9 +373,10 @@ void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
 	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
 	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
-	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
+    OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
     OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
     OutProps.push_back({ "Decal Color", EPropertyType::Vec4, &DecalColor });
+    OutProps.push_back({ "Decal Sort Order", EPropertyType::Int, &DecalSortOrder });
     
 }
 
@@ -384,6 +392,10 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
     else if (std::strcmp(PropertyName, "Decal Color") == 0)
     {
         SetDecalColor(DecalColor);
+    }
+    else if (std::strcmp(PropertyName, "Decal Sort Order") == 0)
+    {
+        SetDecalSortOrder(DecalSortOrder);
     }
     else if (std::strcmp(PropertyName, "Decal Material") == 0 || std::strcmp(PropertyName, "Element 0") == 0)
     {

@@ -86,6 +86,24 @@ void UMovementComponent::SetUpdatedComponent(USceneComponent* NewUpdatedComponen
 	}
 }
 
+USceneComponent* UMovementComponent::GetUpdatedComponent() const
+{
+	return UObjectManager::Get().IsAlivePointer(UpdatedComponent) ? UpdatedComponent : nullptr;
+}
+
+void UMovementComponent::ClearUpdatedComponentIfMatches(const USceneComponent* RemovedComponent)
+{
+	if (!RemovedComponent || UpdatedComponent != RemovedComponent)
+	{
+		return;
+	}
+
+	UpdatedComponent = nullptr;
+	UpdatedComponentPath.clear();
+	bAutoRegisterUpdatedComponent = true;
+	TryAutoRegisterUpdatedComponent();
+}
+
 void UMovementComponent::TryAutoRegisterUpdatedComponent()
 {
 	if (!bAutoRegisterUpdatedComponent)
@@ -119,18 +137,19 @@ TArray<USceneComponent*> UMovementComponent::GetOwnerSceneComponents() const
 
 FString UMovementComponent::GetUpdatedComponentDisplayName() const
 {
-	if (!UpdatedComponent)
+	USceneComponent* CurrentUpdatedComponent = GetUpdatedComponent();
+	if (!CurrentUpdatedComponent)
 	{
 		return bAutoRegisterUpdatedComponent ? FString("Auto (Root)") : FString("None");
 	}
 
-	FString DisplayName = UpdatedComponent->GetFName().ToString();
+	FString DisplayName = CurrentUpdatedComponent->GetFName().ToString();
 	if (DisplayName.empty())
 	{
-		DisplayName = UpdatedComponent->GetTypeInfo()->name;
+		DisplayName = CurrentUpdatedComponent->GetTypeInfo()->name;
 	}
 
-	const FString ComponentPath = BuildUpdatedComponentPath(UpdatedComponent);
+	const FString ComponentPath = BuildUpdatedComponentPath(CurrentUpdatedComponent);
 	if (!ComponentPath.empty())
 	{
 		DisplayName += " (" + ComponentPath + ")";

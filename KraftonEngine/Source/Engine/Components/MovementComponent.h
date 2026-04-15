@@ -26,13 +26,14 @@ public:
 	void PostEditProperty(const char* PropertyName) override;
 
 	void SetUpdatedComponent(USceneComponent* NewUpdatedComponent);
-	USceneComponent* GetUpdatedComponent() const { return UpdatedComponent; }
-	bool HasValidUpdatedComponent() const { return UpdatedComponent != nullptr; }
+	USceneComponent* GetUpdatedComponent() const;
+	bool HasValidUpdatedComponent() const { return GetUpdatedComponent() != nullptr; }
 	const FString& GetUpdatedComponentPath() const { return UpdatedComponentPath; }
 	FString GetUpdatedComponentDisplayName() const;
 	TArray<USceneComponent*> GetOwnerSceneComponents() const;
 	bool ResolveUpdatedComponent();
 	FString BuildUpdatedComponentPath(const USceneComponent* TargetComponent) const;
+	void ClearUpdatedComponentIfMatches(const USceneComponent* RemovedComponent);
 
 protected:
 	void TryAutoRegisterUpdatedComponent();

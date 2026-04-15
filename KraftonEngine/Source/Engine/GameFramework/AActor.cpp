@@ -13,6 +13,28 @@
 
 IMPLEMENT_CLASS(AActor, UObject)
 
+namespace
+{
+	void GatherSceneComponentSubtree(USceneComponent* Component, TArray<UActorComponent*>& OutComponents)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		OutComponents.push_back(Component);
+		for (USceneComponent* Child : Component->GetChildren())
+		{
+			GatherSceneComponentSubtree(Child, OutComponents);
+		}
+	}
+
+	bool ContainsComponent(const TArray<UActorComponent*>& Components, const UActorComponent* Component)
+	{
+		return std::find(Components.begin(), Components.end(), Component) != Components.end();
+	}
+}
+
 AActor::AActor()
 {
 	PrimaryActorTick.SetTarget(this);
@@ -83,24 +105,67 @@ void AActor::RemoveComponent(UActorComponent* Component)
 {
 	if (!Component) return;
 
-	Component->PrimaryComponentTick.UnRegisterTickFunction();
-
-	// PrimitiveComponent::DestroyRenderState 가 Scene/Partition/PickingBVH/VisibleSet
-	// 정리를 모두 책임지므로 여기서는 단순히 호출만 한다.
-	Component->DestroyRenderState();
-
-	auto it = std::find(OwnedComponents.begin(), OwnedComponents.end(), Component);
-	if (it != OwnedComponents.end()) {
-		OwnedComponents.erase(it);
-		bPrimitiveCacheDirty = true;
-		MarkPickingDirty();
+	TArray<UActorComponent*> ComponentsToRemove;
+	if (USceneComponent* SceneComponent = Cast<USceneComponent>(Component))
+	{
+		GatherSceneComponentSubtree(SceneComponent, ComponentsToRemove);
+	}
+	else
+	{
+		ComponentsToRemove.push_back(Component);
 	}
 
-	// RootComponent가 제거되면 nullptr로
-	if (RootComponent == Component)
+	if (ContainsComponent(ComponentsToRemove, RootComponent))
+	{
 		RootComponent = nullptr;
+	}
 
-	UObjectManager::Get().DestroyObject(Component);
+	for (UActorComponent* ExistingComponent : OwnedComponents)
+	{
+		UMovementComponent* MovementComponent = Cast<UMovementComponent>(ExistingComponent);
+		if (!MovementComponent || ContainsComponent(ComponentsToRemove, ExistingComponent))
+		{
+			continue;
+		}
+
+		for (UActorComponent* RemovedComponent : ComponentsToRemove)
+		{
+			if (USceneComponent* RemovedSceneComponent = Cast<USceneComponent>(RemovedComponent))
+			{
+				MovementComponent->ClearUpdatedComponentIfMatches(RemovedSceneComponent);
+			}
+		}
+	}
+
+	for (UActorComponent* RemovedComponent : ComponentsToRemove)
+	{
+		if (!RemovedComponent)
+		{
+			continue;
+		}
+
+		RemovedComponent->PrimaryComponentTick.UnRegisterTickFunction();
+
+		// PrimitiveComponent::DestroyRenderState 가 Scene/Partition/PickingBVH/VisibleSet
+		// 정리를 모두 책임지므로 여기서는 단순히 호출만 한다.
+		RemovedComponent->DestroyRenderState();
+
+		auto it = std::find(OwnedComponents.begin(), OwnedComponents.end(), RemovedComponent);
+		if (it != OwnedComponents.end()) {
+			OwnedComponents.erase(it);
+			bPrimitiveCacheDirty = true;
+			MarkPickingDirty();
+		}
+
+		// RootComponent가 제거되면 nullptr로
+		if (RootComponent == RemovedComponent)
+			RootComponent = nullptr;
+	}
+
+	for (auto It = ComponentsToRemove.rbegin(); It != ComponentsToRemove.rend(); ++It)
+	{
+		UObjectManager::Get().DestroyObject(*It);
+	}
 }
 
 void AActor::SetRootComponent(USceneComponent* Comp)
