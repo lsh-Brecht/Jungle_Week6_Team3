@@ -128,7 +128,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		// Gizmo axis mask must be updated before per-viewport proxy collection.
 		// Otherwise gizmo proxy can read stale mask from a previous viewport/frame.
 		if (UGizmoComponent* Gizmo = Editor->GetGizmo())
-			Gizmo->UpdateAxisMask(Opts.ViewportType);
+			Gizmo->UpdateAxisMask(Opts.ViewportType, Camera->IsOrthogonal());
 
 		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
 

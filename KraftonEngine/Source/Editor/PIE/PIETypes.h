@@ -6,6 +6,8 @@
 #include "Math/Vector.h"
 #include "Object/FName.h"
 
+class FLevelEditorViewportClient;
+
 // PIE 세션 실행 위치. 현재는 InProcess만 사용.
 enum class EPIESessionDestination : uint8
 {
@@ -37,6 +39,12 @@ struct FPIEViewportCameraSnapshot
 	bool bValid = false;
 };
 
+struct FPIEViewportCameraSnapshotEntry
+{
+	FLevelEditorViewportClient* ViewportClient = nullptr;
+	FPIEViewportCameraSnapshot Snapshot;
+};
+
 // 활성 PIE 세션 상태. UE의 FPlayInEditorSessionInfo 대응 (최소 버전).
 struct FPlayInEditorSessionInfo
 {
@@ -45,4 +53,5 @@ struct FPlayInEditorSessionInfo
 	// PIE 시작 직전 활성 월드 핸들 — EndPlayMap에서 원복에 사용.
 	FName PreviousActiveWorldHandle;
 	FPIEViewportCameraSnapshot SavedViewportCamera;
+	TArray<FPIEViewportCameraSnapshotEntry> SavedViewportCameras;
 };

@@ -697,9 +697,19 @@ void UGizmoComponent::SetWorldSpace(bool bWorldSpace)
 }
 
 
-void UGizmoComponent::UpdateAxisMask(ELevelViewportType ViewportType)
+void UGizmoComponent::UpdateAxisMask(ELevelViewportType ViewportType, bool bIsOrthographicView)
 {
 	constexpr uint32 AllAxes = 0x7;
+
+	// 뷰포트 타입 라벨(Top/Front/Right)과 실제 카메라 투영 상태가
+	// PIE Eject 전환 중 일시적으로 불일치할 수 있다.
+	// 실제 투영이 Perspective라면 축을 숨기지 않고 모두 표시한다.
+	if (!bIsOrthographicView)
+	{
+		AxisMask = AllAxes;
+		return;
+	}
+
 	uint32 ViewAxis = AllAxes;
 
 	switch (ViewportType)
