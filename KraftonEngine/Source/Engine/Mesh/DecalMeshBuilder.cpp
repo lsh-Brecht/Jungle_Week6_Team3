@@ -1,8 +1,8 @@
 ﻿#include "Mesh/DecalMeshBuilder.h"
 
-#include "Component/DecalComponent.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
+#include "Components/DecalComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Mesh/StaticMesh.h"

@@ -2,6 +2,7 @@
 #include "Core/CoreTypes.h"
 #include "Render/Pipeline/RenderConstants.h"
 #include "Render/Types/ViewTypes.h"
+#include "Render/Culling/ConvexVolume.h"
 
 class UCameraComponent;
 class FViewport;
@@ -26,6 +27,7 @@ public:
 	void AddSubUVEntry(FSubUVEntry&& Entry);
 	void AddBillboardEntry(FBillboardEntry&& Entry);
 	void AddAABBEntry(FAABBEntry&& Entry);
+	void AddOBBEntry(FOBBEntry&& Entry);
 	void AddGridEntry(FGridEntry&& Entry);
 	void AddDebugLineEntry(FDebugLineEntry&& Entry);
 	void SetSceneEffectConstants(const FSceneEffectConstants& InConstants) { SceneEffectConstants = InConstants; }
@@ -36,6 +38,7 @@ public:
 	const TArray<FSubUVEntry>& GetSubUVEntries() const { return SubUVEntries; }
 	const TArray<FBillboardEntry>& GetBillboardEntries() const { return BillboardEntries; }
 	const TArray<FAABBEntry>& GetAABBEntries() const { return AABBEntries; }
+	const TArray<FOBBEntry>& GetOBBEntries() const { return OBBEntries; }
 	const TArray<FGridEntry>& GetGridEntries() const { return GridEntries; }
 	const TArray<FDebugLineEntry>& GetDebugLineEntries() const { return DebugLineEntries; }
 	const FSceneEffectConstants& GetSceneEffectConstants() const { return SceneEffectConstants; }
@@ -84,6 +87,9 @@ public:
 	void SetLODContext(const FLODUpdateContext& InCtx) { LODContext = InCtx; }
 	const FLODUpdateContext& GetLODContext() const { return LODContext; }
 
+	// Frustum - SetCameraInfo 시 View*Proj로 자동 갱신, UpdatePerViewport에서 OBB 컬링 사용
+	const FConvexVolume& GetConvexVolume() const { return CachedConvexVolume; }
+
 private:
 	// 프록시 패스 큐 — 포인터만 저장, 데이터는 프록시 소유
 	TArray<const FPrimitiveSceneProxy*> ProxyQueues[(uint32)ERenderPass::MAX];
@@ -94,6 +100,7 @@ private:
 	TArray<FSubUVEntry> SubUVEntries;
 	TArray<FBillboardEntry> BillboardEntries;
 	TArray<FAABBEntry>  AABBEntries;
+	TArray<FOBBEntry>   OBBEntries;
 	TArray<FGridEntry>  GridEntries;
 	TArray<FDebugLineEntry> DebugLineEntries;
 	FSceneEffectConstants SceneEffectConstants = {};
@@ -129,6 +136,9 @@ private:
 
 	// LOD
 	FLODUpdateContext LODContext;
+
+	// Frustum (View*Proj로부터 매 프레임 갱신)
+	FConvexVolume CachedConvexVolume;
 
 	//Editor Settings
 	EViewMode ViewMode;

@@ -1,8 +1,8 @@
 ﻿#include "Resource/ResourceManager.h"
 #include "Platform/Paths.h"
-#include "SimpleJSON/json.hpp"
 
-#include <fstream>
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <d3d11.h>
 #include "DDSTextureLoader.h"
@@ -10,81 +10,120 @@
 #include "UI/EditorConsoleWidget.h"
 #include "Profiling/MemoryStats.h"
 
-namespace ResourceKey
+namespace
 {
-	constexpr const char* Font     = "Font";
-	constexpr const char* Particle = "Particle";
-	constexpr const char* Texture  = "Texture";
-	constexpr const char* Path     = "Path";
-	constexpr const char* Columns  = "Columns";
-	constexpr const char* Rows     = "Rows";
+	constexpr const wchar_t* ParticleDir = L"Asset\\Particle\\";
+	constexpr const wchar_t* TextureDir = L"Asset\\Textures\\";
+
+	constexpr const char* DecalIconTextureName = "DecalIcon";
+	constexpr const wchar_t* DecalIconPath = L"Asset\\Editor\\Icons\\DecalActorIcon.png";
+	constexpr const char* PawnIconTextureName = "PawnIcon";
+	constexpr const wchar_t* PawnIconPath = L"Asset\\Editor\\Icons\\Pawn_64x.png";
+	constexpr const char* PointLightIconTextureName = "PointLightIcon";
+	constexpr const wchar_t* PointLightIconPath = L"Asset\\Editor\\Icons\\PointLight_64x.png";
+	constexpr const char* SpotLightIconTextureName = "SpotLightIcon";
+	// 시연용
+	constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight_64x.png";
+	//constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight.png";
+	constexpr const char* EmptyActorIconTextureName = "EmptyActorIcon";
+	constexpr const wchar_t* EmptyActorIconPath = L"Asset\\Editor\\Icon\\EmptyActor.png";
+	constexpr const wchar_t* EmptyActorIconFallbackPath = L"Asset\\Editor\\Icons\\EmptyActor.png";
+	
+	constexpr const char* DefaultFontName = "Default";
+	constexpr const char* DefaultFontPath = "Asset/Font/FontAtlas.dds";
+
+	FString ToLower(FString Value)
+	{
+		for (char& c : Value)
+		{
+			c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+		}
+		return Value;
+	}
+
+	bool IsSupportedTextureExtension(const std::filesystem::path& Path)
+	{
+		const FString Ext = ToLower(Path.extension().string());
+		return Ext == ".dds" || Ext == ".png" || Ext == ".jpg" || Ext == ".jpeg" || Ext == ".bmp";
+	}
+
+	FString ToResourcePath(const std::filesystem::path& FullPath)
+	{
+		const std::filesystem::path RelativePath = std::filesystem::relative(FullPath, std::filesystem::path(FPaths::RootDir()));
+		return FPaths::ToUtf8(RelativePath.generic_wstring());
+	}
+
+	TArray<std::filesystem::path> GetTextureFilesInDirectory(const std::wstring& RelativeDir)
+	{
+		TArray<std::filesystem::path> Files;
+		const std::filesystem::path FullDir = std::filesystem::path(FPaths::RootDir()) / RelativeDir;
+		if (!std::filesystem::exists(FullDir))
+		{
+			return Files;
+		}
+
+		for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(FullDir))
+		{
+			if (Entry.is_regular_file() && IsSupportedTextureExtension(Entry.path()))
+			{
+				Files.push_back(Entry.path());
+			}
+		}
+
+		std::sort(Files.begin(), Files.end(), [](const std::filesystem::path& A, const std::filesystem::path& B)
+		{
+			return A.generic_wstring() < B.generic_wstring();
+		});
+		return Files;
+	}
 }
 
-void FResourceManager::LoadFromFile(const FString& Path, ID3D11Device* InDevice)
+void FResourceManager::LoadDefaultResources(ID3D11Device* InDevice)
 {
-	using namespace json;
+	ReleaseGPUResources();
+	FontResources.clear();
+	ParticleResources.clear();
+	TextureResources.clear();
 
-	std::ifstream File(std::filesystem::path(FPaths::ToWide(Path)));
-	if (!File.is_open())
+	RegisterFont(FName(DefaultFontName), DefaultFontPath, 128, 128);
+
+	for (const std::filesystem::path& Path : GetTextureFilesInDirectory(ParticleDir))
 	{
-		return;
-	}
-
-	FString Content((std::istreambuf_iterator<char>(File)),
-		std::istreambuf_iterator<char>());
-
-	JSON Root = JSON::Load(Content);
-
-	// Font — { "Name": { "Path": "...", "Columns": 16, "Rows": 16 } }
-	if (Root.hasKey(ResourceKey::Font))
-	{
-		JSON FontSection = Root[ResourceKey::Font];
-		for (auto& Pair : FontSection.ObjectRange())
+		const FString Name = FPaths::ToUtf8(Path.stem().wstring());
+		if (ParticleResources.find(Name) != ParticleResources.end())
 		{
-			JSON Entry = Pair.second;
-			FFontResource Resource;
-			Resource.Name    = FName(Pair.first.c_str());
-			Resource.Path    = Entry[ResourceKey::Path].ToString();
-			Resource.Columns = static_cast<uint32>(Entry[ResourceKey::Columns].ToInt());
-			Resource.Rows    = static_cast<uint32>(Entry[ResourceKey::Rows].ToInt());
-			Resource.SRV     = nullptr;
-			FontResources[Pair.first] = Resource;
+			UE_LOG("Duplicate particle resource name skipped: %s", Name.c_str());
+			continue;
 		}
+		RegisterParticle(FName(Name), ToResourcePath(Path), 1, 1);
 	}
 
-	// Particle — { "Name": { "Path": "...", "Columns": 6, "Rows": 6 } }
-	if (Root.hasKey(ResourceKey::Particle))
+	for (const std::filesystem::path& Path : GetTextureFilesInDirectory(TextureDir))
 	{
-		JSON ParticleSection = Root[ResourceKey::Particle];
-		for (auto& Pair : ParticleSection.ObjectRange())
+		const FString Name = FPaths::ToUtf8(Path.stem().wstring());
+		if (TextureResources.find(Name) != TextureResources.end())
 		{
-			JSON Entry = Pair.second;
-			FParticleResource Resource;
-			Resource.Name    = FName(Pair.first.c_str());
-			Resource.Path    = Entry[ResourceKey::Path].ToString();
-			Resource.Columns = static_cast<uint32>(Entry[ResourceKey::Columns].ToInt());
-			Resource.Rows    = static_cast<uint32>(Entry[ResourceKey::Rows].ToInt());
-			Resource.SRV     = nullptr;
-			ParticleResources[Pair.first] = Resource;
+			UE_LOG("Duplicate texture resource name skipped: %s", Name.c_str());
+			continue;
 		}
+		RegisterTexture(FName(Name), ToResourcePath(Path));
 	}
 
-	// Texture — { "Name": { "Path": "..." } }  (Columns/Rows는 항상 1)
-	if (Root.hasKey(ResourceKey::Texture))
+ auto RegisterEditorIconTexture = [&](const char* TextureName, const wchar_t* IconPath)
 	{
-		JSON TextureSection = Root[ResourceKey::Texture];
-		for (auto& Pair : TextureSection.ObjectRange())
+		const std::filesystem::path FullPath = std::filesystem::path(FPaths::RootDir()) / IconPath;
+		if (std::filesystem::exists(FullPath) && TextureResources.find(TextureName) == TextureResources.end())
 		{
-			JSON Entry = Pair.second;
-			FTextureResource Resource;
-			Resource.Name    = FName(Pair.first.c_str());
-			Resource.Path    = Entry[ResourceKey::Path].ToString();
-			Resource.Columns = 1;
-			Resource.Rows    = 1;
-			Resource.SRV     = nullptr;
-			TextureResources[Pair.first] = Resource;
+			RegisterTexture(FName(TextureName), ToResourcePath(FullPath));
 		}
-	}
+	};
+
+	RegisterEditorIconTexture(DecalIconTextureName, DecalIconPath);
+	RegisterEditorIconTexture(PawnIconTextureName, PawnIconPath);
+	RegisterEditorIconTexture(PointLightIconTextureName, PointLightIconPath);
+	RegisterEditorIconTexture(SpotLightIconTextureName, SpotLightIconPath);
+	RegisterEditorIconTexture(EmptyActorIconTextureName, EmptyActorIconPath);
+	RegisterEditorIconTexture(EmptyActorIconTextureName, EmptyActorIconFallbackPath);
 
 	if (LoadGPUResources(InDevice))
 	{
@@ -114,14 +153,13 @@ bool FResourceManager::LoadGPUResources(ID3D11Device* Device)
 			}
 			Resource.SRV->Release();
 			Resource.SRV = nullptr;
+			Resource.Width = 0;
+			Resource.Height = 0;
 		}
 
-		std::wstring FullPath = FPaths::Combine(FPaths::RootDir(), FPaths::ToWide(Resource.Path));
+			std::wstring FullPath = FPaths::Combine(FPaths::RootDir(), FPaths::ToWide(Resource.Path));
 
-		// 확장자에 따라 DDS / WIC 로더 분기
-		std::filesystem::path Ext = std::filesystem::path(Resource.Path).extension();
-		FString ExtStr = Ext.string();
-		for (char& c : ExtStr) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+			const FString ExtStr = ToLower(std::filesystem::path(Resource.Path).extension().string());
 
 		HRESULT hr;
 		if (ExtStr == ".dds")
@@ -165,6 +203,15 @@ bool FResourceManager::LoadGPUResources(ID3D11Device* Device)
 		Resource.TrackedMemoryBytes = MemoryStats::CalculateTextureMemory(TextureResource);
 		if (TextureResource)
 		{
+			ID3D11Texture2D* Texture2D = nullptr;
+			if (SUCCEEDED(TextureResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&Texture2D))) && Texture2D)
+			{
+				D3D11_TEXTURE2D_DESC Desc = {};
+				Texture2D->GetDesc(&Desc);
+				Resource.Width = Desc.Width;
+				Resource.Height = Desc.Height;
+				Texture2D->Release();
+			}
 			TextureResource->Release();
 		}
 
@@ -281,6 +328,7 @@ TArray<FString> FResourceManager::GetFontNames() const
 	{
 		Names.push_back(Key);
 	}
+	std::sort(Names.begin(), Names.end());
 	return Names;
 }
 
@@ -292,6 +340,7 @@ TArray<FString> FResourceManager::GetParticleNames() const
 	{
 		Names.push_back(Key);
 	}
+	std::sort(Names.begin(), Names.end());
 	return Names;
 }
 
@@ -327,5 +376,6 @@ TArray<FString> FResourceManager::GetTextureNames() const
 	{
 		Names.push_back(Key);
 	}
+	std::sort(Names.begin(), Names.end());
 	return Names;
 }

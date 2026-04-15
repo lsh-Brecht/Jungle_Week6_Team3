@@ -3,7 +3,7 @@
 #include "ObjViewer/ObjViewerEngine.h"
 #include "Render/Pipeline/Renderer.h"
 #include "Viewport/Viewport.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "GameFramework/World.h"
 
 FObjViewerRenderPipeline::FObjViewerRenderPipeline(UObjViewerEngine* InEngine, FRenderer& InRenderer)

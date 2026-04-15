@@ -8,7 +8,9 @@
 #include "Editor/Settings/EditorSettings.h"
 #include "Editor/Selection/SelectionManager.h"
 #include "Editor/PIE/PIETypes.h"
+#include "Engine/Input/InputRouter.h"
 #include <optional>
+#include <functional>
 #if STATS
 #include "Editor/EditorRenderPipeline.h"
 #endif
@@ -16,7 +18,9 @@
 class UGizmoComponent;
 class FLevelEditorViewportClient;
 class FEditorViewportClient;
+class FViewportClient;
 class FOverlayStatSystem;
+class UGameViewportClient;
 
 class UEditorEngine : public UEngine
 {
@@ -40,6 +44,31 @@ public:
 	void ResetViewport();
 	void CloseScene();
 	void NewScene();
+	bool LoadSceneWithDialog();
+	bool LoadSceneFromPath(const FString& InScenePath);
+	bool SaveScene();
+	bool SaveSceneAsWithDialog();
+	bool SaveSceneAs(const FString& InSceneName);
+	bool OpenAssetFolder() const;
+	void EnqueueFooterEventLog(const FString& InMessage);
+	bool DequeueFooterEventLog(FString& OutMessage);
+	using FActorSpawnFactory = std::function<AActor*(UWorld*)>;
+	using FActorPostSpawnInitializer = std::function<bool(AActor*)>;
+	struct FPlaceableActorEntry
+	{
+		FString Id;
+		FString DisplayName;
+		FActorSpawnFactory SpawnFactory;
+		FActorPostSpawnInitializer Initializer;
+	};
+	bool RegisterPlaceableActor(FPlaceableActorEntry InEntry);
+	const TArray<FPlaceableActorEntry>& GetPlaceableActorEntries() const { return PlaceableActorEntries; }
+	bool PlaceActorById(const FString& InPlaceableId, int32 InCount = 1);
+	bool PlaceActorFromScreenPointById(const FString& InPlaceableId, int32 InClientX, int32 InClientY, int32 InCount = 1);
+	bool PlaceActor(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer = {}, int32 InCount = 1);
+	bool PlaceActorFromScreenPoint(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InClientX, int32 InClientY, int32 InCount = 1);
+	bool HasCurrentLevelFilePath() const { return !CurrentLevelFilePath.empty(); }
+	const FString& GetCurrentLevelFilePath() const { return CurrentLevelFilePath; }
 
 	FEditorSettings& GetSettings() { return FEditorSettings::Get(); }
 	const FEditorSettings& GetSettings() const { return FEditorSettings::Get(); }
@@ -74,6 +103,13 @@ public:
 
 	void RequestEndPlayMap();
 	bool IsPlayingInEditor() const { return PlayInEditorSessionInfo.has_value(); }
+	enum class EPIEControlMode : uint8
+	{
+		Possessed,
+		Ejected
+	};
+	EPIEControlMode GetPIEControlMode() const { return PIEControlMode; }
+	bool TogglePIEControlMode();
 
 	// 즉시 동기 종료 — Save / NewScene / Load 등 에디터 월드를 만지는 작업 직전에 호출.
 	// PIE 중이 아니면 no-op.
@@ -92,11 +128,28 @@ private:
 	void StartQueuedPlaySessionRequest();
 	void StartPlayInEditorSession(const FRequestPlaySessionParams& Params);
 	void EndPlayMap();
+	bool EnterPIEPossessedMode();
+	bool EnterPIEEjectedMode();
+	bool IsPIEPossessedMode() const;
+	bool IsPIEEjectedMode() const;
+	EInteractionDomain GetCurrentInteractionDomain() const;
+	bool HandleGlobalShortcuts(const FViewportInputContext& InputContext);
+	void UpdateViewportMouseSuppression(bool bAnyPopupOpen);
+	void ConfigureInputRouterCapture(bool bAnyPopupOpen);
+	void ResolveViewportRoutingTarget(FLevelEditorViewportClient* VC, FViewportClient*& OutReceiverClient, EInteractionDomain& OutDomain);
+	void RegisterInputRouterTargets();
+	void SyncGameViewportPIEControlState(bool bPossessedMode);
+	bool HasViewportMousePressEvent(const FViewportInputContext& RoutedInputContext) const;
+	void ActivateViewportFromBinding(const FInteractionBinding& InteractionBinding);
+	void HandlePostRoutingInput(FViewportInputContext& RoutedInputContext, const FInteractionBinding& InteractionBinding, bool bAnyPopupOpen);
+	void RegisterDefaultPlaceableActors();
+	const FPlaceableActorEntry* FindPlaceableActorEntryById(const FString& InPlaceableId) const;
 
 	FSelectionManager SelectionManager;
 	FEditorMainPanel MainPanel;
 	FLevelViewportLayout ViewportLayout;
 	FOverlayStatSystem OverlayStatSystem;
+	FInputRouter InputRouter;
 
 	// PIE 요청 단일 슬롯 (UE TOptional<FRequestPlaySessionParams>).
 	std::optional<FRequestPlaySessionParams> PlaySessionRequest;
@@ -104,4 +157,12 @@ private:
 	std::optional<FPlayInEditorSessionInfo> PlayInEditorSessionInfo;
 	// 종료 요청 지연 플래그. Tick 선두에서 확인 후 EndPlayMap 호출.
 	bool bRequestEndPlayMapQueued = false;
+	EPIEControlMode PIEControlMode = EPIEControlMode::Possessed;
+	FLevelEditorViewportClient* PIEEntryViewportClient = nullptr;
+	bool bSavedEntryViewportGizmo = true;
+	bool bHadAnyPopupOpenLastFrame = false;
+	bool bSuppressViewportMouseUntilButtonsReleased = false;
+	FString CurrentLevelFilePath;
+	TArray<FPlaceableActorEntry> PlaceableActorEntries;
+	TArray<FString> PendingFooterEventLogs;
 };

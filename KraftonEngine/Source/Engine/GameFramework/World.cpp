@@ -1,13 +1,14 @@
 ﻿#include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
-#include "Component/DecalComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/DecalComponent.h"
 #include "Engine/Render/Culling/ConvexVolume.h"
-#include "Engine/Component/CameraComponent.h"
 #include "Render/Pipeline/LODContext.h"
+#include "Collision/RayUtils.h"
 #include <cmath>
 #include <algorithm>
+#include <cfloat>
 #include "Profiling/Stats.h"
 
 IMPLEMENT_CLASS(UWorld, UObject)
@@ -79,6 +80,16 @@ void UWorld::AddActor(AActor* Actor)
 	}
 
 	PersistentLevel->AddActor(Actor);
+
+	// 생성자 시점에 AddComponent된 컴포넌트는 Owner/World가 아직 완성되지 않아
+	// CreateRenderState가 early-return될 수 있다. 월드 등록 시점에 한 번 더 보장한다.
+	for (UActorComponent* Comp : Actor->GetComponents())
+	{
+		if (Comp)
+		{
+			Comp->CreateRenderState();
+		}
+	}
 
 	InsertActorToOctree(Actor);
 	MarkWorldPrimitivePickingBVHDirty();
@@ -166,6 +177,72 @@ bool UWorld::RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor
 	return WorldPrimitivePickingBVH.Raycast(Ray, OutHitResult, OutActor);
 }
 
+bool UWorld::RaycastPrimitivesById(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const
+{
+	OutHitResult = {};
+	OutHitResult.Distance = FLT_MAX;
+	OutActor = nullptr;
+
+	TArray<UPrimitiveComponent*> CandidatePrimitives;
+	Partition.QueryRayAllPrimitive(Ray, CandidatePrimitives);
+	if (CandidatePrimitives.empty())
+	{
+		return false;
+	}
+
+	float BestDistance = FLT_MAX;
+	UPrimitiveComponent* BestComponent = nullptr;
+	uint32 BestActorUUID = UINT32_MAX;
+
+	for (UPrimitiveComponent* Primitive : CandidatePrimitives)
+	{
+		if (!Primitive || !Primitive->IsVisible())
+		{
+			continue;
+		}
+
+		AActor* OwnerActor = Primitive->GetOwner();
+		if (!OwnerActor || !OwnerActor->IsVisible())
+		{
+			continue;
+		}
+
+		float TMin = 0.0f;
+		float TMax = 0.0f;
+		const FBoundingBox Bounds = Primitive->GetWorldBoundingBox();
+		if (!FRayUtils::IntersectRayAABB(Ray, Bounds.Min, Bounds.Max, TMin, TMax))
+		{
+			continue;
+		}
+
+		const float HitDistance = (TMin >= 0.0f) ? TMin : 0.0f;
+		if (HitDistance < BestDistance)
+		{
+			BestDistance = HitDistance;
+			BestComponent = Primitive;
+			BestActorUUID = OwnerActor->GetUUID();
+		}
+	}
+
+	if (!BestComponent || BestActorUUID == UINT32_MAX)
+	{
+		return false;
+	}
+
+	AActor* ResolvedActor = Cast<AActor>(UObjectManager::Get().FindByUUID(BestActorUUID));
+	if (!ResolvedActor)
+	{
+		return false;
+	}
+
+	OutHitResult.bHit = true;
+	OutHitResult.Distance = BestDistance;
+	OutHitResult.HitComponent = BestComponent;
+	OutHitResult.WorldHitLocation = Ray.Origin + (Ray.Direction * BestDistance);
+	OutActor = ResolvedActor;
+	return true;
+}
+
 
 void UWorld::InsertActorToOctree(AActor* Actor)
 {
@@ -234,6 +311,10 @@ bool UWorld::NeedsVisibleProxyRebuild() const
 	{
 		return true;
 	}
+	if (ActiveCamera != LastVisibleCamera)
+	{
+		return true;
+	}
 
 	const FVector CameraPos = ActiveCamera->GetWorldLocation();
 	if (DistanceSquared(CameraPos, LastVisibleCameraPos) >= VisibleCameraMoveThresholdSq)
@@ -261,9 +342,11 @@ void UWorld::CacheVisibleCameraState()
 	if (!ActiveCamera)
 	{
 		bHasVisibleCameraState = false;
+		LastVisibleCamera = nullptr;
 		return;
 	}
 
+	LastVisibleCamera = ActiveCamera;
 	LastVisibleCameraPos = ActiveCamera->GetWorldLocation();
 	LastVisibleCameraForward = ActiveCamera->GetForwardVector();
 	LastVisibleCameraState = ActiveCamera->GetCameraState();
@@ -307,6 +390,7 @@ void UWorld::UpdateVisibleProxies()
 
 		VisibleProxies.clear();
 		bHasVisibleCameraState = false;
+		LastVisibleCamera = nullptr;
 		return;
 	}
 
@@ -377,12 +461,52 @@ void UWorld::UpdateVisibleProxies()
 	Scene.MarkVisibleSetClean();
 }
 
+void UWorld::GatherVisibleProxiesForCamera(const UCameraComponent* InCamera, TArray<FPrimitiveSceneProxy*>& OutVisibleProxies) const
+{
+	OutVisibleProxies.clear();
+	if (!InCamera)
+	{
+		return;
+	}
+
+	const uint32 ExpectedProxyCount = Scene.GetProxyCount();
+	if (OutVisibleProxies.capacity() < ExpectedProxyCount)
+	{
+		OutVisibleProxies.reserve(ExpectedProxyCount);
+	}
+
+	{
+		SCOPE_STAT_CAT("FrustumCulling", "1_WorldTick");
+		FConvexVolume ConvexVolume = InCamera->GetConvexVolume();
+		Partition.QueryFrustumAllProxies(ConvexVolume, OutVisibleProxies);
+	}
+
+	// NeverCull 프록시는 frustum 결과와 무관하게 항상 포함
+	for (FPrimitiveSceneProxy* Proxy : Scene.GetNeverCullProxies())
+	{
+		if (!Proxy)
+		{
+			continue;
+		}
+
+		if (std::find(OutVisibleProxies.begin(), OutVisibleProxies.end(), Proxy) == OutVisibleProxies.end())
+		{
+			OutVisibleProxies.push_back(Proxy);
+		}
+	}
+}
+
 FLODUpdateContext UWorld::PrepareLODContext()
 {
-	if (!ActiveCamera) return {};
+	return PrepareLODContextForCamera(ActiveCamera);
+}
 
-	const FVector CameraPos = ActiveCamera->GetWorldLocation();
-	const FVector CameraForward = ActiveCamera->GetForwardVector();
+FLODUpdateContext UWorld::PrepareLODContextForCamera(const UCameraComponent* InCamera)
+{
+	if (!InCamera) return {};
+
+	const FVector CameraPos = InCamera->GetWorldLocation();
+	const FVector CameraForward = InCamera->GetForwardVector();
 
 	const uint32 LODUpdateFrame = VisibleProxyBuildFrame++;
 	const uint32 LODUpdateSlice = LODUpdateFrame & (LOD_UPDATE_SLICE_COUNT - 1);
@@ -390,14 +514,14 @@ FLODUpdateContext UWorld::PrepareLODContext()
 
 	const bool bForceFullLODRefresh =
 		!bShouldStaggerLOD
-		|| LastLODUpdateCamera != ActiveCamera
+		|| LastLODUpdateCamera != InCamera
 		|| !bHasLastFullLODUpdateCameraPos
 		|| FVector::DistSquared(CameraPos, LastFullLODUpdateCameraPos) >= LOD_FULL_UPDATE_CAMERA_MOVE_SQ
 		|| CameraForward.Dot(LastFullLODUpdateCameraForward) < LOD_FULL_UPDATE_CAMERA_ROTATION_DOT;
 
 	if (bForceFullLODRefresh)
 	{
-		LastLODUpdateCamera = ActiveCamera;
+		LastLODUpdateCamera = const_cast<UCameraComponent*>(InCamera);
 		LastFullLODUpdateCameraPos = CameraPos;
 		LastFullLODUpdateCameraForward = CameraForward;
 		bHasLastFullLODUpdateCameraPos = true;

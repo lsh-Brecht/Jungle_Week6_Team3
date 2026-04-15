@@ -1,5 +1,5 @@
 ﻿#include "Render/Proxy/PrimitiveSceneProxy.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "GameFramework/AActor.h"
 #include "Render/Resource/ShaderManager.h"
 

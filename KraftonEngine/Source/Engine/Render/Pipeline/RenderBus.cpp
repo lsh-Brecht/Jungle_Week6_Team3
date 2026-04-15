@@ -1,5 +1,5 @@
 ﻿#include "RenderBus.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Viewport/Viewport.h"
 
 void FRenderBus::Clear()
@@ -14,6 +14,7 @@ void FRenderBus::Clear()
 	SubUVEntries.clear();
 	BillboardEntries.clear();
 	AABBEntries.clear();
+	OBBEntries.clear();
 	GridEntries.clear();
 	DebugLineEntries.clear();
 	SceneEffectConstants = {};
@@ -61,6 +62,11 @@ void FRenderBus::AddAABBEntry(FAABBEntry&& Entry)
 	AABBEntries.push_back(std::move(Entry));
 }
 
+void FRenderBus::AddOBBEntry(FOBBEntry&& Entry)
+{
+	OBBEntries.push_back(std::move(Entry));
+}
+
 void FRenderBus::AddGridEntry(FGridEntry&& Entry)
 {
 	GridEntries.push_back(std::move(Entry));
@@ -83,6 +89,9 @@ void FRenderBus::SetCameraInfo(const UCameraComponent* Camera)
 	FarPlane = Camera->GetFarPlane();
 	bIsOrtho = Camera->IsOrthogonal();
 	OrthoWidth = Camera->GetOrthoWidth();
+
+	// View * Proj 로부터 절두체 평면 갱신 - OBB 컬링(IntersectOBB)에 사용
+	CachedConvexVolume.UpdateFromMatrix(View * Proj);
 }
 
 void FRenderBus::SetViewportInfo(const FViewport* VP)

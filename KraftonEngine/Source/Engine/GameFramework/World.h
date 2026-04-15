@@ -5,7 +5,7 @@
 #include "Collision/WorldPrimitivePickingBVH.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/Level.h"
-#include "Component/CameraComponent.h"
+#include "Components/CameraComponent.h"
 #include "Render/Proxy/FScene.h"
 #include "Render/DebugDraw/DebugDrawQueue.h"
 #include "Render/Culling/ConvexVolume.h"
@@ -38,6 +38,17 @@ public:
 	void EndDeferredPickingBVHUpdate();
 	void WarmupPickingData() const;
 	bool RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
+	
+	//// Decal GeometryChecker가 Broad Phase BVH 쿼리에 사용 (EnsureBuilt 선행 필요)
+	//const FWorldPrimitivePickingBVH& GetWorldPrimitivePickingBVH() const { return WorldPrimitivePickingBVH; }
+	// Decal GeometryChecker용: EnsureBuilt 후 BVH 참조 반환
+	// (dirty일 때만 재빌드하므로 매 프레임 호출해도 안전)
+	const FWorldPrimitivePickingBVH& EnsureAndGetWorldPrimitivePickingBVH() const
+	{
+		WorldPrimitivePickingBVH.EnsureBuilt(GetActors());
+		return WorldPrimitivePickingBVH;
+	}
+	bool RaycastPrimitivesById(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
 	void InvalidateVisibleSet();
 
 	const TArray<AActor*>& GetActors() const { return PersistentLevel->GetActors(); }
@@ -45,9 +56,11 @@ public:
 	const TArray<FPrimitiveSceneProxy*>& GetVisibleProxies() const { return Scene.GetVisibleProxies(); }
 	void RemoveVisibleProxy(FPrimitiveSceneProxy* Proxy, uint32 Index);
 	void UpdateVisibleProxies();
+	void GatherVisibleProxiesForCamera(const UCameraComponent* InCamera, TArray<FPrimitiveSceneProxy*>& OutVisibleProxies) const;
 
 	// LOD 컨텍스트를 RenderBus에 전달 (Collect 단계에서 LOD 인라인 갱신용)
 	FLODUpdateContext PrepareLODContext();
+	FLODUpdateContext PrepareLODContextForCamera(const UCameraComponent* InCamera);
 
 	void InitWorld();      // Set up the world before gameplay begins
 	void BeginPlay();      // Triggers BeginPlay on all actors
@@ -90,6 +103,7 @@ private:
 	int32 DeferredPickingBVHUpdateDepth = 0;
 	bool bDeferredPickingBVHDirty = false;
 	bool bHasVisibleCameraState = false;
+	UCameraComponent* LastVisibleCamera = nullptr;
 	uint32 VisibleProxyBuildFrame = 0;
 	FVector LastVisibleCameraPos = FVector(0, 0, 0);
 	FVector LastVisibleCameraForward = FVector(1, 0, 0);

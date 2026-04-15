@@ -1,7 +1,8 @@
-#include "GPUOcclusionCulling.h"
+﻿#include "GPUOcclusionCulling.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Profiling/Stats.h"
 
+#include <algorithm>
 #include <cstring>
 
 // ── CB layouts matching HLSL ──
@@ -101,7 +102,7 @@ void FGPUOcclusionCulling::Release()
 	bHasResults = false;
 	for (uint32 i = 0; i < STAGING_COUNT; i++)
 	{
-		StagingProxies[i].clear();
+		StagingProxyIds[i].clear();
 		StagingProxyCount[i] = 0;
 	}
 	WriteIndex = 0;
@@ -114,7 +115,7 @@ void FGPUOcclusionCulling::InvalidateResults()
 {
 	for (uint32 i = 0; i < STAGING_COUNT; i++)
 	{
-		StagingProxies[i].clear();
+		StagingProxyIds[i].clear();
 		StagingProxyCount[i] = 0;
 		StagingMaxProxyId[i] = 0;
 	}
@@ -287,7 +288,7 @@ void FGPUOcclusionCulling::ReleaseBuffers()
 	for (uint32 i = 0; i < STAGING_COUNT; i++)
 	{
 		if (StagingBuffers[i]) { StagingBuffers[i]->Release(); StagingBuffers[i] = nullptr; }
-		StagingProxies[i].clear();
+		StagingProxyIds[i].clear();
 		StagingProxyCount[i] = 0;
 	}
 	AABBBufferCapacity = VisibilityBufferCapacity = 0;
@@ -397,18 +398,31 @@ void FGPUOcclusionCulling::ReadbackResults(ID3D11DeviceContext* Ctx)
 	{
 		const uint32* vis = static_cast<const uint32*>(mapped.pData);
 		const uint32 count = StagingProxyCount[ReadIdx];
-		const auto& proxies = StagingProxies[ReadIdx];
+		const auto& proxyIds = StagingProxyIds[ReadIdx];
+		const uint32 safeCount = (std::min)(count, static_cast<uint32>(proxyIds.size()));
 
-		uint32 wordCount = (StagingMaxProxyId[ReadIdx] / 32) + 1;
+		uint32 maxProxyId = StagingMaxProxyId[ReadIdx];
+		for (uint32 i = 0; i < safeCount; ++i)
+		{
+			maxProxyId = (std::max)(maxProxyId, proxyIds[i]);
+		}
+		uint32 wordCount = (safeCount > 0) ? ((maxProxyId / 32) + 1) : 0;
 		OccludedBits.resize(wordCount);
-		memset(OccludedBits.data(), 0, wordCount * sizeof(uint32));
+		if (wordCount > 0)
+		{
+			memset(OccludedBits.data(), 0, wordCount * sizeof(uint32));
+		}
 
-		for (uint32 i = 0; i < count; i++)
+		for (uint32 i = 0; i < safeCount; i++)
 		{
 			if (vis[i] == 0)
 			{
-				uint32 id = proxies[i]->ProxyId;
-				OccludedBits[id >> 5] |= (1u << (id & 31));
+				uint32 id = proxyIds[i];
+				const uint32 word = id >> 5;
+				if (word < static_cast<uint32>(OccludedBits.size()))
+				{
+					OccludedBits[word] |= (1u << (id & 31));
+				}
 			}
 		}
 
@@ -423,8 +437,8 @@ void FGPUOcclusionCulling::ReadbackResults(ID3D11DeviceContext* Ctx)
 
 void FGPUOcclusionCulling::BeginGatherAABB(uint32 ExpectedCount)
 {
-	auto& curProxies = StagingProxies[WriteIndex];
-	curProxies.resize(ExpectedCount);
+	auto& curProxyIds = StagingProxyIds[WriteIndex];
+	curProxyIds.resize(ExpectedCount);
 	CPUAABBStaging.resize(ExpectedCount);
 	PreGatherWritePos = 0;
 	PreGatherMaxId = 0;
@@ -433,11 +447,11 @@ void FGPUOcclusionCulling::BeginGatherAABB(uint32 ExpectedCount)
 
 void FGPUOcclusionCulling::GatherAABB(FPrimitiveSceneProxy* Proxy)
 {
-	if (!Proxy || Proxy->bNeverCull) return;
+	if (!Proxy || Proxy->bNeverCull || Proxy->bSkipGPUOcclusion) return;
 
-	auto& curProxies = StagingProxies[WriteIndex];
+	auto& curProxyIds = StagingProxyIds[WriteIndex];
 	uint32 pos = PreGatherWritePos;
-	curProxies[pos] = Proxy;
+	curProxyIds[pos] = Proxy->ProxyId;
 	if (Proxy->ProxyId > PreGatherMaxId) PreGatherMaxId = Proxy->ProxyId;
 	const FBoundingBox& B = Proxy->CachedBounds;
 	CPUAABBStaging[pos] = { B.Min.X, B.Min.Y, B.Min.Z, 0.0f,
@@ -474,8 +488,8 @@ void FGPUOcclusionCulling::DispatchOcclusionTest(
 		{
 			// Fallback: 기존 GatherLoop
 			uint32 visCount = static_cast<uint32>(VisibleProxies.size());
-			auto& curProxies = StagingProxies[WriteIndex];
-			curProxies.resize(visCount);
+			auto& curProxyIds = StagingProxyIds[WriteIndex];
+			curProxyIds.resize(visCount);
 			CPUAABBStaging.resize(visCount);
 			FGPUOcclusionAABB* staging = CPUAABBStaging.data();
 			uint32 writePos = 0;
@@ -484,9 +498,9 @@ void FGPUOcclusionCulling::DispatchOcclusionTest(
 			for (uint32 i = 0; i < visCount; i++)
 			{
 				FPrimitiveSceneProxy* Proxy = VisibleProxies[i];
-				if (!Proxy || Proxy->bNeverCull) continue;
+				if (!Proxy || Proxy->bNeverCull || Proxy->bSkipGPUOcclusion) continue;
 
-				curProxies[writePos] = Proxy;
+				curProxyIds[writePos] = Proxy->ProxyId;
 				if (Proxy->ProxyId > maxId) maxId = Proxy->ProxyId;
 				const FBoundingBox& B = Proxy->CachedBounds;
 				staging[writePos] = { B.Min.X, B.Min.Y, B.Min.Z, 0.0f,

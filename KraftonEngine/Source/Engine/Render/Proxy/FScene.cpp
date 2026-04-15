@@ -1,7 +1,7 @@
 ﻿#include "Render/Proxy/FScene.h"
-#include "Component/SceneEffectSource.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/ExponentialHeightFogComponent.h"
+#include "Components/SceneEffectSource.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Profiling/Stats.h"
 #include <algorithm>
 
@@ -51,7 +51,7 @@ namespace
 		}
 	}
 
-	void RemoveFogComponentFast(TArray<UExponentialHeightFogComponent*>& FogList, UExponentialHeightFogComponent* Component)
+	void RemoveFogComponent(TArray<UExponentialHeightFogComponent*>& FogList, UExponentialHeightFogComponent* Component)
 	{
 		if (!Component)
 		{
@@ -61,15 +61,13 @@ namespace
 		auto It = std::find(FogList.begin(), FogList.end(), Component);
 		if (It != FogList.end())
 		{
-			*It = FogList.back();
-			FogList.pop_back();
+			FogList.erase(It);
 		}
 	}
 
 	FFogPostProcessConstants BuildFogPostProcessConstants(const TArray<UExponentialHeightFogComponent*>& FogList)
 	{
 		FFogPostProcessConstants Result = {};
-		uint32 FogIndex = 0;
 
 		for (UExponentialHeightFogComponent* FogComponent : FogList)
 		{
@@ -78,16 +76,11 @@ namespace
 				continue;
 			}
 
-			if (FogIndex >= FogRendering::MaxFogComponents)
-			{
-				break;
-			}
-
-			Result.Fogs[FogIndex] = FogComponent->BuildFogUniformParameters();
-			++FogIndex;
+			Result.Fogs[0] = FogComponent->BuildFogUniformParameters();
+			Result.FogCount = 1;
+			return Result;
 		}
 
-		Result.FogCount = FogIndex;
 		return Result;
 	}
 }
@@ -345,7 +338,7 @@ void FScene::RegisterFogComponent(UExponentialHeightFogComponent* Component)
 
 void FScene::UnregisterFogComponent(UExponentialHeightFogComponent* Component)
 {
-	RemoveFogComponentFast(FogComponents, Component);
+	RemoveFogComponent(FogComponents, Component);
 }
 
 FFogPostProcessConstants FScene::GetFogPostProcessConstants() const

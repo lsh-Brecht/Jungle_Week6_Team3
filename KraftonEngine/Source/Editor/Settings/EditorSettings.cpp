@@ -15,13 +15,22 @@ namespace Key
 	constexpr const char* CameraSpeed = "CameraSpeed";
 	constexpr const char* CameraRotationSpeed = "CameraRotationSpeed";
 	constexpr const char* CameraZoomSpeed = "CameraZoomSpeed";
+	constexpr const char* bEnableCameraSmoothing = "bEnableCameraSmoothing";
+	constexpr const char* CameraMoveSmoothSpeed = "CameraMoveSmoothSpeed";
+	constexpr const char* CameraRotateSmoothSpeed = "CameraRotateSmoothSpeed";
+	constexpr const char* PickingMode = "PickingMode";
 	constexpr const char* InitViewPos = "InitViewPos";
 	constexpr const char* InitLookAt = "InitLookAt";
+	constexpr const char* FXAAStage = "FXAAStage";
+	constexpr const char* FXAAEdgeThreshold = "FXAAEdgeThreshold";
+	constexpr const char* FXAAEdgeThresholdMin = "FXAAEdgeThresholdMin";
+	constexpr const char* FXAASearchSteps = "FXAASearchSteps";
 
 	// Slot Render Options
 	constexpr const char* ViewMode = "ViewMode";
 	constexpr const char* bPrimitives = "bPrimitives";
 	constexpr const char* bGrid = "bGrid";
+	constexpr const char* bDecal = "bDecal";
 	constexpr const char* bWorldAxis = "bWorldAxis";
 	constexpr const char* bGizmo = "bGizmo";
 	constexpr const char* bBillboardText = "bBillboardText";
@@ -71,6 +80,14 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::CameraSpeed] = CameraSpeed;
 	Viewport[Key::CameraRotationSpeed] = CameraRotationSpeed;
 	Viewport[Key::CameraZoomSpeed] = CameraZoomSpeed;
+	Viewport[Key::bEnableCameraSmoothing] = bEnableCameraSmoothing;
+	Viewport[Key::CameraMoveSmoothSpeed] = CameraMoveSmoothSpeed;
+	Viewport[Key::CameraRotateSmoothSpeed] = CameraRotateSmoothSpeed;
+	Viewport[Key::PickingMode] = static_cast<int32>(PickingMode);
+	Viewport[Key::FXAAStage] = FXAAStage;
+	Viewport[Key::FXAAEdgeThreshold] = FXAAEdgeThreshold;
+	Viewport[Key::FXAAEdgeThresholdMin] = FXAAEdgeThresholdMin;
+	Viewport[Key::FXAASearchSteps] = FXAASearchSteps;
 
 	JSON InitPos = Array(InitViewPos.X, InitViewPos.Y, InitViewPos.Z);
 	Viewport[Key::InitViewPos] = InitPos;
@@ -99,6 +116,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 		SlotObj[Key::ViewportType] = static_cast<int32>(Opts.ViewportType);
 		SlotObj[Key::bPrimitives] = Opts.ShowFlags.bPrimitives;
 		SlotObj[Key::bGrid] = Opts.ShowFlags.bGrid;
+		SlotObj[Key::bDecal] = Opts.ShowFlags.bDecal;
 		SlotObj[Key::bWorldAxis] = Opts.ShowFlags.bWorldAxis;
 		SlotObj[Key::bGizmo] = Opts.ShowFlags.bGizmo;
 		SlotObj[Key::bBillboardText] = Opts.ShowFlags.bBillboardText;
@@ -179,6 +197,24 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			CameraRotationSpeed = static_cast<float>(Viewport[Key::CameraRotationSpeed].ToFloat());
 		if (Viewport.hasKey(Key::CameraZoomSpeed))
 			CameraZoomSpeed = static_cast<float>(Viewport[Key::CameraZoomSpeed].ToFloat());
+		if (Viewport.hasKey(Key::bEnableCameraSmoothing))
+			bEnableCameraSmoothing = Viewport[Key::bEnableCameraSmoothing].ToBool();
+		if (Viewport.hasKey(Key::CameraMoveSmoothSpeed))
+			CameraMoveSmoothSpeed = static_cast<float>(Viewport[Key::CameraMoveSmoothSpeed].ToFloat());
+		if (Viewport.hasKey(Key::CameraRotateSmoothSpeed))
+			CameraRotateSmoothSpeed = static_cast<float>(Viewport[Key::CameraRotateSmoothSpeed].ToFloat());
+		if (Viewport.hasKey(Key::PickingMode))
+			PickingMode = static_cast<EEditorPickingMode>(Viewport[Key::PickingMode].ToInt());
+		if (PickingMode != EEditorPickingMode::Id && PickingMode != EEditorPickingMode::RayTriangle)
+			PickingMode = EEditorPickingMode::Id;
+		if (Viewport.hasKey(Key::FXAAStage))
+			FXAAStage = Viewport[Key::FXAAStage].ToInt();
+		if (Viewport.hasKey(Key::FXAAEdgeThreshold))
+			FXAAEdgeThreshold = static_cast<float>(Viewport[Key::FXAAEdgeThreshold].ToFloat());
+		if (Viewport.hasKey(Key::FXAAEdgeThresholdMin))
+			FXAAEdgeThresholdMin = static_cast<float>(Viewport[Key::FXAAEdgeThresholdMin].ToFloat());
+		if (Viewport.hasKey(Key::FXAASearchSteps))
+			FXAASearchSteps = Viewport[Key::FXAASearchSteps].ToInt();
 
 		if (Viewport.hasKey(Key::InitViewPos))
 		{
@@ -231,6 +267,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 					Opts.ShowFlags.bPrimitives = S[Key::bPrimitives].ToBool();
 				if (S.hasKey(Key::bGrid))
 					Opts.ShowFlags.bGrid = S[Key::bGrid].ToBool();
+				if(S.hasKey(Key::bDecal))
+					Opts.ShowFlags.bDecal = S[Key::bDecal].ToBool();
 				if (S.hasKey(Key::bWorldAxis))
 					Opts.ShowFlags.bWorldAxis = S[Key::bWorldAxis].ToBool();
 				if (S.hasKey(Key::bGizmo))

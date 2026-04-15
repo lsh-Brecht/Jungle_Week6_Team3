@@ -1,8 +1,11 @@
-#include "Profiling/Stats.h"
+﻿#include "Profiling/Stats.h"
 
 #include <algorithm>
 
 uint32 FDrawCallStats::Count = 0;
+uint32 FDecalStats::DecalActorCount = 0;
+uint32 FDecalStats::RenderedDecalCount = 0;
+uint32 FDecalStats::AffectedObjectCount = 0;
 
 #if STATS
 uint32 FLODStats::LODCount[4] = { 0, 0, 0, 0 };

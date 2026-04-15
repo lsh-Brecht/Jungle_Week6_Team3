@@ -8,7 +8,6 @@
 #include "Engine/Object/FName.h"
 #include "Engine/Mesh/ObjManager.h"
 #include "Materials/Material.h"
-#include "Editor/UI/EditorConsoleWidget.h"
 #include <memory>
 #include <algorithm>
 

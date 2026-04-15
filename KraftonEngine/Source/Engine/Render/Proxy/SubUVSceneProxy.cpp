@@ -1,5 +1,5 @@
 ﻿#include "Render/Proxy/SubUVSceneProxy.h"
-#include "Component/SubUVComponent.h"
+#include "Components/SubUVComponent.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ShaderManager.h"
 
@@ -45,6 +45,8 @@ void FSubUVSceneProxy::CollectEntries(FRenderBus& Bus)
 	Entry.PerObject = PerObjectConstants;
 	Entry.SubUV.Particle = Particle;
 	Entry.SubUV.FrameIndex = Comp->GetFrameIndex();
+	Entry.SubUV.Columns = Comp->GetColumns();
+	Entry.SubUV.Rows = Comp->GetRows();
 	Entry.SubUV.Width = Comp->GetWidth();
 	Entry.SubUV.Height = Comp->GetHeight();
     Entry.bSelected = bSelected;

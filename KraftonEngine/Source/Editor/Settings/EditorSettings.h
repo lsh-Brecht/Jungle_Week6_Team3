@@ -8,6 +8,12 @@
 #include "Render/Types/ViewTypes.h"
 #include "Profiling/Stats.h"
 
+enum class EEditorPickingMode : int32
+{
+	Id = 0,
+	RayTriangle = 1,
+};
+
 class FEditorSettings : public TSingleton<FEditorSettings>
 {
 	friend class TSingleton<FEditorSettings>;
@@ -17,8 +23,16 @@ public:
 	float CameraSpeed = 10.f;
 	float CameraRotationSpeed = 60.f;
 	float CameraZoomSpeed = 300.f;
+	bool bEnableCameraSmoothing = true;
+	float CameraMoveSmoothSpeed = 4.0f;
+	float CameraRotateSmoothSpeed = 2.0f;
+	EEditorPickingMode PickingMode = EEditorPickingMode::Id;
 	FVector InitViewPos = FVector(10, 0, 5);
 	FVector InitLookAt = FVector(0, 0, 0);
+	int32 FXAAStage = 1; // 0:Low, 1:Medium, 2:High, 3:Epic, 4:Cinematic, -1:Custom
+	float FXAAEdgeThreshold = 0.063f;
+	float FXAAEdgeThresholdMin = 0.0312f;
+	int32 FXAASearchSteps = 3;
 
 	// Viewport Layout
 	int32 LayoutType = 0; // EViewportLayout

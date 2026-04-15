@@ -14,6 +14,7 @@ class FWindowsWindow;
 class FRenderer;
 class UWorld;
 class UEditorEngine;
+struct ImVec2;
 
 // 뷰포트 레이아웃 종류 (12가지, UE 동일)
 enum class EViewportLayout : uint8
@@ -54,6 +55,7 @@ public:
 
 	// 레이아웃 전환
 	void SetLayout(EViewportLayout NewLayout);
+	void SetLayoutAnimated(EViewportLayout NewLayout);
 	EViewportLayout GetLayout() const { return CurrentLayout; }
 
 	// 편의용 토글 (OnePane ↔ FourPanes2x2)
@@ -62,6 +64,7 @@ public:
 
 	// ImGui "Viewport" 창에 레이아웃 계산 + 렌더
 	void RenderViewportUI(float DeltaTime);
+	bool ConsumeViewportMouseSuppressRequest();
 
 	bool IsMouseOverViewport() const { return bMouseOverViewport; }
 
@@ -70,16 +73,45 @@ public:
 
 	void SetActiveViewport(FLevelEditorViewportClient* InClient);
 	FLevelEditorViewportClient* GetActiveViewport() const { return ActiveViewportClient; }
+	FLevelEditorViewportClient* GetPIEStartViewport() const;
 
 	void SetWorld(UWorld* InWorld);
 	void ResetViewport(UWorld* InWorld);
 	void DestroyAllCameras();
 	void DisableWorldAxisForPIE();
 	void RestoreWorldAxisAfterPIE();
+	void BeginPIEViewportMode();
+	void EndPIEViewportMode();
+	void NotifyPIEPossessedViewport(FLevelEditorViewportClient* InViewportClient);
+	bool IsDraggingSplitter() const { return DraggingSplitter != nullptr; }
+	bool IsPointOverSplitterBar(const POINT& InScreenPos) const;
 
 	static int32 GetSlotCount(EViewportLayout Layout);
 
 private:
+	enum class ELayoutTransitionState : uint8
+	{
+		None,
+		CollapsingCurrent,
+		ExpandingTarget
+	};
+
+	void StartAnimatedLayoutTransition(EViewportLayout NewLayout);
+	void TickLayoutTransition(float DeltaTime);
+	void BeginCurrentLayoutCollapsePhase();
+	void BeginTargetLayoutExpandPhase();
+	void EndLayoutTransition();
+
+	int32 GetActiveSlotIndex() const;
+	bool DoesWindowContainSlot(const SWindow* InWindow, int32 SlotIndex) const;
+	void ApplyFocusCollapseRecursive(SSplitter* InNode, int32 FocusSlotIndex);
+	void CollectSplitterRatios(TArray<float>& OutRatios) const;
+	void ApplySplitterRatios(const TArray<float>& InRatios);
+	bool IsViewportInteractiveHover(int32 SlotIndex, float MouseX, float MouseY) const;
+	void HandleSplitterInteraction(const ImVec2& MousePos, const POINT& MousePoint);
+	void HandleViewportActivationOnClick(const ImVec2& MousePos, int32 ActiveSlotCount, int32 OnePaneSlotIndex);
+	void RenderPlaceActorPopup(bool bPlaceActorPopupWasOpen);
+
 	SSplitter* BuildSplitterTree(EViewportLayout Layout);
 	void EnsureViewportSlots(int32 RequiredCount);
 	void ShrinkViewportSlots(int32 RequiredCount);
@@ -99,6 +131,7 @@ private:
 	TArray<FEditorViewportClient*> AllViewportClients;
 	TArray<FLevelEditorViewportClient*> LevelViewportClients;
 	FLevelEditorViewportClient* ActiveViewportClient = nullptr;
+	FLevelEditorViewportClient* LastUserActivatedViewportClient = nullptr;
 
 	SSplitter* RootSplitter = nullptr;
 	SWindow* ViewportWindows[MaxViewportSlots] = {};
@@ -106,6 +139,7 @@ private:
 
 	SSplitter* DraggingSplitter = nullptr;
 	bool bMouseOverViewport = false;
+	bool bRequestViewportMouseSuppress = false;
 
 	// 레이아웃 아이콘 SRV (EViewportLayout::MAX 개)
 	ID3D11ShaderResourceView* LayoutIcons[static_cast<int>(EViewportLayout::MAX)] = {};
@@ -115,4 +149,39 @@ private:
 	bool bHasSavedWorldAxisVisibility = false;
 	bool SavedWorldAxisVisibility[MaxViewportSlots] = {};
 	bool SavedGridVisibility[MaxViewportSlots] = {};
+	bool bPIEViewportMode = false;
+	FLevelEditorViewportClient* PIEFocusedViewportClient = nullptr;
+
+	ELayoutTransitionState LayoutTransitionState = ELayoutTransitionState::None;
+	EViewportLayout PendingTargetLayout = EViewportLayout::OnePane;
+	EViewportLayout LastSplitLayout = EViewportLayout::FourPanes2x2;
+	bool bSuppressLastSplitLayoutUpdate = false;
+	bool bUseCoverTransitionToOnePane = false;
+	bool bUseCoverTransitionFromOnePane = false;
+	bool bRequestPreserveSplitOnOnePane = false;
+	bool bIsTemporaryOnePane = false;
+	int32 TemporaryOnePaneSourceSlot = 0;
+	int32 TransitionFocusSlot = 0;
+	float LayoutTransitionElapsed = 0.0f;
+	float LayoutTransitionDuration = 0.18f;
+	TArray<float> TransitionStartRatios;
+	TArray<float> TransitionTargetRatios;
+
+	struct FViewportContextMenuState
+	{
+		struct FContextMenuPos
+		{
+			float X = 0.0f;
+			float Y = 0.0f;
+		};
+
+		bool RightClickTracking[MaxViewportSlots] = { false, false, false, false };
+		float RightClickTravelSq[MaxViewportSlots] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		FContextMenuPos RightClickPressPos[MaxViewportSlots] = {};
+		int32 PendingPopupSlot = -1;
+		FContextMenuPos PendingPopupPos = {};
+		FContextMenuPos PendingSpawnPos = {};
+		bool bForceNextPopupPos = false;
+	};
+	FViewportContextMenuState ContextMenuState;
 };

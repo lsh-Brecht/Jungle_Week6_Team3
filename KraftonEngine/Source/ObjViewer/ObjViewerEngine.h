@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Engine/Runtime/Engine.h"
+#include "Engine/Input/InputRouter.h"
 #include "Mesh/ObjImporter.h"
 #include "ObjViewer/ObjViewerPanel.h"
 #include "ObjViewer/ObjViewerViewportClient.h"
@@ -29,6 +30,10 @@ public:
 	void RenderUI(float DeltaTime);
 
 private:
+	void ConfigureInputRouter();
+
+private:
+	FInputRouter InputRouter;
 	FObjViewerPanel Panel;
 	FObjViewerViewportClient ViewportClient;
 };

@@ -23,6 +23,10 @@ public:
 	// 메시 변경 대응용 API는 일단 주석으로 남겨 둡니다.
 	// void MarkDirty();
 
+	// Decal BVH Narrow Phase: 로컬 공간 AABB와 겹치는 삼각형의 로컬 정점을 수집합니다.
+	// 각 삼각형은 [V0, V1, V2] 형태로 OutTriangles에 추가됩니다. (3개씩 append)
+	void QueryAABBLocal(const FBoundingBox& LocalBox, TArray<FVector>& OutTriangles) const;
+
 private:
 	struct FTriangleLeaf
 	{

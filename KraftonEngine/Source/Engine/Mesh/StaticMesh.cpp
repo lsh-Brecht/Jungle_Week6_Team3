@@ -13,14 +13,11 @@ static const FString EmptyPath;
 
 UStaticMesh::~UStaticMesh()
 {
-	if (StaticMeshAsset)
+	if (CachedStaticMeshCPUSize > 0)
 	{
-		const uint32 CPUSize =
-			static_cast<uint32>(StaticMeshAsset->Vertices.size() * sizeof(FNormalVertex)) +
-			static_cast<uint32>(StaticMeshAsset->Indices.size() * sizeof(uint32));
-
-		MemoryStats::SubStaticMeshCPUMemory(CPUSize);
+		MemoryStats::SubStaticMeshCPUMemory(CachedStaticMeshCPUSize);
 	}
+	// unique_ptr이 StaticMeshAsset 자동 삭제 → RenderBuffer 소멸 → SubVertexBufferMemory/SubIndexBufferMemory 호출
 }
 
 void UStaticMesh::Serialize(FArchive& Ar)
@@ -28,7 +25,7 @@ void UStaticMesh::Serialize(FArchive& Ar)
 	// 에셋이 비어있으면 로드용으로 생성
 	if (Ar.IsLoading() && !StaticMeshAsset)
 	{
-		StaticMeshAsset = new FStaticMesh();
+		StaticMeshAsset = std::make_unique<FStaticMesh>();
 	}
 
 	// 1. 지오메트리 데이터 직렬화
@@ -63,7 +60,12 @@ void UStaticMesh::InitResources(ID3D11Device* InDevice)
 	const uint32 CPUSize =
 		static_cast<uint32>(StaticMeshAsset->Vertices.size() * sizeof(FNormalVertex)) +
 		static_cast<uint32>(StaticMeshAsset->Indices.size() * sizeof(uint32));
+	if (CachedStaticMeshCPUSize > 0)
+	{
+		MemoryStats::SubStaticMeshCPUMemory(CachedStaticMeshCPUSize);
+	}
 	MemoryStats::AddStaticMeshCPUMemory(CPUSize);
+	CachedStaticMeshCPUSize = CPUSize;
 
 	// CPU → GPU 정점 버퍼 변환
 	TMeshData<FVertexPNCT> RenderMeshData;
@@ -130,9 +132,9 @@ const FString& UStaticMesh::GetAssetPathFileName() const
 	return EmptyPath;
 }
 
-void UStaticMesh::SetStaticMeshAsset(FStaticMesh* InMesh)
+void UStaticMesh::SetStaticMeshAsset(std::unique_ptr<FStaticMesh> InMesh)
 {
-	StaticMeshAsset = InMesh;
+	StaticMeshAsset = std::move(InMesh);
 	// 현재는 static mesh asset이 로드 후 고정된다고 보고, 메시 변경 dirty 갱신은 비활성화합니다.
 	// MarkMeshTrianglePickingBVHDirty();
 
@@ -157,7 +159,7 @@ void UStaticMesh::SetStaticMeshAsset(FStaticMesh* InMesh)
 
 FStaticMesh* UStaticMesh::GetStaticMeshAsset() const
 {
-	return StaticMeshAsset;
+	return StaticMeshAsset.get();
 }
 
 void UStaticMesh::SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials)

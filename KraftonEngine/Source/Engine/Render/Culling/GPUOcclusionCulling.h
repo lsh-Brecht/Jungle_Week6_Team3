@@ -103,7 +103,7 @@ private:
 	ID3D11UnorderedAccessView* VisibilityUAV = nullptr;
 	static constexpr uint32 STAGING_COUNT = 3;
 	ID3D11Buffer* StagingBuffers[STAGING_COUNT] = {};
-	TArray<const FPrimitiveSceneProxy*> StagingProxies[STAGING_COUNT];
+	TArray<uint32> StagingProxyIds[STAGING_COUNT];
 	uint32 StagingProxyCount[STAGING_COUNT] = {};
 	uint32 StagingMaxProxyId[STAGING_COUNT] = {};
 	uint32 WriteIndex = 0;   // 현재 프레임 기록용

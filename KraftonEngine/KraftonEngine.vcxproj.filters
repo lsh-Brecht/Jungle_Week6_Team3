@@ -37,9 +37,6 @@
     <Filter Include="Source\Engine\Collision">
       <UniqueIdentifier>{0a1ac0a6-fa86-45a3-c38e-91b60c7ce3cf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source\Engine\Component">
-      <UniqueIdentifier>{22bbd7c0-73bc-1bc4-992f-be08238b1609}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source\Engine\Core">
       <UniqueIdentifier>{aaeb2f3f-eff4-9d0e-a471-82c1372b9aed}</UniqueIdentifier>
     </Filter>
@@ -127,6 +124,9 @@
     <Filter Include="ThirdParty\SimpleJSON">
       <UniqueIdentifier>{b5b63371-405e-e009-4e4e-e3b5a25ee7bd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Components">
+      <UniqueIdentifier>{22bbd7c0-73bc-1bc4-992f-be08238b1609}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Editor.hlsl">
@@ -186,6 +186,7 @@
     <FxCompile Include="Shaders\Common\VertexLayouts.hlsl">
       <Filter>Shaders\Common</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Decal.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Editor\EditorEngine.cpp">
@@ -254,50 +255,50 @@
     <ClCompile Include="Source\Engine\Collision\WorldPrimitivePickingBVH.cpp">
       <Filter>Source\Engine\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\ActorComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\ActorComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\BillboardComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\BillboardComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\CameraComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\CameraComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\ExponentialHeightFogComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\ExponentialHeightFogComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\FireBallComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\FireBallComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\GizmoComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\GizmoComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\MeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\MeshComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\MovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\MovementComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\PrimitiveComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\PrimitiveComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\ProjectileMovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\ProjectileMovementComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\RotatingMovementComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\RotatingMovementComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\SceneComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\SceneComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\StaticMeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\StaticMeshComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\SubUVComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\SubUVComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\TextRenderComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
+    <ClCompile Include="Source\Engine\Components\TextRenderComponent.cpp">
+      <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Core\EngineTypes.cpp">
       <Filter>Source\Engine\Core</Filter>
@@ -319,6 +320,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\World.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Input\InputRouter.cpp">
+      <Filter>Source\Engine\Input</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Input\InputSystem.cpp">
       <Filter>Source\Engine\Input</Filter>
@@ -552,6 +556,18 @@
       <Filter>ThirdParty\ImGui</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Source\Engine\Components\DecalComponent.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorGizmoTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorNavigationTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorSelectionTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportCommandTool.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportController.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportInputContexts.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportModes.cpp" />
+    <ClCompile Include="Source\Editor\Input\EditorViewportTools.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\DecalGeometryChecker.cpp" />
+    <ClCompile Include="Source\Engine\GameFramework\SpotLightActor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -626,56 +642,56 @@
     <ClInclude Include="Source\Engine\Collision\WorldPrimitivePickingBVH.h">
       <Filter>Source\Engine\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\ActorComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\ActorComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\BillboardComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\BillboardComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\CameraComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\CameraComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\DecalComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\DecalComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\ExponentialHeightFogComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\ExponentialHeightFogComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\FireBallComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\FireBallComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\GizmoComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\GizmoComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\MeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\MeshComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\MovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\MovementComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\PrimitiveComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\PrimitiveComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\ProjectileMovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\ProjectileMovementComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\RotatingMovementComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\RotatingMovementComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\SceneComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\SceneComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\SceneEffectSource.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\SceneEffectSource.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\StaticMeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\StaticMeshComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\SubUVComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\SubUVComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\TextRenderComponent.h">
-      <Filter>Source\Engine\Component</Filter>
+    <ClInclude Include="Source\Engine\Components\TextRenderComponent.h">
+      <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Core\ClassTypes.h">
       <Filter>Source\Engine\Core</Filter>
@@ -725,7 +741,16 @@
     <ClInclude Include="Source\Engine\GameFramework\WorldContext.h">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputBinding.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputRouter.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Input\InputSystem.h">
+      <Filter>Source\Engine\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Input\InputTypes.h">
       <Filter>Source\Engine\Input</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Materials\Material.h">
@@ -1025,6 +1050,19 @@
     <ClInclude Include="ThirdParty\SimpleJSON\json.hpp">
       <Filter>ThirdParty\SimpleJSON</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\Input\EditorGizmoTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorNavigationTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorSelectionTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportCommandTool.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportController.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputContexts.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputMapping.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportInputUtils.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportModes.h" />
+    <ClInclude Include="Source\Editor\Input\EditorViewportTools.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\DecalSceneProxy.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\DecalGeometryChecker.h" />
+    <ClInclude Include="Source\Engine\GameFramework\SpotLightActor.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />

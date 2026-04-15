@@ -1,7 +1,8 @@
 ﻿#include "Render/Proxy/DecalSceneProxy.h"
 
-#include "Component/DecalComponent.h"
+#include "Components/DecalComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Resource/ResourceManager.h"
 #include "Render/Resource/ShaderManager.h"
 #include "Render/Types/VertexTypes.h"
 #include "Runtime/Engine.h"
@@ -39,6 +40,7 @@ void FDecalSceneProxy::UpdateMesh()
 	UDecalComponent* Decal = GetDecalComponent();
 	Decal->EnsureDecalMeshBuilt();
 	const FDecalRenderableMesh& SrcMesh = Decal->GetRenderableMesh();
+	LastOverlappingObjectCount = SrcMesh.IsEmpty() ? 0u : 1u;
 
 	MeshBuffer = nullptr;
 	SectionDraws.clear();
@@ -84,6 +86,14 @@ void FDecalSceneProxy::UpdateMesh()
 				Draw.DiffuseSRV = Diffuse->GetSRV();
 			}
 			Draw.DiffuseColor = Mat->GetDiffuseColor();
+		}
+		else if (Decal->GetDecalTextureName().IsValid())
+		{
+			if (const FTextureResource* Texture = FResourceManager::Get().FindTexture(Decal->GetDecalTextureName()))
+			{
+				Draw.DiffuseSRV = Texture->SRV;
+				Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+			}
 		}
 
 		SectionDraws.push_back(Draw);

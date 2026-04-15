@@ -3,6 +3,7 @@
 #include "Editor/EditorEngine.h"
 #include "Engine/Profiling/Timer.h"
 #include "Engine/Profiling/MemoryStats.h"
+#include "Engine/Profiling/Stats.h"
 #include <cstdio>
 
 void FOverlayStatSystem::AppendLine(TArray<FOverlayStatLine>& OutLines, float Y, const FString& Text) const
@@ -40,6 +41,54 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 		Groups.push_back(std::move(Group));
 	}
 
+	if (bShowDecal)
+	{
+		FOverlayStatGroup Group;
+      {
+			char Buffer[160] = {};
+			snprintf(Buffer, sizeof(Buffer), "Decal Actors : %u", FDecalStats::GetDecalActorCount());
+			Group.Lines.push_back(FString(Buffer));
+		}
+		{
+			char Buffer[160] = {};
+			snprintf(Buffer, sizeof(Buffer), "Rendered Decals : %u", FDecalStats::GetRenderedDecalCount());
+			Group.Lines.push_back(FString(Buffer));
+		}
+		{
+			char Buffer[160] = {};
+			snprintf(Buffer, sizeof(Buffer), "Affected Objects (sum) : %u", FDecalStats::GetAffectedObjectCount());
+			Group.Lines.push_back(FString(Buffer));
+		}
+
+		const TArray<FStatEntry>& Entries = FStatManager::Get().GetSnapshot();
+		for (const FStatEntry& Entry : Entries)
+		{
+			if (!Entry.Name)
+			{
+				continue;
+			}
+
+			const FString StatName = Entry.Name;
+			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
+			{
+				continue;
+			}
+			if (StatName == "RenderPass::Decal" || StatName == "Renderpass::decal")
+			{
+				continue;
+			}
+
+			char Buffer[196] = {};
+			snprintf(Buffer, sizeof(Buffer), "%s : %.3f ms", Entry.Name, Entry.LastTime * 1000.0);
+			Group.Lines.push_back(FString(Buffer));
+		}
+
+		if (!Group.Lines.empty())
+		{
+			Groups.push_back(std::move(Group));
+		}
+	}
+
 	if (bShowPickingTime)
 	{
 		FOverlayStatGroup Group;
@@ -61,17 +110,17 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 	{
 		FOverlayStatGroup Group;
 
-		/*{
+		{
 			char Buffer[128] = {};
-			snprintf(Buffer, sizeof(Buffer), "Memory Allocated : %u", MemoryStats::GetTotalAllocationBytes());
+			snprintf(Buffer, sizeof(Buffer), "Object Memory : %.2f KB", MemoryStats::GetTotalAllocationBytes() / 1024.0);
 			Group.Lines.push_back(FString(Buffer));
 		}
 
 		{
 			char Buffer[128] = {};
-			snprintf(Buffer, sizeof(Buffer), "Times Allocated : %u", MemoryStats::GetTotalAllocationCount());
+			snprintf(Buffer, sizeof(Buffer), "Object Count  : %u", MemoryStats::GetTotalAllocationCount());
 			Group.Lines.push_back(FString(Buffer));
-		}*/
+		}
 
 		{
 			char Buffer[128] = {};
@@ -130,7 +179,11 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	}
 	if (bShowMemory)
 	{
-		EstimatedLineCount += 6;
+		EstimatedLineCount += 8;
+	}
+   if (bShowDecal)
+	{
+		EstimatedLineCount += 8;
 	}
 	OutLines.reserve(EstimatedLineCount);
 
@@ -162,8 +215,19 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 
 	if (bShowMemory)
 	{
-		constexpr int32 MemoryLineCount = 6;
 		char Buffer[128] = {};
+
+		// 액터/오브젝트 단위 추적 (생성·삭제 시 변동)
+		snprintf(Buffer, sizeof(Buffer), "Object Memory : %.2f KB", MemoryStats::GetTotalAllocationBytes() / 1024.0);
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Object Count  : %u", MemoryStats::GetTotalAllocationCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		// GPU/CPU 리소스 단위 추적 (에셋 로드 시 변동)
+		constexpr int32 MemoryLineCount = 6;
 		const double ValuesKB[MemoryLineCount] = {
 			static_cast<double>(MemoryStats::GetPixelShaderMemory() / 1024.0f),
 			static_cast<double>(MemoryStats::GetVertexShaderMemory() / 1024.0f),
@@ -185,6 +249,47 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 		for (int32 Index = 0; Index < MemoryLineCount; ++Index)
 		{
 			snprintf(Buffer, sizeof(Buffer), "%s : %.2f KB", Labels[Index], ValuesKB[Index]);
+			AppendLine(OutLines, CurrentY, FString(Buffer));
+			CurrentY += Layout.LineHeight;
+		}
+       CurrentY += Layout.GroupSpacing;
+	}
+
+	if (bShowDecal)
+	{
+      char Buffer[160] = {};
+		snprintf(Buffer, sizeof(Buffer), "Decal Actors : %u", FDecalStats::GetDecalActorCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Rendered Decals : %u", FDecalStats::GetRenderedDecalCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Affected Objects (sum) : %u", FDecalStats::GetAffectedObjectCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		const TArray<FStatEntry>& Entries = FStatManager::Get().GetSnapshot();
+		for (const FStatEntry& Entry : Entries)
+		{
+			if (!Entry.Name)
+			{
+				continue;
+			}
+
+			const FString StatName = Entry.Name;
+			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
+			{
+				continue;
+			}
+			if (StatName == "RenderPass::Decal" || StatName == "Renderpass::decal")
+			{
+				continue;
+			}
+
+			char Buffer[196] = {};
+			snprintf(Buffer, sizeof(Buffer), "%s : %.3f ms", Entry.Name, Entry.LastTime * 1000.0);
 			AppendLine(OutLines, CurrentY, FString(Buffer));
 			CurrentY += Layout.LineHeight;
 		}

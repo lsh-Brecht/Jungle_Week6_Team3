@@ -4,11 +4,13 @@
 #include "Render/Pipeline/Renderer.h"
 #include "Render/Pipeline/SceneRenderSetup.h"
 #include "Viewport/Viewport.h"
-#include "Component/CameraComponent.h"
-#include "Component/GizmoComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/GizmoComponent.h"
+#include "GameFramework/DecalActor.h"
 #include "GameFramework/World.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
+#include "Render/Proxy/DecalSceneProxy.h"
 
 FEditorRenderPipeline::FEditorRenderPipeline(UEditorEngine* InEditor, FRenderer& InRenderer)
 	: Editor(InEditor)
@@ -69,17 +71,37 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	UWorld* World = Editor->GetWorld();
 	if (!World) return;
+	TArray<FPrimitiveSceneProxy*> VisibleProxiesForViewport;
+	World->GatherVisibleProxiesForCamera(Camera, VisibleProxiesForViewport);
+
+	// GPU Occlusion readback/result는 현재 전역 상태를 공유하므로
+	// 멀티 뷰포트에서 카메라별 결과가 섞여 아티팩트가 발생할 수 있다.
+	// 멀티 뷰포트에서는 occlusion을 비활성화하고 frustum culling만 사용한다.
+	const bool bEnableGPUOcclusion = !Editor->IsSplitViewport();
 
 	// GPU Occlusion 지연 초기화
-	if (!GPUOcclusion.IsInitialized())
+	if (bEnableGPUOcclusion && !GPUOcclusion.IsInitialized())
 		GPUOcclusion.Initialize(Renderer.GetFD3DDevice().GetDevice());
 
 	// 이전 프레임 Occlusion 결과 읽기 (staging → OccludedSet)
-	GPUOcclusion.ReadbackResults(Ctx);
+	if (bEnableGPUOcclusion)
+	{
+		GPUOcclusion.ReadbackResults(Ctx);
+	}
 
 	// 뷰포트별 렌더 옵션 사용
 	const FViewportRenderOptions& Opts = VC->GetRenderOptions();
-	const FShowFlags& ShowFlags = Opts.ShowFlags;
+	FShowFlags EffectiveShowFlags = Opts.ShowFlags;
+	const bool bPIEPossessedMode =
+		Editor->IsPlayingInEditor()
+		&& Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
+	if (bPIEPossessedMode)
+	{
+		EffectiveShowFlags.bSelectionOutline = false;
+		EffectiveShowFlags.bBoundingVolume = false;
+		EffectiveShowFlags.bDebugDraw = false;
+		EffectiveShowFlags.bOctree = false;
+	}
 	EViewMode ViewMode = Opts.ViewMode;
 
 	// 지연 리사이즈 적용 + 오프스크린 RT 바인딩
@@ -95,47 +117,78 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 	Bus.Clear();
 
 	Bus.SetCameraInfo(Camera);
-	Bus.SetRenderSettings(ViewMode, ShowFlags);
+	Bus.SetRenderSettings(ViewMode, EffectiveShowFlags);
 	PopulateScenePostProcessConstants(World, Bus);
 	Bus.SetViewportInfo(VP);
 	Bus.SetViewportType(Opts.ViewportType);
-	Bus.SetOcclusionCulling(&GPUOcclusion);
-	Bus.SetLODContext(World->PrepareLODContext());
+	Bus.SetOcclusionCulling(bEnableGPUOcclusion ? &GPUOcclusion : nullptr);
+	Bus.SetLODContext(World->PrepareLODContextForCamera(Camera));
 
 	// 2. 프록시 + Batcher Entry를 ERenderPass별로 수집
 	{
 		SCOPE_STAT_CAT("Collector", "3_Collect");
-		Collector.CollectWorld(World, Bus);
-
+		// Gizmo axis mask must be updated before per-viewport proxy collection.
+		// Otherwise gizmo proxy can read stale mask from a previous viewport/frame.
 		if (UGizmoComponent* Gizmo = Editor->GetGizmo())
-			Gizmo->UpdateAxisMask(Opts.ViewportType);
+			Gizmo->UpdateAxisMask(Opts.ViewportType, Camera->IsOrthogonal());
+
+		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
 
 		Collector.CollectGrid(Opts.GridSpacing, Opts.GridHalfLineCount, Bus);
 		Collector.CollectDebugDraw(World->GetDebugDrawQueue(), Bus);
 
-		for (AActor* SelectedActor : Editor->GetSelectionManager().GetSelectedActors())
+		if (EffectiveShowFlags.bDebugDraw)
 		{
-			if (!SelectedActor || SelectedActor->GetWorld() != World)
+			for (AActor* SelectedActor : Editor->GetSelectionManager().GetSelectedActors())
 			{
-				continue;
-			}
-
-			for (UActorComponent* ActorComponent : SelectedActor->GetComponents())
-			{
-				if (!ActorComponent)
+				if (!SelectedActor || SelectedActor->GetWorld() != World)
 				{
 					continue;
 				}
 
-				ActorComponent->CollectEditorVisualizations(Bus);
+				for (UActorComponent* ActorComponent : SelectedActor->GetComponents())
+				{
+					if (!ActorComponent)
+					{
+						continue;
+					}
+
+					ActorComponent->CollectEditorVisualizations(Bus);
+				}
 			}
 		}
 
-		if (ShowFlags.bOctree)
+		if (EffectiveShowFlags.bOctree)
 			Collector.CollectOctreeDebug(World->GetOctree(), Bus);
 
-		if (VC == Editor->GetActiveViewport())
-			Collector.CollectOverlayText(Editor->GetOverlayStatSystem(), *Editor, Bus);
+	}
+
+	{
+		uint32 DecalActorCount = 0;
+		for (AActor* Actor : World->GetActors())
+		{
+			if (Cast<ADecalActor>(Actor))
+			{
+				++DecalActorCount;
+			}
+		}
+
+     const TArray<const FPrimitiveSceneProxy*>& RenderedDecalProxies = Bus.GetProxies(ERenderPass::Decal);
+		uint32 AffectedObjectCount = 0;
+        for (const FPrimitiveSceneProxy* Proxy : RenderedDecalProxies)
+		{
+			if (!Proxy)
+			{
+				continue;
+			}
+
+           const FDecalSceneProxy* DecalProxy = static_cast<const FDecalSceneProxy*>(Proxy);
+			AffectedObjectCount += DecalProxy->GetLastOverlappingObjectCount();
+		}
+
+		FDecalStats::SetDecalActorCount(DecalActorCount);
+		FDecalStats::SetRenderedDecalCount(static_cast<uint32>(RenderedDecalProxies.size()));
+		FDecalStats::SetAffectedObjectCount(AffectedObjectCount);
 	}
 
 	// 3. Batcher 준비
@@ -150,8 +203,10 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		Renderer.Render(Bus);
 	}
 
+	Renderer.RenderIdPickBuffer(Bus, VP->GetIdPickRTV(), VP->GetDSV());
+
 	// 5. GPU Occlusion — DSV 언바인딩 후 Hi-Z 생성 + Occlusion Test 디스패치
-	if (GPUOcclusion.IsInitialized())
+	if (bEnableGPUOcclusion && GPUOcclusion.IsInitialized())
 	{
 		SCOPE_STAT_CAT("GPUOcclusion", "4_ExecutePass");
 

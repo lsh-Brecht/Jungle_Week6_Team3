@@ -14,10 +14,12 @@ public:
 	void UpdateTransform() override;
 	void UpdateMaterial() override;
 	void UpdateMesh() override;
+	uint32 GetLastOverlappingObjectCount() const { return LastOverlappingObjectCount; }
 
 private:
 	UDecalComponent* GetDecalComponent() const;
 
 private:
 	FMeshBuffer OwnedMeshBuffer;
+	uint32 LastOverlappingObjectCount = 0;
 };

@@ -63,7 +63,28 @@ void FDepthStencilStateManager::Create(ID3D11Device* InDevice)
 	Desc.BackFace = Desc.FrontFace;
 	InDevice->CreateDepthStencilState(&Desc, &GizmoOutside);
 
+	// Gizmo Inside (Stencil Equal, depth write)
+	Desc.DepthEnable = TRUE;
+	Desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	Desc.DepthFunc = D3D11_COMPARISON_LESS;
+	Desc.StencilEnable = TRUE;
+	Desc.StencilReadMask = 0xFF;
+	Desc.StencilWriteMask = 0x00;
+	Desc.FrontFace.StencilFunc = D3D11_COMPARISON_EQUAL;
+	Desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	Desc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	Desc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
+	Desc.BackFace = Desc.FrontFace;
+	InDevice->CreateDepthStencilState(&Desc, &GizmoInsideDepthWrite);
+
+	// Gizmo Outside (Stencil Not Equal, depth write)
+	Desc.FrontFace.StencilFunc = D3D11_COMPARISON_NOT_EQUAL;
+	Desc.BackFace = Desc.FrontFace;
+	InDevice->CreateDepthStencilState(&Desc, &GizmoOutsideDepthWrite);
+
 	// Stencil Mask Equal (read-only)
+	Desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	Desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
 	Desc.FrontFace.StencilFunc = D3D11_COMPARISON_EQUAL;
 	Desc.BackFace = Desc.FrontFace;
 	InDevice->CreateDepthStencilState(&Desc, &StencilMaskEqual);
@@ -79,6 +100,8 @@ void FDepthStencilStateManager::Release()
 	SAFE_RELEASE(NoDepth);
 	SAFE_RELEASE(GizmoInside);
 	SAFE_RELEASE(GizmoOutside);
+	SAFE_RELEASE(GizmoInsideDepthWrite);
+	SAFE_RELEASE(GizmoOutsideDepthWrite);
 }
 
 void FDepthStencilStateManager::Set(ID3D11DeviceContext* InContext, EDepthStencilState InState)
@@ -94,6 +117,8 @@ void FDepthStencilStateManager::Set(ID3D11DeviceContext* InContext, EDepthStenci
 	case EDepthStencilState::NoDepth:              InContext->OMSetDepthStencilState(NoDepth, 0);          break;
 	case EDepthStencilState::GizmoInside:          InContext->OMSetDepthStencilState(GizmoInside, 1);      break;
 	case EDepthStencilState::GizmoOutside:         InContext->OMSetDepthStencilState(GizmoOutside, 1);     break;
+	case EDepthStencilState::GizmoInsideDepthWrite:InContext->OMSetDepthStencilState(GizmoInsideDepthWrite, 1); break;
+	case EDepthStencilState::GizmoOutsideDepthWrite:InContext->OMSetDepthStencilState(GizmoOutsideDepthWrite, 1); break;
 	}
 
 	CurrentState = InState;

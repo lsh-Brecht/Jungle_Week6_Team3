@@ -326,7 +326,7 @@ void FFontBatcher::DrawSelectionMaskBatch(ID3D11DeviceContext* Context, const FF
 	if (!VB.Update(Context, SelectedVertices.data(), VertexCount)) return;
 	if (!IB.Update(Context, SelectedIndices.data(), IndexCount)) return;
 
-	// 💡 핵심: 반드시 ShaderFont를 바인딩해야 셰이더 안의 discard(알파 클리핑)가 작동하여 네모가 아닌 글자 모양 마스크가 나옵니다.
+	// 핵심: 반드시 ShaderFont를 바인딩해야 셰이더 안의 discard(알파 클리핑)가 작동하여 네모가 아닌 글자 모양 마스크가 나옵니다.
 	FShaderManager::Get().GetShader(EShaderType::Font)->Bind(Context);
 
 	VB.Bind(Context);

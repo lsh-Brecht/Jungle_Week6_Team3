@@ -28,6 +28,7 @@ namespace ECBSlot
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
 	constexpr uint32 Fog = 6;			// b6: fog post-process params
+	constexpr uint32 Picking = 7;		// b7: ID picking
 
 
 	constexpr uint32 PostProcess_FXAA = 9;    // b9: FXAA effect params
@@ -113,6 +114,12 @@ struct FMaterialConstants
 	FVector4 SectionColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 };
 
+struct FPickingConstants
+{
+	uint32 PickingId = 0;
+	float _pad[3] = { 0.0f, 0.0f, 0.0f };
+};
+
 struct FGizmoConstants
 {
 	FVector4 ColorTint;
@@ -121,7 +128,8 @@ struct FGizmoConstants
 	uint32 SelectedAxis;
 	float HoveredAxisOpacity;
 	uint32 AxisMask;       // 비트 0=X, 1=Y, 2=Z — 1이면 표시, 0이면 숨김. 0x7=전부 표시
-	uint32 _pad[3];
+	uint32 bOverrideAxisColor;
+	uint32 _pad[2];
 };
 
 // PostProcess Outline CB (b3) — HLSL OutlinePostProcessCB와 1:1 대응
@@ -137,10 +145,11 @@ struct FOutlinePostProcessConstants
 struct FFXAAConstants
 {
 	FVector2 TexelSize = FVector2(0.0f, 0.0f);
-	float EdgeThreshold = 0.063f;
-	float EdgeThresholdMin = 0.0312f;
+	float EdgeThreshold;
+	float EdgeThresholdMin;
+  int32 SearchSteps = 3;
+	float _pad[3] = { 0.0f, 0.0f, 0.0f };
 };
-
 
 struct FAABBConstants
 {
@@ -150,6 +159,13 @@ struct FAABBConstants
 	FVector Max;
 	float Padding1;
 
+	FColor Color;
+};
+
+struct FOBBConstants
+{
+	FBoundingBox LocalBox;
+	FMatrix Transform;
 	FColor Color;
 };
 
@@ -174,6 +190,8 @@ struct FSubUVConstants
 {
 	const FParticleResource* Particle = nullptr;
 	uint32 FrameIndex = 0;
+	uint32 Columns = 1;
+	uint32 Rows = 1;
 	float Width = 1.0f;
 	float Height = 1.0f;
 };
@@ -213,6 +231,11 @@ struct FBillboardEntry
 struct FAABBEntry
 {
 	FAABBConstants AABB;
+};
+
+struct FOBBEntry
+{
+	FOBBConstants OBB;
 };
 
 struct FGridEntry

@@ -3,11 +3,12 @@
 #include "Editor/EditorEngine.h"
 
 #include "ImGui/imgui.h"
-#include "Component/GizmoComponent.h"
-#include "Component/MovementComponent.h"
-#include "Component/PrimitiveComponent.h"
-#include "Component/StaticMeshComponent.h"
-#include "Component/SceneComponent.h"
+#include "Components/GizmoComponent.h"
+#include "Components/DecalComponent.h"
+#include "Components/MovementComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "Core/PropertyTypes.h"
 #include "Core/ClassTypes.h"
 #include "Resource/ResourceManager.h"
@@ -20,6 +21,7 @@
 
 #include <Windows.h>
 #include <commdlg.h>
+#include <cstring>
 #include <filesystem>
 
 #define SEPARATOR(); ImGui::Spacing(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); ImGui::Spacing();
@@ -39,6 +41,34 @@ static FString GetStemFromPath(const FString& Path)
 	size_t SlashPos = Path.find_last_of("/\\");
 	FString FileName = (SlashPos == FString::npos) ? Path : Path.substr(SlashPos + 1);
 	return RemoveExtension(FileName);
+}
+
+static constexpr const char* DecalTextureMaterialPrefix = "Texture:";
+
+static bool IsDecalTextureMaterialPath(const FString& Path)
+{
+	return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
+}
+
+static FString MakeDecalTextureMaterialPath(const FString& TextureName)
+{
+	return FString(DecalTextureMaterialPrefix) + TextureName;
+}
+
+static FString GetDecalTextureNameFromMaterialPath(const FString& Path)
+{
+	return IsDecalTextureMaterialPath(Path)
+		? Path.substr(std::strlen(DecalTextureMaterialPrefix))
+		: FString();
+}
+
+static FString GetMaterialSlotPreviewName(const FString& Path)
+{
+	if (Path.empty() || Path == "None")
+	{
+		return "None";
+	}
+	return IsDecalTextureMaterialPath(Path) ? GetDecalTextureNameFromMaterialPath(Path) : GetStemFromPath(Path);
 }
 
 static FString GetComponentDisplayLabel(UActorComponent* Comp)
@@ -753,7 +783,8 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 	case EPropertyType::MaterialSlot:
 	{
 		FMaterialSlot* Slot = static_cast<FMaterialSlot*>(Prop.ValuePtr);
-		int32          ElemIdx = (strncmp(Prop.Name.c_str(), "Element ", 8) == 0) ? atoi(&Prop.Name[8]) : -1;
+       const bool bElementSlot = (strncmp(Prop.Name.c_str(), "Element ", 8) == 0);
+		int32 ElemIdx = bElementSlot ? atoi(&Prop.Name[8]) : -1;
 
 		FString SlotName = "None";
 		if (ElemIdx != -1 && SelectedComponent && SelectedComponent->IsA<UStaticMeshComponent>())
@@ -763,13 +794,20 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				SlotName = SMC->GetStaticMesh()->GetStaticMaterials()[ElemIdx].MaterialSlotName;
 		}
 
-		// 좌측: Element 인덱스 + 슬롯 이름
+      // 좌측: Element 인덱스 + 슬롯 이름 (일반 머티리얼 슬롯) 또는 프로퍼티 이름(전용 슬롯)
 		ImGui::BeginGroup();
-		ImGui::Text("Element %d", ElemIdx);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-		ImGui::TextUnformatted(SlotName.c_str());
-		ImGui::PopStyleColor();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", SlotName.c_str());
+     if (bElementSlot)
+		{
+			ImGui::Text("Element %d", ElemIdx);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::TextUnformatted(SlotName.c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", SlotName.c_str());
+		}
+		else
+		{
+			ImGui::TextUnformatted(Prop.Name.c_str());
+		}
 		ImGui::EndGroup();
 
 		ImGui::SameLine(120);
@@ -778,37 +816,110 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::BeginGroup();
 		ImGui::SetNextItemWidth(-1);
 
-		FString Preview = (Slot->Path.empty() || Slot->Path == "None") ? "None" : GetStemFromPath(Slot->Path);
-		if (ImGui::BeginCombo("##Mat", Preview.c_str()))
-		{
-			// "None" 선택지 기본 제공
-			bool bSelectedNone = (Slot->Path == "None" || Slot->Path.empty());
-			if (ImGui::Selectable("None", bSelectedNone))
+			const bool bDecalMaterialSlot = !bElementSlot && Prop.Name == "Decal Material";
+			FString Preview = GetMaterialSlotPreviewName(Slot->Path);
+			if (ImGui::BeginCombo("##Mat", Preview.c_str()))
 			{
-				Slot->Path = "None";
+				// "None" 선택지 기본 제공
+				bool bSelectedNone = (Slot->Path == "None" || Slot->Path.empty());
+				if (ImGui::Selectable("None", bSelectedNone))
+				{
+					Slot->Path = "None";
 				bChanged = true;
 			}
 			if (bSelectedNone) ImGui::SetItemDefaultFocus();
 
-			// TObjectIterator 대신 FObjManager 파일 목록 스캔 데이터 사용
-			const TArray<FMaterialAssetListItem>& MatFiles = FObjManager::GetAvailableMaterialFiles();
-			for (const FMaterialAssetListItem& Item : MatFiles)
-			{
-				bool bSelected = (Slot->Path == Item.FullPath);
-				if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+				// TObjectIterator 대신 FObjManager 파일 목록 스캔 데이터 사용
+				const TArray<FMaterialAssetListItem>& MatFiles = FObjManager::GetAvailableMaterialFiles();
+				for (const FMaterialAssetListItem& Item : MatFiles)
 				{
-					Slot->Path = Item.FullPath; // 데이터는 전체 경로로 저장
-					bChanged = true;
+					bool bSelected = (Slot->Path == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+					{
+						Slot->Path = Item.FullPath; // 데이터는 전체 경로로 저장
+						bChanged = true;
+					}
+					if (bSelected) ImGui::SetItemDefaultFocus();
 				}
-				if (bSelected) ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		}
 
-		// UVScroll 체크박스 — 렌더러가 매 프레임 직접 읽으므로 PostEditProperty 불필요
-		bool bScroll = (Slot->bUVScroll != 0);
-		if (ImGui::Checkbox("Scroll", &bScroll))
-			Slot->bUVScroll = bScroll ? 1 : 0;
+				if (bDecalMaterialSlot)
+				{
+					for (const FString& TextureName : FResourceManager::Get().GetTextureNames())
+					{
+						const FString TextureMaterialPath = MakeDecalTextureMaterialPath(TextureName);
+						const FString DisplayName = TextureName + " (Texture)";
+						bool bSelected = (Slot->Path == TextureMaterialPath);
+						if (ImGui::Selectable(DisplayName.c_str(), bSelected))
+						{
+							Slot->Path = TextureMaterialPath;
+							bChanged = true;
+						}
+						if (bSelected) ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			if (bDecalMaterialSlot && IsDecalTextureMaterialPath(Slot->Path))
+			{
+				const FString TextureName = GetDecalTextureNameFromMaterialPath(Slot->Path);
+				const FTextureResource* Texture = FResourceManager::Get().FindTexture(FName(TextureName));
+				if (Texture && Texture->SRV)
+				{
+					ImGui::Text("Preview (%u x %u)", Texture->Width, Texture->Height);
+					constexpr float PreviewFrameSize = 176.0f;
+					constexpr float PreviewFramePadding = 8.0f;
+					const float PreviewMaxSize = PreviewFrameSize - PreviewFramePadding * 2.0f;
+
+					ImVec2 PreviewSize(PreviewMaxSize, PreviewMaxSize);
+					if (Texture->Width > 0 && Texture->Height > 0)
+					{
+						const float Aspect = static_cast<float>(Texture->Width) / static_cast<float>(Texture->Height);
+						if (Aspect >= 1.0f)
+						{
+							PreviewSize.y = PreviewSize.x / Aspect;
+						}
+						else
+						{
+							PreviewSize.x = PreviewSize.y * Aspect;
+						}
+					}
+
+					const ImVec2 FrameMin = ImGui::GetCursorScreenPos();
+					const ImVec2 FrameSize(PreviewFrameSize, PreviewFrameSize);
+					const ImVec2 FrameMax(FrameMin.x + FrameSize.x, FrameMin.y + FrameSize.y);
+					ImGui::InvisibleButton("##DecalTexturePreviewFrame", FrameSize);
+
+					ImDrawList* DrawList = ImGui::GetWindowDrawList();
+					DrawList->AddRectFilled(FrameMin, FrameMax, IM_COL32(36, 36, 36, 255), 4.0f);
+					DrawList->AddRect(FrameMin, FrameMax, IM_COL32(125, 125, 125, 255), 4.0f);
+
+					const ImVec2 ImageMin(
+						FrameMin.x + (FrameSize.x - PreviewSize.x) * 0.5f,
+						FrameMin.y + (FrameSize.y - PreviewSize.y) * 0.5f
+					);
+					const ImVec2 ImageMax(ImageMin.x + PreviewSize.x, ImageMin.y + PreviewSize.y);
+					DrawList->AddImage((ImTextureID)Texture->SRV, ImageMin, ImageMax);
+					DrawList->AddRect(ImageMin, ImageMax, IM_COL32(180, 180, 180, 180));
+
+					if (Texture->Width > 0 && Texture->Height > 0
+						&& SelectedComponent && SelectedComponent->IsA<UDecalComponent>())
+					{
+						if (ImGui::Button("Fit Size To Texture"))
+						{
+							bChanged = static_cast<UDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+						}
+					}
+				}
+			}
+
+      // UVScroll은 StaticMesh element 슬롯에서만 노출
+		if (bElementSlot)
+		{
+			bool bScroll = (Slot->bUVScroll != 0);
+			if (ImGui::Checkbox("Scroll", &bScroll))
+				Slot->bUVScroll = bScroll ? 1 : 0;
+		}
 
 		ImGui::EndGroup();
 		break;
@@ -827,28 +938,47 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		else if (strcmp(Prop.Name.c_str(), "Texture") == 0)
 			Names = FResourceManager::Get().GetTextureNames();
 
-		if (!Names.empty())
-		{
-			if (ImGui::BeginCombo(Prop.Name.c_str(), Current.c_str()))
+			if (!Names.empty())
 			{
-				for (const auto& Name : Names)
+				if (ImGui::BeginCombo(Prop.Name.c_str(), Current.c_str()))
 				{
-					bool bSelected = (Current == Name);
-					if (ImGui::Selectable(Name.c_str(), bSelected))
+					for (const auto& Name : Names)
 					{
-						*Val = FName(Name);
-						bChanged = true;
+						bool bSelected = (Current == Name);
+						if (ImGui::Selectable(Name.c_str(), bSelected))
+						{
+							*Val = FName(Name);
+							bChanged = true;
+						}
+						if (bSelected)
+							ImGui::SetItemDefaultFocus();
 					}
-					if (bSelected)
-						ImGui::SetItemDefaultFocus();
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
+
+				if (strcmp(Prop.Name.c_str(), "Particle") == 0)
+				{
+					const FParticleResource* Particle = FResourceManager::Get().FindParticle(*Val);
+					if (Particle && Particle->SRV)
+					{
+						ImGui::TextUnformatted("Preview");
+						ImGui::Image((ImTextureID)Particle->SRV, ImVec2(160.0f, 160.0f));
+					}
+				}
+				else if (strcmp(Prop.Name.c_str(), "Texture") == 0)
+				{
+					const FTextureResource* Texture = FResourceManager::Get().FindTexture(*Val);
+					if (Texture && Texture->SRV)
+					{
+						ImGui::TextUnformatted("Preview");
+						ImGui::Image((ImTextureID)Texture->SRV, ImVec2(160.0f, 160.0f));
+					}
+				}
 			}
-		}
-		else
-		{
-			char Buf[256];
-			strncpy_s(Buf, sizeof(Buf), Current.c_str(), _TRUNCATE);
+			else
+			{
+				char Buf[256];
+				strncpy_s(Buf, sizeof(Buf), Current.c_str(), _TRUNCATE);
 			if (ImGui::InputText(Prop.Name.c_str(), Buf, sizeof(Buf)))
 			{
 				*Val = FName(Buf);

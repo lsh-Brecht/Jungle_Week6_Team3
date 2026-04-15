@@ -14,7 +14,9 @@ enum class EDepthStencilState
 
 	// --- 기즈모 전용 ---
 	GizmoInside,
-	GizmoOutside
+	GizmoOutside,
+	GizmoInsideDepthWrite,
+	GizmoOutsideDepthWrite
 };
 
 enum class EBlendState

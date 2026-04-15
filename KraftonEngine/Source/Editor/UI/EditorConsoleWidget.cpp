@@ -2,6 +2,8 @@
 #include "Editor/EditorEngine.h"
 #include "Editor/Subsystem/OverlayStatSystem.h"
 
+#include <cctype>
+
 void FEditorConsoleWidget::AddLog(const char* fmt, ...) {
 	char buf[1024];
 	va_list args;
@@ -32,12 +34,16 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 
 			if (Args.size() < 2)
 			{
-				AddLog("Usage: stat fps | stat memory | stat none\n");
+				AddLog("Usage: stat fps | stat memory | stat decal | stat none\n");
 				return;
 			}
 
 			FOverlayStatSystem& StatSystem = EditorEngine->GetOverlayStatSystem();
-			const FString& SubCommand = Args[1];
+            FString SubCommand = Args[1];
+			for (char& Ch : SubCommand)
+			{
+				Ch = static_cast<char>(::tolower(static_cast<unsigned char>(Ch)));
+			}
 
 			if (SubCommand == "fps")
 			{
@@ -49,6 +55,11 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 				StatSystem.ShowMemory(true);
 				AddLog("Overlay stat enabled: memory\n");
 			}
+          else if (SubCommand == "decal")
+			{
+				StatSystem.ShowDecal(true);
+				AddLog("Overlay stat enabled: decal\n");
+			}
 			else if (SubCommand == "none")
 			{
 				StatSystem.HideAll();
@@ -57,7 +68,7 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 			else
 			{
 				AddLog("[ERROR] Unknown stat command: '%s'\n", SubCommand.c_str());
-				AddLog("Usage: stat fps | stat memory | stat none\n");
+              AddLog("Usage: stat fps | stat memory | stat decal | stat none\n");
 			}
 		});
 }
@@ -73,80 +84,119 @@ void FEditorConsoleWidget::Render(float DeltaTime)
 		return;
 	}
 
-	if (ImGui::SmallButton("Clear")) { Clear(); }
-
+	RenderDrawerToolbar();
 	ImGui::Separator();
+	RenderLogContents(-ImGui::GetStyle().ItemSpacing.y - ImGui::GetFrameHeightWithSpacing());
+	ImGui::Separator();
+	RenderInputLine();
 
-	//// Options menu
-	if (ImGui::BeginPopup("Options"))
+	ImGui::End();
+}
+
+void FEditorConsoleWidget::RenderDrawerToolbar()
+{
+	if (ImGui::BeginPopup("ConsoleOptions"))
 	{
 		ImGui::Checkbox("Auto-scroll", &AutoScroll);
 		ImGui::EndPopup();
 	}
 
-	// Options, Filter
-	ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_Tooltip);
-	if (ImGui::Button("Options"))
-		ImGui::OpenPopup("Options");
+	if (ImGui::SmallButton("Clear"))
+	{
+		Clear();
+	}
 	ImGui::SameLine();
-	Filter.Draw("Filter (\"incl,-excl\") (\"error\")", 180);
-	ImGui::Separator();
+	if (ImGui::SmallButton("Options"))
+	{
+		ImGui::OpenPopup("ConsoleOptions");
+	}
+	ImGui::SameLine();
+	Filter.Draw("Filter (\"incl,-excl\")", 180.0f);
+}
 
-	const float FooterHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-	if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, -FooterHeight), false, ImGuiWindowFlags_HorizontalScrollbar)) {
-		for (auto& Item : Messages) {
-			if (!Filter.PassFilter(Item)) continue;
+void FEditorConsoleWidget::RenderLogContents(float Height)
+{
+	if (ImGui::BeginChild("ScrollingRegion", ImVec2(0.0f, Height), false, ImGuiWindowFlags_HorizontalScrollbar))
+	{
+		for (auto& Item : Messages)
+		{
+			if (!Filter.PassFilter(Item))
+			{
+				continue;
+			}
 
 			ImVec4 Color;
 			bool bHasColor = false;
-			if (strncmp(Item, "[ERROR]", 7) == 0) {
+			if (strncmp(Item, "[ERROR]", 7) == 0)
+			{
 				Color = ImVec4(1, 0.4f, 0.4f, 1);
 				bHasColor = true;
 			}
-			else if (strncmp(Item, "[WARN]", 6) == 0) {
+			else if (strncmp(Item, "[WARN]", 6) == 0)
+			{
 				Color = ImVec4(1, 0.8f, 0.2f, 1);
 				bHasColor = true;
 			}
-			else if (strncmp(Item, "#", 1) == 0) {
+			else if (strncmp(Item, "#", 1) == 0)
+			{
 				Color = ImVec4(1, 0.8f, 0.6f, 1);
 				bHasColor = true;
 			}
 
-			if (bHasColor) {
+			if (bHasColor)
+			{
 				ImGui::PushStyleColor(ImGuiCol_Text, Color);
 			}
 			ImGui::TextUnformatted(Item);
-			if (bHasColor) {
+			if (bHasColor)
+			{
 				ImGui::PopStyleColor();
 			}
 		}
 
-		if (ScrollToBottom || (AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())) {
+		if (ScrollToBottom || (AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()))
+		{
 			ImGui::SetScrollHereY(1.0f);
 		}
 		ScrollToBottom = false;
 	}
 	ImGui::EndChild();
-	ImGui::Separator();
+}
 
-	// Input line
-	bool bReclaimFocus = false;
-	ImGuiInputTextFlags Flags = ImGuiInputTextFlags_EnterReturnsTrue
+void FEditorConsoleWidget::RenderInputLine(const char* Label, float Width, bool bFocusInput)
+{
+	if (Width > 0.0f)
+	{
+		ImGui::SetNextItemWidth(Width);
+	}
+
+	const ImGuiInputTextFlags Flags =
+		ImGuiInputTextFlags_EnterReturnsTrue
 		| ImGuiInputTextFlags_EscapeClearsAll
 		| ImGuiInputTextFlags_CallbackHistory
-		| ImGuiInputTextFlags_CallbackCompletion;
-	if (ImGui::InputText("Input", InputBuf, sizeof(InputBuf), Flags, &TextEditCallback, this)) {
+		| ImGuiInputTextFlags_CallbackCompletion
+		| ImGuiInputTextFlags_CallbackCharFilter;
+
+	bool bReclaimFocus = false;
+	if (ImGui::InputText(Label, InputBuf, sizeof(InputBuf), Flags, &TextEditCallback, this))
+	{
 		ExecCommand(InputBuf);
 		strcpy_s(InputBuf, "");
 		bReclaimFocus = true;
 	}
 
-	ImGui::SetItemDefaultFocus();
-	if (bReclaimFocus) {
+	if (bFocusInput)
+	{
 		ImGui::SetKeyboardFocusHere(-1);
 	}
-
-	ImGui::End();
+	else
+	{
+		ImGui::SetItemDefaultFocus();
+	}
+	if (bReclaimFocus)
+	{
+		ImGui::SetKeyboardFocusHere(-1);
+	}
 }
 
 void FEditorConsoleWidget::RegisterCommand(const FString& Name, CommandFn Fn) {
@@ -221,6 +271,12 @@ int32 FEditorConsoleWidget::TextEditCallback(ImGuiInputTextCallbackData* Data) {
 		else if (Candidates.Size > 1) {
 			Console->AddLog("Possible completions:\n");
 			for (auto& C : Candidates) Console->AddLog("  %s\n", C);
+		}
+	}
+
+	if (Data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) {
+		if (Data->EventChar == '`') {
+			return 1;
 		}
 	}
 

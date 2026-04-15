@@ -1,5 +1,5 @@
 ﻿#include "Collision/RayUtils.h"
-#include "Component/PrimitiveComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include <cmath>
 #include <cfloat>
 #include <algorithm>

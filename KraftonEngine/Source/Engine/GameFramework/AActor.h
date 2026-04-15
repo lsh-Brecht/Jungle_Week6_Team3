@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "Object/Object.h"
 #include "Object/ObjectFactory.h"
-#include "Component/SceneComponent.h"
+#include "Components/SceneComponent.h"
 #include "Core/TickFunction.h"
 
 class FArchive;

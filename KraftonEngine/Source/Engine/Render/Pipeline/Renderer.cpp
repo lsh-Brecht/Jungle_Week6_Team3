@@ -42,6 +42,7 @@ void FRenderer::Create(HWND hWindow)
 	FontBatcher.Create(Device.GetDevice());
 	SubUVBatcher.Create(Device.GetDevice());
 	BillboardBatcher.Create(Device.GetDevice());
+	IdPickPerObjectCB.Create(Device.GetDevice(), sizeof(FPerObjectConstants));
 
 	InitializePassRenderStates();
 	InitializePassBatchers();
@@ -84,6 +85,7 @@ void FRenderer::Release()
 	FontBatcher.Release();
 	SubUVBatcher.Release();
 	BillboardBatcher.Release();
+	IdPickPerObjectCB.Release();
 
 	for (FConstantBuffer& CB : PerObjectCBPool)
 	{
@@ -111,6 +113,10 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 	for (const auto& Entry : Bus.GetAABBEntries())
 	{
 		EditorLineBatcher.AddAABB(FBoundingBox{ Entry.AABB.Min, Entry.AABB.Max }, Entry.AABB.Color);
+	}
+	for (const auto& Entry : Bus.GetOBBEntries())
+	{
+		EditorLineBatcher.AddOBB(Entry.OBB.LocalBox, Entry.OBB.Transform, Entry.OBB.Color);
 	}
 	for (const auto& Entry : Bus.GetDebugLineEntries())
 	{
@@ -193,8 +199,8 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 					Bus.GetCameraUp(),
 					Entry.PerObject.Model.GetScale(),
 					Entry.SubUV.FrameIndex,
-					Entry.SubUV.Particle->Columns,
-					Entry.SubUV.Particle->Rows,
+					Entry.SubUV.Columns,
+					Entry.SubUV.Rows,
 					Entry.SubUV.Width,
                   Entry.SubUV.Height,
 					Entry.bSelected
@@ -300,15 +306,38 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		UpdateSceneEffectBuffer(Context, InRenderBus);
 	}
 
-	for (uint32 i = 0; i < (uint32)ERenderPass::MAX; ++i)
+	// 패스 실행 순서:
+	// - Grid/Axis가 PostProcess/Font 위를 덮지 않도록 Grid를 먼저 그린다.
+	// - SelectionMask는 PostProcess 내부에서만 실행한다.
+	const ERenderPass PassOrder[] = {
+		ERenderPass::Opaque,
+		ERenderPass::Decal,
+		ERenderPass::Translucent,
+		ERenderPass::Grid,
+		ERenderPass::SubUV,
+		ERenderPass::Billboard,
+		ERenderPass::Editor,
+		ERenderPass::GizmoOuter,
+		ERenderPass::GizmoInner,
+		ERenderPass::Font,
+		ERenderPass::PostProcess,
+		ERenderPass::OverlayFont
+	};
+
+	for (ERenderPass CurPass : PassOrder)
 	{
-		ERenderPass CurPass = static_cast<ERenderPass>(i);
-      if (CurPass == ERenderPass::SelectionMask)
+		if (CurPass == ERenderPass::SelectionMask)
 		{
 			continue;
 		}
 
-		const auto& Batcher = PassBatchers[i];
+		if (CurPass == ERenderPass::Decal && !InRenderBus.GetShowFlags().bDecal)
+		{
+			continue;
+		}
+
+		const uint32 PassIndex = static_cast<uint32>(CurPass);
+		const auto& Batcher = PassBatchers[PassIndex];
 		const bool bHasBatcher = static_cast<bool>(Batcher);
 		const bool bHasProxies = !InRenderBus.GetProxies(CurPass).empty();
 		const bool bAlwaysExecutePass = (CurPass == ERenderPass::SelectionMask || CurPass == ERenderPass::PostProcess);
@@ -322,32 +351,47 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 		ApplyPassRenderState(CurPass, Context, InRenderBus.GetViewMode());
 		if (CurPass == ERenderPass::PostProcess)
 		{
-         ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
+            ApplyPassRenderState(ERenderPass::SelectionMask, Context, InRenderBus.GetViewMode());
 			ExecuteSelectionMaskPass(InRenderBus, Context);
 			ApplyPassRenderState(ERenderPass::PostProcess, Context, InRenderBus.GetViewMode());
 
-			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
+			const bool bIsSceneDepth = (InRenderBus.GetViewMode() == EViewMode::SceneDepth);
+			if (bIsSceneDepth)
 			{
 				DrawScenenDepthVisualize(InRenderBus, Context);
 			}
 			ExecutePostProcessChain(InRenderBus, Context);
-
-			if (InRenderBus.GetViewMode() == EViewMode::SceneDepth)
-			{
-				ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
-				const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
-				if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))
-				{
-					FontBatcher.DrawBatch(ERenderPass::Font, InRenderBus, Context);
-				}
-			}
+			DrawPostProcessOverlays(InRenderBus, Context, bIsSceneDepth);
 			continue;
 		}
 
-		if (bHasBatcher)
-			PassBatchers[i].DrawBatch(CurPass, InRenderBus, Context);
+		ID3D11RenderTargetView* pCurrentRTV = nullptr;
+		ID3D11DepthStencilView* pCurrentDSV = nullptr;
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 1. 현재 바인딩된 RTV와 DSV를 가져옵니다. (가져올 때 내부적으로 Ref Count가 1 증가함)
+			Context->OMGetRenderTargets(1, &pCurrentRTV, &pCurrentDSV);
+
+			// 2. DSV(Depth) 자리에 nullptr을 꽂아서 바인딩을 끊습니다. 
+			// -> 이제 픽셀 셰이더에서 Depth SRV(t1)를 마음껏 읽을 수 있습니다!
+			Context->OMSetRenderTargets(1, &pCurrentRTV, nullptr);
+		}
+
+        if (bHasBatcher)
+			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
 		else
-			ExecutePass(InRenderBus.GetProxies(CurPass), Context);
+			ExecutePass(InRenderBus.GetProxies(CurPass), InRenderBus, Context);
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 3. 다시 원래의 DSV를 연결하여 다음 패스(Translucent 등)가 정상 작동하도록 복구합니다.
+			Context->OMSetRenderTargets(1, &pCurrentRTV, pCurrentDSV);
+
+			// 4. OMGetRenderTargets 호출로 인해 증가했던 메모리 참조 카운트(Ref Count)를 해제합니다. (메모리 누수 방지)
+			if (pCurrentRTV) pCurrentRTV->Release();
+			if (pCurrentDSV) pCurrentDSV->Release();
+		}
 	}
 }
 
@@ -370,12 +414,15 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Font] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 
-	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	// PostProcess는 ping RT를 매 단계 "완전한 새 프레임"으로 갱신해야 한다.
+	// AlphaBlend 상태면 이전 뷰포트/이전 단계의 잔상이 합성되어
+	// 멀티 뷰포트에서 selection 시 화면이 덮여 보이는 아티팩트가 발생한다.
+	S[(uint32)E::PostProcess] =		{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidNoCull,		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
-	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
-	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutsideDepthWrite, EBlendState::Opaque,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInsideDepthWrite, EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 
 }
@@ -495,17 +542,19 @@ void FRenderer::DrawPostProcessFog(const FRenderBus& Bus, ID3D11DeviceContext* C
 // ============================================================
 // 프록시 패스 실행기 — FPrimitiveSceneProxy* 순회
 // ============================================================
-void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context)
+void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, const FRenderBus& Bus, ID3D11DeviceContext* Context)
 {
 	SortProxies(Proxies);
 
 	FDrawState State;
+	ActiveDepthSRV = Bus.GetViewportDepthSRV();
 
 	{
 		SCOPE_STAT_CAT("ExecutePass::Draw", "4_ExecutePass");
 		for (const FPrimitiveSceneProxy* RawProxy : SortedProxyBuffer)
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
+			if (Proxy.Pass == ERenderPass::Decal && !ActiveDepthSRV) continue;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
 			BindShader(Proxy, Context, State);	
 			BindExtraCB(Proxy, Context);
@@ -520,6 +569,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 	}
 
 	CleanupSRV(Context, State);
+   ActiveDepthSRV = nullptr;
 }
 
 // ============================================================
@@ -623,6 +673,7 @@ bool FRenderer::BindPerObjectCB(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceC
 	if (RawCB != State.LastPerObjectCB)
 	{
 		Ctx->VSSetConstantBuffers(ECBSlot::PerObject, 1, &RawCB);
+      Ctx->PSSetConstantBuffers(ECBSlot::PerObject, 1, &RawCB);
 		State.LastPerObjectCB = RawCB;
 	}
 
@@ -674,6 +725,11 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 		Ctx->PSSetSamplers(0, 1, &Resources.DefaultSampler);
 		State.bSamplerBound = true;
 	}
+
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
+	}
 	
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
@@ -681,6 +737,7 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 	{
 		ID3D11Buffer* b4 = MaterialCB->GetBuffer();
 		Ctx->VSSetConstantBuffers(ECBSlot::Material, 1, &b4);
+        Ctx->PSSetConstantBuffers(ECBSlot::Material, 1, &b4);
 		State.bMaterialBound = true;
 	}
 
@@ -730,12 +787,18 @@ void FRenderer::DrawSingleSection(const FPrimitiveSceneProxy& Proxy, ID3D11Devic
 		State.bSamplerBound = true;
 	}
 
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
+	}
+
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
 	if (!State.bMaterialBound)
 	{
 		ID3D11Buffer* b4 = MaterialCB->GetBuffer();
 		Ctx->VSSetConstantBuffers(ECBSlot::Material, 1, &b4);
+		Ctx->PSSetConstantBuffers(ECBSlot::Material, 1, &b4);
 		State.bMaterialBound = true;
 	}
 
@@ -785,6 +848,9 @@ void FRenderer::CleanupSRV(ID3D11DeviceContext* Ctx, const FDrawState& State)
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 		Ctx->PSSetShaderResources(0, 1, &nullSRV);
 	}
+
+	ID3D11ShaderResourceView* nullDepthSRV = nullptr;
+	Ctx->PSSetShaderResources(1, 1, &nullDepthSRV);
 }
 
 void FRenderer::ApplyPassRenderState(ERenderPass Pass, ID3D11DeviceContext* Context, EViewMode CurViewMode)
@@ -815,6 +881,14 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
 	const float ClearMask[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	Context->ClearRenderTargetView(OutlineMaskRTV, ClearMask);
+	if (!Bus.GetShowFlags().bSelectionOutline)
+	{
+		if (ViewportRTV)
+		{
+			Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
+		}
+		return;
+	}
 
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
 	if (MaskProxies.empty())
@@ -826,9 +900,9 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 		return;
 	}
 
-	Context->OMSetRenderTargets(1, &OutlineMaskRTV, DSV);
+	Context->OMSetRenderTargets(1, &OutlineMaskRTV, nullptr);
 
-	ExecutePass(MaskProxies, Context);
+    ExecutePass(MaskProxies, Bus, Context);
 
 	if (FontBatcher.GetSelectedQuadCount() > 0)
 	{
@@ -872,7 +946,7 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 	Context->OMSetRenderTargets(0, nullptr, nullptr);
 	bool bExecutedAnyPost = false;
 
-	//	기본 체인 순서: Decal -> Fog -> Outline -> FXAA
+	//	기본 체인 순서: Fog -> Outline -> FXAA
 	const EPostEffectType Order[] = {
 		//EPostEffectType::Decal,
 		EPostEffectType::Fog,
@@ -886,7 +960,9 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 	for (EPostEffectType Type : Order)
 	{
 		const uint32 Idx = static_cast<uint32>(Type);
-		if (ViewMode == EViewMode::SceneDepth && Type != EPostEffectType::Outline)
+		// SceneDepth 모드에서는 Outline만 허용하고 나머지(Fog, FXAA)는 건너뜀
+		const bool bSkipForSceneDepth = (ViewMode == EViewMode::SceneDepth) && (Type != EPostEffectType::Outline);
+		if (bSkipForSceneDepth)
 		{
 			continue;
 		}
@@ -1031,27 +1107,28 @@ void FRenderer::DrawPostProcessOutline(const FRenderBus& Bus, ID3D11DeviceContex
 		return;
 	}
 
-	// SelectionMask 큐가 비어 있으면 복사만 수행
-	if (Bus.GetProxies(ERenderPass::SelectionMask).empty())
-	{
-		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
-		return;
-	}
-
 	Context->OMSetRenderTargets(1, &OutputRTV, nullptr);
 
 	ID3D11ShaderResourceView* SRVs[2] = { SceneColorSRV, OutlineMaskSRV };
 	Context->PSSetShaderResources(0, 2, SRVs);
 
 	FShader* PPShader = FShaderManager::Get().GetShader(EShaderType::OutlinePostProcess);
-	if (PPShader) PPShader->Bind(Context);
+	if (!PPShader)
+	{
+		BlitSRVToRTV(SceneColorSRV, OutputRTV, Context);
+		ID3D11ShaderResourceView* NullSRV[2] = { nullptr, nullptr };
+		Context->PSSetShaderResources(0, 2, NullSRV);
+		return;
+	}
+	PPShader->Bind(Context);
 
 	FConstantBuffer* OutlineCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess, sizeof(FOutlinePostProcessConstants));
 	FOutlinePostProcessConstants PPConstants;
 	PPConstants.OutlineColor = FVector4(1.0f, 0.5f, 0.0f, 1.0f);
 	PPConstants.OutlineThickness = 7.0f;
 	PPConstants.OutlineFalloff = 1.6f;
-	PPConstants.bOutputLumaToAlpha = (Bus.GetViewMode() == EViewMode::SceneDepth) ? 0.0f : 1.0f;
+    const bool bUseFXAAAfterOutline = IsPostEffectEnabled(EPostEffectType::FXAA) && (Bus.GetViewMode() != EViewMode::SceneDepth);
+	PPConstants.bOutputLumaToAlpha = bUseFXAAAfterOutline ? 1.0f : 0.0f;
 	PPConstants.OutputAlpha = 1.0f;
 	OutlineCB->Update(Context, &PPConstants, sizeof(PPConstants));
 	ID3D11Buffer* cb = OutlineCB->GetBuffer();
@@ -1098,7 +1175,7 @@ void FRenderer::DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* 
 	}
 	FXAAShader->Bind(Context);
 
-	FFXAAConstants FXAAData = {};
+	FFXAAConstants FXAAData = FXAAConstants;
 	FXAAData.TexelSize = FVector2(1.0f / Width, 1.0f / Height);
 
 	FConstantBuffer* FXAACB = FConstantBufferPool::Get().GetBuffer(ECBSlot::PostProcess_FXAA, sizeof(FFXAAConstants));
@@ -1141,6 +1218,216 @@ void FRenderer::DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceCont
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 	Context->PSSetShaderResources(0, 1, &nullSRV);
 	Context->OMSetRenderTargets(1, &RTV, DSV);
+}
+
+void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context, FShader* PrimitiveShader, FShader* BillboardShader, FShader* StaticMeshShader)
+{
+	if (!Context || !PrimitiveShader || !BillboardShader || !StaticMeshShader || !IdPickPerObjectCB.GetBuffer())
+	{
+		return;
+	}
+	FConstantBuffer* PickingCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Picking, sizeof(FPickingConstants));
+	if (!PickingCB || !PickingCB->GetBuffer())
+	{
+		return;
+	}
+
+	ID3D11SamplerState* Sampler = Resources.DefaultSampler;
+	Context->PSSetSamplers(0, 1, &Sampler);
+
+	FMeshBuffer* LastMeshBuffer = nullptr;
+	FShader* LastShader = nullptr;
+	ID3D11ShaderResourceView* LastSRV = reinterpret_cast<ID3D11ShaderResourceView*>(~0ull);
+	for (const FPrimitiveSceneProxy* Proxy : Proxies)
+	{
+		if (!Proxy || !Proxy->Owner || !Proxy->MeshBuffer || !Proxy->MeshBuffer->IsValid() || Proxy->ProxyId == UINT32_MAX)
+		{
+			continue;
+		}
+		if (!Proxy->bVisible)
+		{
+			continue;
+		}
+
+		const bool bIsStaticMesh = (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::StaticMesh));
+		const bool bIsBillboard = (Proxy->Pass == ERenderPass::Billboard);
+		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsBillboard;
+		FShader* IdShader = PrimitiveShader;
+		if (bIsStaticMesh)
+		{
+			IdShader = StaticMeshShader;
+		}
+		else if (bIsBillboard)
+		{
+			IdShader = BillboardShader;
+		}
+		if (IdShader != LastShader)
+		{
+			IdShader->Bind(Context);
+			LastShader = IdShader;
+		}
+
+		const FPerObjectConstants PickCB = Proxy->PerObjectConstants;
+		IdPickPerObjectCB.Update(Context, &PickCB, sizeof(PickCB));
+		ID3D11Buffer* CB = IdPickPerObjectCB.GetBuffer();
+		Context->VSSetConstantBuffers(ECBSlot::PerObject, 1, &CB);
+		Context->PSSetConstantBuffers(ECBSlot::PerObject, 1, &CB);
+
+		FPickingConstants PickingData = {};
+		PickingData.PickingId = Proxy->ProxyId + 1u;
+		PickingCB->Update(Context, &PickingData, sizeof(PickingData));
+		ID3D11Buffer* b7 = PickingCB->GetBuffer();
+		Context->VSSetConstantBuffers(ECBSlot::Picking, 1, &b7);
+		Context->PSSetConstantBuffers(ECBSlot::Picking, 1, &b7);
+
+		if (Proxy->MeshBuffer != LastMeshBuffer)
+		{
+			uint32 Offset = 0;
+			ID3D11Buffer* VB = Proxy->MeshBuffer->GetVertexBuffer().GetBuffer();
+			if (!VB)
+			{
+				continue;
+			}
+			const uint32 Stride = Proxy->MeshBuffer->GetVertexBuffer().GetStride();
+			if (Stride == 0)
+			{
+				continue;
+			}
+			Context->IASetVertexBuffers(0, 1, &VB, &Stride, &Offset);
+			ID3D11Buffer* IB = Proxy->MeshBuffer->GetIndexBuffer().GetBuffer();
+			if (IB)
+			{
+				Context->IASetIndexBuffer(IB, DXGI_FORMAT_R32_UINT, 0);
+			}
+			LastMeshBuffer = Proxy->MeshBuffer;
+		}
+
+		if (!Proxy->SectionDraws.empty() && Proxy->MeshBuffer->GetIndexBuffer().GetBuffer())
+		{
+			for (const FMeshSectionDraw& Section : Proxy->SectionDraws)
+			{
+				if (Section.IndexCount == 0)
+				{
+					continue;
+				}
+
+				if (bUseTextureAlphaPick && Section.DiffuseSRV != LastSRV)
+				{
+					ID3D11ShaderResourceView* SRV = Section.DiffuseSRV;
+					Context->PSSetShaderResources(0, 1, &SRV);
+					LastSRV = SRV;
+				}
+
+				Context->DrawIndexed(Section.IndexCount, Section.FirstIndex, 0);
+			}
+			continue;
+		}
+
+		if (bUseTextureAlphaPick && LastSRV != nullptr)
+		{
+			ID3D11ShaderResourceView* NullSRV = nullptr;
+			Context->PSSetShaderResources(0, 1, &NullSRV);
+			LastSRV = nullptr;
+		}
+
+		const uint32 IndexCount = Proxy->MeshBuffer->GetIndexBuffer().GetIndexCount();
+		if (IndexCount > 0)
+		{
+			Context->DrawIndexed(IndexCount, 0, 0);
+		}
+		else
+		{
+			Context->Draw(Proxy->MeshBuffer->GetVertexBuffer().GetVertexCount(), 0);
+		}
+	}
+
+	if (LastSRV != nullptr)
+	{
+		ID3D11ShaderResourceView* NullSRV = nullptr;
+		Context->PSSetShaderResources(0, 1, &NullSRV);
+	}
+}
+
+void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView* IdPickRTV, ID3D11DepthStencilView* DSV)
+{
+	if (!IdPickRTV || !DSV)
+	{
+		return;
+	}
+
+	ID3D11DeviceContext* Context = Device.GetDeviceContext();
+	if (!Context)
+	{
+		return;
+	}
+
+	const uint32 ClearValue[4] = { 0u, 0u, 0u, 0u };
+	Context->ClearRenderTargetView(IdPickRTV, reinterpret_cast<const float*>(ClearValue));
+	Context->OMSetRenderTargets(1, &IdPickRTV, DSV);
+
+	Device.SetDepthStencilState(EDepthStencilState::DepthReadOnly);
+	Device.SetBlendState(EBlendState::Opaque);
+	Device.SetRasterizerState(ERasterizerState::SolidBackCull);
+	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	FShader* PrimitiveShader = FShaderManager::Get().GetShader(EShaderType::IDPickPrimitive);
+	FShader* BillboardShader = FShaderManager::Get().GetShader(EShaderType::IDPickBillboard);
+	FShader* StaticMeshShader = FShaderManager::Get().GetShader(EShaderType::IDPickStaticMesh);
+	if (!PrimitiveShader || !BillboardShader || !StaticMeshShader)
+	{
+		return;
+	}
+
+	const ERenderPass Passes[] =
+	{
+		ERenderPass::Opaque,
+		ERenderPass::Decal,
+		ERenderPass::Translucent,
+		ERenderPass::Billboard
+	};
+	for (ERenderPass Pass : Passes)
+	{
+		ExecuteIdPickPass(Bus.GetProxies(Pass), Context, PrimitiveShader, BillboardShader, StaticMeshShader);
+	}
+}
+
+// PostProcess 이후 fog 영향을 받지 않아야 하는 에디터 오버레이를 렌더링한다.
+void FRenderer::DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context, bool bDrawFontOverlay)
+{
+	if (InRenderBus.GetShowFlags().bGizmo)
+	{
+		ID3D11DepthStencilView* DSV = InRenderBus.GetViewportDSV();
+		if (DSV)
+		{
+			Context->ClearDepthStencilView(DSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
+		}
+
+		const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
+		if (!GizmoOuterProxies.empty())
+		{
+			ApplyPassRenderState(ERenderPass::GizmoOuter, Context, InRenderBus.GetViewMode());
+			ExecutePass(GizmoOuterProxies, InRenderBus, Context);
+		}
+
+		const auto& GizmoInnerProxies = InRenderBus.GetProxies(ERenderPass::GizmoInner);
+		if (!GizmoInnerProxies.empty())
+		{
+			ApplyPassRenderState(ERenderPass::GizmoInner, Context, InRenderBus.GetViewMode());
+			ExecutePass(GizmoInnerProxies, InRenderBus, Context);
+		}
+	}
+
+	if (!bDrawFontOverlay)
+	{
+		return;
+	}
+
+	ApplyPassRenderState(ERenderPass::Font, Context, InRenderBus.GetViewMode());
+	const auto& FontBatcher = PassBatchers[(uint32)ERenderPass::Font];
+	if (FontBatcher && (!FontBatcher.IsEmpty || !FontBatcher.IsEmpty()))
+	{
+		FontBatcher.DrawBatch(ERenderPass::Font, InRenderBus, Context);
+	}
 }
 
 //	Present the rendered frame to the screen. 반드시 Render 이후에 호출되어야 함.

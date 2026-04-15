@@ -6,7 +6,7 @@
 #include "Object/FName.h"
 
 // 리소스를 관리하는 싱글턴.
-// Resource.ini에서 리소스 경로/그리드 정보를 읽고, GPU 리소스를 로드/캐싱합니다.
+// 기본 리소스와 에셋 디렉터리의 텍스처를 등록하고, GPU 리소스를 로드/캐싱합니다.
 // 컴포넌트는 소유하지 않고 포인터로 공유 데이터를 참조합니다.
 
 struct ID3D11Device;
@@ -16,8 +16,8 @@ class FResourceManager : public TSingleton<FResourceManager>
 	friend class TSingleton<FResourceManager>;
 
 public:
-	// Resource.ini에서 경로/그리드 정보 로드 후 GPU 리소스 생성
-	void LoadFromFile(const FString& Path, ID3D11Device* InDevice);
+	// 코드 기본값과 에셋 디렉터리 스캔으로 리소스 등록 후 GPU 리소스 생성
+	void LoadDefaultResources(ID3D11Device* InDevice);
 
 	// GPU 리소스 로드 (Device 필요)
 	bool LoadGPUResources(ID3D11Device* Device);
