@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Core/Singleton.h"
@@ -100,6 +100,21 @@ struct FDrawCallStats
 	static void Reset() { Count = 0; }
 	static void Increment() { ++Count; }
 	static uint32 Get() { return Count; }
+};
+
+struct FDecalStats
+{
+	static uint32 DecalActorCount;
+	static uint32 RenderedDecalCount;
+	static uint32 AffectedObjectCount;
+
+	static void SetDecalActorCount(uint32 InCount) { DecalActorCount = InCount; }
+	static void SetRenderedDecalCount(uint32 InCount) { RenderedDecalCount = InCount; }
+	static void SetAffectedObjectCount(uint32 InCount) { AffectedObjectCount = InCount; }
+
+	static uint32 GetDecalActorCount() { return DecalActorCount; }
+	static uint32 GetRenderedDecalCount() { return RenderedDecalCount; }
+	static uint32 GetAffectedObjectCount() { return AffectedObjectCount; }
 };
 
 // --- LOD Distribution Counter ---

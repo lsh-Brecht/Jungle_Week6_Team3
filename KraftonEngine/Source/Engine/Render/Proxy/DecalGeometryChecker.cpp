@@ -6,6 +6,7 @@
 #include "Mesh/StaticMesh.h"
 #include "Mesh/StaticMeshAsset.h"
 #include "GameFramework/World.h"
+#include "Profiling/Stats.h"
 
 #include <cmath>
 #include <cfloat>
@@ -14,8 +15,13 @@
 // 진입점
 // ============================================================
 
-bool FDecalGeometryChecker::HasOverlappingGeometry(UDecalComponent* Decal, const UWorld& World)
+bool FDecalGeometryChecker::HasOverlappingGeometry(UDecalComponent* Decal, const UWorld& World, int32* OutOverlappingObjectCount)
 {
+  if (OutOverlappingObjectCount)
+	{
+		*OutOverlappingObjectCount = 0;
+	}
+
 	if (!Decal || !Decal->IsVisible())
 	{
 		return false;
@@ -55,25 +61,111 @@ bool FDecalGeometryChecker::HasOverlappingGeometry(UDecalComponent* Decal, const
 
 	// ---- Stage 1: Broad Phase ----
 	TArray<UStaticMeshComponent*> Candidates;
-	GatherBroadPhaseCandidates(DecalWorldAABB, WorldBVH, Candidates);
+	{
+		SCOPE_STAT_CAT("Decal.BroadPhase", "3_Collect");
+		GatherBroadPhaseCandidates(DecalWorldAABB, WorldBVH, Candidates);
+	}
 	if (Candidates.empty())
 	{
 		return false;
 	}
 
-	// ---- Stage 2: Narrow Phase (BVH 삼각형 수집) ----
-	TArray<FVector> WorldTriVerts; // [V0,V1,V2, V0,V1,V2, ...]
-	GatherBVHFilteredTriangles(Candidates, DecalWorldAABB, WorldTriVerts);
-	if (WorldTriVerts.empty())
+	if (OutOverlappingObjectCount)
+	{
+     SCOPE_STAT_CAT("Decal.NarrowPhase", "3_Collect");
+
+		int32 OverlapCount = 0;
+		for (UStaticMeshComponent* Candidate : Candidates)
+		{
+			if (HasOverlapWithCandidate(Candidate, DecalWorldAABB, InvDecalModel))
+			{
+				++OverlapCount;
+			}
+		}
+
+		*OutOverlappingObjectCount = OverlapCount;
+		return OverlapCount > 0;
+	}
+
+	{
+		SCOPE_STAT_CAT("Decal.NarrowPhase", "3_Collect");
+
+		// ---- Stage 2: Narrow Phase (BVH 삼각형 수집) ----
+		TArray<FVector> WorldTriVerts; // [V0,V1,V2, V0,V1,V2, ...]
+		GatherBVHFilteredTriangles(Candidates, DecalWorldAABB, WorldTriVerts);
+		if (WorldTriVerts.empty())
+		{
+			return false;
+		}
+
+		// ---- Stage 3: Decal 로컬 공간 변환 ----
+		TArray<FVector> LocalTriVerts;
+		TransformTrianglesToDecalLocal(WorldTriVerts, InvDecalModel, LocalTriVerts);
+
+		// ---- Stage 4: Coarse AABB 필터 ----
+		TArray<int32> CoarseTriIndices;
+		GatherCoarseOverlapTriangles(LocalTriVerts, CoarseTriIndices);
+		if (CoarseTriIndices.empty())
+		{
+			return false;
+		}
+
+		// ---- Stage 5: SAT 정밀 판별 ----
+		return GatherSATOverlapTriangles(LocalTriVerts, CoarseTriIndices);
+	}
+}
+
+bool FDecalGeometryChecker::HasOverlapWithCandidate(
+	UStaticMeshComponent* Candidate,
+	const FBoundingBox& DecalWorldAABB,
+	const FMatrix& InvDecalModel)
+{
+	if (!Candidate)
 	{
 		return false;
 	}
 
-	// ---- Stage 3: Decal 로컬 공간 변환 ----
-	TArray<FVector> LocalTriVerts;
-	TransformTrianglesToDecalLocal(WorldTriVerts, InvDecalModel, LocalTriVerts);
+	UStaticMesh* StaticMesh = Candidate->GetStaticMesh();
+	if (!StaticMesh)
+	{
+		return false;
+	}
 
-	// ---- Stage 4: Coarse AABB 필터 ----
+	StaticMesh->EnsureMeshTrianglePickingBVHBuilt();
+
+	const FStaticMesh* MeshAsset = StaticMesh->GetStaticMeshAsset();
+	if (!MeshAsset || MeshAsset->Vertices.empty())
+	{
+		return false;
+	}
+
+	const FMatrix& InvMeshWorld = Candidate->GetWorldInverseMatrix();
+
+	FVector WorldCorners[8];
+	DecalWorldAABB.GetCorners(WorldCorners);
+
+	FBoundingBox MeshLocalBox;
+	for (const FVector& Corner : WorldCorners)
+	{
+		MeshLocalBox.Expand(InvMeshWorld.TransformPositionWithW(Corner));
+	}
+
+	TArray<FVector> MeshLocalTriVerts;
+	StaticMesh->QueryMeshTrianglesInBox(MeshLocalBox, MeshLocalTriVerts);
+	if (MeshLocalTriVerts.empty())
+	{
+		return false;
+	}
+
+	const FMatrix& MeshWorld = Candidate->GetWorldMatrix();
+	TArray<FVector> LocalTriVerts;
+	LocalTriVerts.reserve(MeshLocalTriVerts.size());
+	for (const FVector& V : MeshLocalTriVerts)
+	{
+		const FVector WorldV = MeshWorld.TransformPositionWithW(V);
+		LocalTriVerts.push_back(InvDecalModel.TransformPositionWithW(WorldV));
+	}
+
 	TArray<int32> CoarseTriIndices;
 	GatherCoarseOverlapTriangles(LocalTriVerts, CoarseTriIndices);
 	if (CoarseTriIndices.empty())
@@ -81,7 +173,6 @@ bool FDecalGeometryChecker::HasOverlappingGeometry(UDecalComponent* Decal, const
 		return false;
 	}
 
-	// ---- Stage 5: SAT 정밀 판별 ----
 	return GatherSATOverlapTriangles(LocalTriVerts, CoarseTriIndices);
 }
 

@@ -16,6 +16,7 @@ public:
 
 	// 매 프레임 카메라 기준 OBB-Frustum 컬링 수행 (bPerViewportUpdate = true)
 	void UpdatePerViewport(const FRenderBus& Bus) override;
+	uint32 GetLastOverlappingObjectCount() const { return LastOverlappingObjectCount; }
 
 private:
     UDecalComponent* GetDecalComponent() const;
@@ -24,6 +25,7 @@ private:
 	// 지오메트리 교차 여부 (실제 데칼 프로젝션 렌더 여부)
 	// bVisible과 분리하여 선택 시 OBB 박스는 항상 그리되, 프로젝션은 교차할 때만 수행
 	bool bDecalProjectionVisible = false;
+	uint32 LastOverlappingObjectCount = 0;
 };
 
 class FDecalArrowSceneProxy : public FPrimitiveSceneProxy
