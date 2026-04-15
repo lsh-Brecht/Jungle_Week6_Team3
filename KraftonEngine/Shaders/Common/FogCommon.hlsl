@@ -1,3 +1,12 @@
+#ifndef CONSTANT_BUFFERS_HLSL
+struct FogUniformParameters
+{
+    float4 ExponentialFogParameters;
+    float4 ExponentialFogColorParameter;
+    float4 ExponentialFogParameters3;
+};
+#endif
+
 static const float FOG_DENSITY_SCALE = 0.1f;
 static const float FOG_FAR_DEPTH_DISTANCE = 1000.0f;
 
