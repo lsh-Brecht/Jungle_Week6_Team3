@@ -159,8 +159,6 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		if (EffectiveShowFlags.bOctree)
 			Collector.CollectOctreeDebug(World->GetOctree(), Bus);
 
-		if (VC == Editor->GetActiveViewport())
-			Collector.CollectOverlayText(Editor->GetOverlayStatSystem(), *Editor, Bus);
 	}
 
 	// 3. Batcher 준비
@@ -174,6 +172,8 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		SCOPE_STAT_CAT("Renderer.Render", "4_ExecutePass");
 		Renderer.Render(Bus);
 	}
+
+	Renderer.RenderIdPickBuffer(Bus, VP->GetIdPickRTV(), VP->GetDSV());
 
 	// 5. GPU Occlusion — DSV 언바인딩 후 Hi-Z 생성 + Occlusion Test 디스패치
 	if (bEnableGPUOcclusion && GPUOcclusion.IsInitialized())

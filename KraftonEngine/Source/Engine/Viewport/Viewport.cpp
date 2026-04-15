@@ -71,6 +71,38 @@ void FViewport::BeginRender(ID3D11DeviceContext* Ctx, const float ClearColor[4])
 	Ctx->RSSetViewports(1, &VPRect);
 }
 
+bool FViewport::ReadIdPickAt(uint32 InX, uint32 InY, ID3D11DeviceContext* Ctx, uint32& OutId) const
+{
+	OutId = 0;
+	if (!Ctx || !IdPickTexture || !IdPickReadbackTexture || Width == 0 || Height == 0)
+	{
+		return false;
+	}
+
+	const uint32 SafeX = (InX < Width) ? InX : (Width - 1);
+	const uint32 SafeY = (InY < Height) ? InY : (Height - 1);
+
+	D3D11_BOX SrcBox = {};
+	SrcBox.left = SafeX;
+	SrcBox.right = SafeX + 1;
+	SrcBox.top = SafeY;
+	SrcBox.bottom = SafeY + 1;
+	SrcBox.front = 0;
+	SrcBox.back = 1;
+	Ctx->CopySubresourceRegion(IdPickReadbackTexture, 0, 0, 0, 0, IdPickTexture, 0, &SrcBox);
+
+	D3D11_MAPPED_SUBRESOURCE Mapped = {};
+	const HRESULT Hr = Ctx->Map(IdPickReadbackTexture, 0, D3D11_MAP_READ, 0, &Mapped);
+	if (FAILED(Hr) || !Mapped.pData)
+	{
+		return false;
+	}
+
+	OutId = *reinterpret_cast<const uint32*>(Mapped.pData);
+	Ctx->Unmap(IdPickReadbackTexture, 0);
+	return true;
+}
+
 bool FViewport::CreateResources()
 {
 	if (!Device || Width == 0 || Height == 0) return false;
@@ -93,6 +125,38 @@ bool FViewport::CreateResources()
 	if (FAILED(hr)) return false;
 
 	hr = Device->CreateShaderResourceView(RTTexture, nullptr, &SRV);
+	if (FAILED(hr)) return false;
+
+	D3D11_TEXTURE2D_DESC IdPickDesc = {};
+	IdPickDesc.Width = Width;
+	IdPickDesc.Height = Height;
+	IdPickDesc.MipLevels = 1;
+	IdPickDesc.ArraySize = 1;
+	IdPickDesc.Format = DXGI_FORMAT_R32_UINT;
+	IdPickDesc.SampleDesc.Count = 1;
+	IdPickDesc.Usage = D3D11_USAGE_DEFAULT;
+	IdPickDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+	hr = Device->CreateTexture2D(&IdPickDesc, nullptr, &IdPickTexture);
+	if (FAILED(hr)) return false;
+
+	D3D11_RENDER_TARGET_VIEW_DESC IdRTVDesc = {};
+	IdRTVDesc.Format = DXGI_FORMAT_R32_UINT;
+	IdRTVDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	IdRTVDesc.Texture2D.MipSlice = 0;
+	hr = Device->CreateRenderTargetView(IdPickTexture, &IdRTVDesc, &IdPickRTV);
+	if (FAILED(hr)) return false;
+
+	D3D11_TEXTURE2D_DESC IdReadbackDesc = {};
+	IdReadbackDesc.Width = 1;
+	IdReadbackDesc.Height = 1;
+	IdReadbackDesc.MipLevels = 1;
+	IdReadbackDesc.ArraySize = 1;
+	IdReadbackDesc.Format = DXGI_FORMAT_R32_UINT;
+	IdReadbackDesc.SampleDesc.Count = 1;
+	IdReadbackDesc.Usage = D3D11_USAGE_STAGING;
+	IdReadbackDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	hr = Device->CreateTexture2D(&IdReadbackDesc, nullptr, &IdPickReadbackTexture);
 	if (FAILED(hr)) return false;
 
 	// ── 뎁스/스텐실 (TYPELESS → DSV + StencilSRV) ──
@@ -151,6 +215,9 @@ bool FViewport::CreateResources()
 
 void FViewport::ReleaseResources()
 {
+	if (IdPickReadbackTexture) { IdPickReadbackTexture->Release(); IdPickReadbackTexture = nullptr; }
+	if (IdPickRTV) { IdPickRTV->Release(); IdPickRTV = nullptr; }
+	if (IdPickTexture) { IdPickTexture->Release(); IdPickTexture = nullptr; }
 	if (StencilSRV) { StencilSRV->Release(); StencilSRV = nullptr; }
 	if (DepthSRV) { DepthSRV->Release(); DepthSRV = nullptr; }
 	if (DSV) { DSV->Release(); DSV = nullptr; }

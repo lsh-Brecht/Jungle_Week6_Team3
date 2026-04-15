@@ -34,6 +34,7 @@ private:
 	void RenderDockSpace();
 	void RenderEditorDebugPanel();
 	void RenderShortcutOverlay();
+	void RenderStatOverlay();
 	void RenderFooterOverlay(float DeltaTime);
 	void RenderConsoleDrawer(float DeltaTime);
 #if STATS

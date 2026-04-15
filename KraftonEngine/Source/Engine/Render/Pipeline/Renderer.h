@@ -75,6 +75,7 @@ public:
 	void RegisterPostEffect(EPostEffectType Type, FPostEffectCallback Callback);
 	void SetPostEffectEnabled(EPostEffectType Type, bool bEnabled);
 	bool IsPostEffectEnabled(EPostEffectType Type) const;
+	void RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView* IdPickRTV, ID3D11DepthStencilView* DSV);
 	void SetFXAAConstants(const FFXAAConstants& InConstants) { FXAAConstants = InConstants; }
 	const FFXAAConstants& GetFXAAConstants() const { return FXAAConstants; }
 
@@ -132,6 +133,7 @@ private:
 	void DrawPostProcessFXAA(const FRenderBus& Bus, ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SceneColorSRV, ID3D11RenderTargetView* OutputRTV);
 	
 	void DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context);
+	void ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context, FShader* PrimitiveShader, FShader* StaticMeshShader);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 
@@ -157,6 +159,7 @@ private:
 	TArray<FSubUVEntry> SortedSubUVBuffer;
 	TArray<FBillboardEntry> SortedBillboardBuffer;
 	TArray<FConstantBuffer> PerObjectCBPool;
+	FConstantBuffer IdPickPerObjectCB;
 	ID3D11ShaderResourceView* ActiveDepthSRV = nullptr;
 
 	FPassRenderState    PassRenderStates[(uint32)ERenderPass::MAX];
