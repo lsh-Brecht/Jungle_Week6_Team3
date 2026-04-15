@@ -13,6 +13,7 @@
 #include "GameFramework/AActor.h"
 #include "GameFramework/StaticMeshActor.h"
 #include "GameFramework/DecalActor.h"
+#include "GameFramework/SpotLightActor.h"
 #include "Viewport/GameViewportClient.h"
 #include "Viewport/Viewport.h"
 #include "Platform/Paths.h"
@@ -109,6 +110,7 @@ bool TryComputeSpawnLocationFromViewportPoint(FLevelEditorViewportClient* InView
 constexpr const char* GPlaceableIdCube = "basic_shape_cube";
 constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
 constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
+constexpr const char* GPlaceableIdSpotLight = "basic_actor_spotlight";
 
 bool SpawnPlacedActors(
 	UWorld* InWorld,
@@ -183,9 +185,9 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 		{
 			Settings.FXAASearchSteps = 1;
 		}
-		if (Settings.FXAASearchSteps > 20)
+		if (Settings.FXAASearchSteps > 100)
 		{
-			Settings.FXAASearchSteps = 20;
+			Settings.FXAASearchSteps = 100;
 		}
 
 		FFXAAConstants FXAA = {};
@@ -1068,6 +1070,26 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 			return true;
 		}
 		});
+
+	RegisterPlaceableActor({
+	GPlaceableIdSpotLight,
+	"SpotLight",
+	[](UWorld* World) -> AActor*
+	{
+		// ASpotLightActor 클래스가 구현되어 있다고 가정합니다.
+		return World ? static_cast<AActor*>(World->SpawnActor<ASpotLightActor>()) : nullptr;
+	},
+	[](AActor* Actor) -> bool
+	{
+		ASpotLightActor* SpotLightActor = Cast<ASpotLightActor>(Actor);
+		if (!SpotLightActor)
+		{
+			return false;
+		}
+
+		return true;
+	}
+	});
 }
 
 bool UEditorEngine::PlaceActor(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InCount)

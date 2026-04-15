@@ -52,5 +52,5 @@ private:
 	float FogCutoffDistance = 0.0f;	// 이 거리 너머로는 안개 미적용
 	float FogMaxOpacity = 1.0f;		// 최대 불투명도
 
-	FLinearColor FogInscatteringColor = FLinearColor(0.8f, 0.8f, 0.9f, 1.0f);
+	FLinearColor FogInscatteringColor = FLinearColor(0.447f, 0.537f, 0.647f, 1.0f);
 };

@@ -1,7 +1,7 @@
 ﻿#include "Components/DecalComponent.h"
-#include "Components/DecalComponent.h"
 
 #include <cstring>
+#include <algorithm>
 
 #include "Collision/RayUtils.h"
 #include "Mesh/ObjManager.h"
@@ -41,6 +41,10 @@ namespace
 
 UDecalComponent::UDecalComponent()
 {
+	bTickEnable = true;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
+   OriginalAlpha = DecalColor.A;
 }
 
 float UDecalComponent::GetFadeStartDelay() const { return FadeStartDelay; }
@@ -50,20 +54,54 @@ float UDecalComponent::GetFadeInDuration() const { return FadeInDuration; }
 
 void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
 {
-    FadeStartDelay = StartDelay;
-    FadeDuration = Duration;
-    bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
+	FadeStartDelay = StartDelay;
+	FadeDuration = Duration;
+	bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
+
+  bIsFadeInActive = false;
+	FadeOutTimeElapsed = 0.0f;
+	bIsFadeOutActive = true;
+   bPendingFadeOutAfterFadeIn = false;
+	OriginalAlpha = DecalColor.A;
+   SetVisibility(true);
+	SetComponentTickEnabled(true);
 }
 
 void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 {
-    FadeInStartDelay = StartDelay;
-    FadeInDuration = Duration;
+	FadeInStartDelay = StartDelay;
+	FadeInDuration = Duration;
+
+   bIsFadeOutActive = false;
+	FadeInTimeElapsed = 0.0f;
+	bIsFadeInActive = true;
+
+   // 목표 알파(OriginalAlpha)는 기존 값을 유지하고, 시작 시점에는 0(투명)으로 설정
+	if (OriginalAlpha <= 0.0f)
+	{
+		OriginalAlpha = (DecalColor.A > 0.0f) ? DecalColor.A : 1.0f;
+	}
+	DecalColor.A = 0.0f;
+	SetVisibility(true);
+	SetComponentTickEnabled(true);
+
+	// 첫 프레임부터 즉시 렌더 스레드에 반영되도록Dirty 마킹
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
+void UDecalComponent::RestartFadePreviewSequence()
+{
+	bPendingFadeOutAfterFadeIn = true;
+	SetFadeIn(FadeInStartDelay, FadeInDuration);
 }
 
 void UDecalComponent::SetDecalColor(const FLinearColor& Color)
 {
     DecalColor = Color;
+  if (!bIsFadeInActive && !bIsFadeOutActive)
+	{
+		OriginalAlpha = Color.A;
+	}
     MarkProxyDirty(EDirtyFlag::Transform);
 }
 
@@ -299,12 +337,39 @@ void UDecalComponent::PostDuplicate()
     MarkRenderStateDirty();
 }
 
+void UDecalComponent::BeginPlay()
+{
+	UPrimitiveComponent::BeginPlay();
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig && bHasFadeOutConfig)
+	{
+		RestartFadePreviewSequence();
+	}
+	else if (bHasFadeInConfig)
+	{
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
+}
+
 void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
 {
     UPrimitiveComponent::GetEditableProperties(OutProps);
+	OutProps.push_back({ "Decal Material", EPropertyType::MaterialSlot, &DecalMaterialSlot });
+	OutProps.push_back({ "Fade Start Delay", EPropertyType::Float, &FadeStartDelay });
+	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
+	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
+	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
+	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
     OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
     OutProps.push_back({ "Decal Color", EPropertyType::Vec4, &DecalColor });
-    OutProps.push_back({ "Decal Material", EPropertyType::MaterialSlot, &DecalMaterialSlot });
+    
 }
 
 void UDecalComponent::PostEditProperty(const char* PropertyName)
@@ -335,5 +400,92 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 			SetDecalMaterial(FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path));
 		}
     }
+	else if (std::strcmp(PropertyName, "Fade Start Delay") == 0
+		|| std::strcmp(PropertyName, "Fade Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Start Delay") == 0)
+	{
+       if (Owner && Owner->HasActorBegunPlay())
+		{
+			RestartFadePreviewSequence();
+		}
+	}
+
 }
 
+void UDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+{
+	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	bool bColorChanged = false;
+
+	// 1. 페이드 인 (서서히 나타남)
+	if (bIsFadeInActive)
+	{
+		FadeInTimeElapsed += DeltaTime;
+
+		// 시작 지연 시간이 지났을 때부터 알파값 증가
+		if (FadeInTimeElapsed >= FadeInStartDelay)
+		{
+			if (FadeInDuration > 0.0f)
+			{
+				float Progress = (FadeInTimeElapsed - FadeInStartDelay) / FadeInDuration;
+				DecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
+			}
+			else
+			{
+				DecalColor.A = OriginalAlpha;
+			}
+
+			bColorChanged = true;
+
+			// 완료 체크
+			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
+			{
+				bIsFadeInActive = false;
+               if (bPendingFadeOutAfterFadeIn)
+				{
+					SetFadeOut(FadeStartDelay, FadeDuration, false);
+				}
+			}
+		}
+	}
+
+	// 2. 페이드 아웃 (서서히 사라짐)
+	if (bIsFadeOutActive)
+	{
+		FadeOutTimeElapsed += DeltaTime;
+
+		// 시작 지연 시간이 지났을 때부터 알파값 감소
+		if (FadeOutTimeElapsed >= FadeStartDelay)
+		{
+			if (FadeDuration > 0.0f)
+			{
+				float Progress = (FadeOutTimeElapsed - FadeStartDelay) / FadeDuration;
+				DecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
+			}
+			else
+			{
+				DecalColor.A = 0.0f;
+			}
+
+			bColorChanged = true;
+
+			// 완료 체크
+			if (FadeOutTimeElapsed >= FadeStartDelay + FadeDuration)
+			{
+				bIsFadeOutActive = false;
+
+				// 액터를 삭제하지 않는 대신 가시성과 틱을 꺼서 렌더링/연산 비용 제거
+				SetVisibility(false);
+				SetComponentTickEnabled(false);
+			}
+		}
+	}
+
+	if (bColorChanged)
+	{
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
+
+}
