@@ -50,7 +50,7 @@ void ADecalActor::SetDecalSize(const FVector& InDecalSize)
 
 FVector ADecalActor::GetDecalSize() const
 {
-	return Decal ? Decal->GetDecalSize() : FVector(0.0f, 0.0f, 0.0f);
+	return Decal ? Decal->DecalSize : FVector(0.0f, 0.0f, 0.0f);
 }
 
 void ADecalActor::BeginPlay()

@@ -7,6 +7,7 @@
 #include "Components/CameraComponent.h"
 #include "Components/GizmoComponent.h"
 #include "GameFramework/DecalActor.h"
+#include "GameFramework/MeshDecalActor.h"
 #include "GameFramework/World.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
@@ -165,16 +166,23 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	{
 		uint32 DecalActorCount = 0;
+		uint32 MeshDecalActorCount = 0;
 		for (AActor* Actor : World->GetActors())
 		{
 			if (Cast<ADecalActor>(Actor))
 			{
 				++DecalActorCount;
 			}
+			else if (Cast<AMeshDecalActor>(Actor))
+			{
+				++MeshDecalActorCount;
+			}
 		}
 
      const TArray<const FPrimitiveSceneProxy*>& RenderedDecalProxies = Bus.GetProxies(ERenderPass::Decal);
-		uint32 AffectedObjectCount = 0;
+     const TArray<const FPrimitiveSceneProxy*>& RenderedMeshDecalProxies = Bus.GetProxies(ERenderPass::MeshDecal);
+		uint32 AffectedObjectCountSum = 0;
+		uint32 AffectedObjectCountMax = 0;
         for (const FPrimitiveSceneProxy* Proxy : RenderedDecalProxies)
 		{
 			if (!Proxy)
@@ -183,12 +191,39 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 			}
 
            const FDecalSceneProxy* DecalProxy = static_cast<const FDecalSceneProxy*>(Proxy);
-			AffectedObjectCount += DecalProxy->GetLastOverlappingObjectCount();
+			const uint32 OverlapCount = DecalProxy->GetLastOverlappingObjectCount();
+			AffectedObjectCountSum += OverlapCount;
+			if (OverlapCount > AffectedObjectCountMax)
+			{
+				AffectedObjectCountMax = OverlapCount;
+			}
+		}
+
+		uint32 MeshDecalVertexCount = 0;
+		uint32 MeshDecalTriangleCount = 0;
+		uint32 MeshDecalSectionCount = 0;
+		for (const FPrimitiveSceneProxy* Proxy : RenderedMeshDecalProxies)
+		{
+			if (!Proxy || !Proxy->MeshBuffer)
+			{
+				continue;
+			}
+
+			MeshDecalVertexCount += Proxy->MeshBuffer->GetVertexBuffer().GetVertexCount();
+			const uint32 IndexCount = Proxy->MeshBuffer->GetIndexBuffer().GetIndexCount();
+			MeshDecalTriangleCount += IndexCount / 3u;
+			MeshDecalSectionCount += static_cast<uint32>(Proxy->SectionDraws.size());
 		}
 
 		FDecalStats::SetDecalActorCount(DecalActorCount);
+		FDecalStats::SetMeshDecalActorCount(MeshDecalActorCount);
 		FDecalStats::SetRenderedDecalCount(static_cast<uint32>(RenderedDecalProxies.size()));
-		FDecalStats::SetAffectedObjectCount(AffectedObjectCount);
+		FDecalStats::SetRenderedMeshDecalCount(static_cast<uint32>(RenderedMeshDecalProxies.size()));
+		FDecalStats::SetAffectedObjectCountSum(AffectedObjectCountSum);
+		FDecalStats::SetAffectedObjectCountMax(AffectedObjectCountMax);
+		FDecalStats::SetMeshDecalVertexCount(MeshDecalVertexCount);
+		FDecalStats::SetMeshDecalTriangleCount(MeshDecalTriangleCount);
+		FDecalStats::SetMeshDecalSectionCount(MeshDecalSectionCount);
 	}
 
 	// 3. Batcher 준비
@@ -203,7 +238,12 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		Renderer.Render(Bus);
 	}
 
-	Renderer.RenderIdPickBuffer(Bus, VP->GetIdPickRTV(), VP->GetDSV());
+	Renderer.RenderIdPickBuffer(
+		Bus,
+		VP->GetIdPickRTV(),
+		VP->GetDSV(),
+		VP->GetIdPickSRV(),
+		VP->GetIdPickDebugRTV());
 
 	// 5. GPU Occlusion — DSV 언바인딩 후 Hi-Z 생성 + Occlusion Test 디스패치
 	if (bEnableGPUOcclusion && GPUOcclusion.IsInitialized())

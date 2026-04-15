@@ -98,7 +98,6 @@ void FPrimitiveSceneProxy::UpdateMesh()
 
 void FPrimitiveSceneProxy::UpdateSortKey()
 {
-	SortPriority = Owner ? Owner->GetSortPriority() : 0;
 	SortKey = (static_cast<uint64>(reinterpret_cast<uintptr_t>(Shader) >> 4) << 32)
 		| (static_cast<uint64>(reinterpret_cast<uintptr_t>(MeshBuffer) >> 4) & 0xFFFFFFFF);
 	MaterialSortKey = HashMaterialLayout(SectionDraws);

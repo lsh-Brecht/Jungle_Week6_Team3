@@ -8,6 +8,7 @@
 #include "Render/Resource/ConstantBufferPool.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/Runtime/Engine.h"
 #include "Profiling/Timer.h"
 
@@ -43,6 +44,17 @@ void FRenderer::Create(HWND hWindow)
 	SubUVBatcher.Create(Device.GetDevice());
 	BillboardBatcher.Create(Device.GetDevice());
 	IdPickPerObjectCB.Create(Device.GetDevice(), sizeof(FPerObjectConstants));
+	{
+		D3D11_SAMPLER_DESC SampDesc = {};
+		SampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+		SampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		SampDesc.MinLOD = 0.0f;
+		SampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+		Device.GetDevice()->CreateSamplerState(&SampDesc, &IdPickSampler);
+	}
 
 	InitializePassRenderStates();
 	InitializePassBatchers();
@@ -86,6 +98,7 @@ void FRenderer::Release()
 	SubUVBatcher.Release();
 	BillboardBatcher.Release();
 	IdPickPerObjectCB.Release();
+	SafeRelease(IdPickSampler);
 
 	for (FConstantBuffer& CB : PerObjectCBPool)
 	{
@@ -228,12 +241,16 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 		{
 			if (Entry.Billboard.Texture)
 			{
+				// Billboard visual size is authored by Width/Height only.
+				// Do not feed PerObject matrix scale here, otherwise ID-pass scale compensation
+				// leaks into color rendering and causes pick/visual size mismatch.
+				const FVector BillboardVisualScale(1.0f, 1.0f, 1.0f);
 				BillboardBatcher.AddSprite(
 					Entry.Billboard.Texture->SRV,
 					Entry.PerObject.Model.GetLocation(),
 					Bus.GetCameraRight(),
 					Bus.GetCameraUp(),
-					Entry.PerObject.Model.GetScale(),
+					BillboardVisualScale,
 					Entry.Billboard.Width,
                   Entry.Billboard.Height,
 					Entry.bSelected
@@ -312,6 +329,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	const ERenderPass PassOrder[] = {
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
+		ERenderPass::MeshDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Grid,
 		ERenderPass::SubUV,
@@ -331,7 +349,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
-		if (CurPass == ERenderPass::Decal && !InRenderBus.GetShowFlags().bDecal)
+		if ((CurPass == ERenderPass::Decal || CurPass == ERenderPass::MeshDecal) && !InRenderBus.GetShowFlags().bDecal)
 		{
 			continue;
 		}
@@ -365,10 +383,33 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
+		ID3D11RenderTargetView* pCurrentRTV = nullptr;
+		ID3D11DepthStencilView* pCurrentDSV = nullptr;
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 1. 현재 바인딩된 RTV와 DSV를 가져옵니다. (가져올 때 내부적으로 Ref Count가 1 증가함)
+			Context->OMGetRenderTargets(1, &pCurrentRTV, &pCurrentDSV);
+
+			// 2. DSV(Depth) 자리에 nullptr을 꽂아서 바인딩을 끊습니다. 
+			// -> 이제 픽셀 셰이더에서 Depth SRV(t1)를 마음껏 읽을 수 있습니다!
+			Context->OMSetRenderTargets(1, &pCurrentRTV, nullptr);
+		}
+
         if (bHasBatcher)
 			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), InRenderBus, Context);
+
+		if (CurPass == ERenderPass::Decal)
+		{
+			// 3. 다시 원래의 DSV를 연결하여 다음 패스(Translucent 등)가 정상 작동하도록 복구합니다.
+			Context->OMSetRenderTargets(1, &pCurrentRTV, pCurrentDSV);
+
+			// 4. OMGetRenderTargets 호출로 인해 증가했던 메모리 참조 카운트(Ref Count)를 해제합니다. (메모리 누수 방지)
+			if (pCurrentRTV) pCurrentRTV->Release();
+			if (pCurrentDSV) pCurrentDSV->Release();
+		}
 	}
 }
 
@@ -382,10 +423,11 @@ void FRenderer::InitializePassRenderStates()
 
 	//								DepthStencil							Blend						Rasterizer							Topology								WireframeAware
 	S[(uint32)E::Opaque] =			{ EDepthStencilState::Default,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
-	S[(uint32)E::Decal] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCullDepthBias,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+ S[(uint32)E::Decal] =			{ EDepthStencilState::NoDepth,		EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	//	Outline에 대한 Masking 방해로 인해 Patch
 	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::MeshDecal] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Translucent] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::SubUV] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
@@ -531,6 +573,7 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 		for (const FPrimitiveSceneProxy* RawProxy : SortedProxyBuffer)
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
+			if (Proxy.Pass == ERenderPass::Decal && !ActiveDepthSRV) continue;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
 			BindShader(Proxy, Context, State);	
 			BindExtraCB(Proxy, Context);
@@ -558,11 +601,6 @@ void FRenderer::SortProxies(const TArray<const FPrimitiveSceneProxy*>& Proxies)
 
 	const auto ProxyLess = [](const FPrimitiveSceneProxy* A, const FPrimitiveSceneProxy* B)
 	{
-		if (A->SortPriority != B->SortPriority)
-		{
-			return A->SortPriority < B->SortPriority;
-		}
-
 		if (A->SortKey != B->SortKey)
 		{
 			return A->SortKey < B->SortKey;
@@ -702,6 +740,11 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 		State.bSamplerBound = true;
 	}
 
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
+	}
+	
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
 	if (!State.bMaterialBound)
@@ -756,6 +799,11 @@ void FRenderer::DrawSingleSection(const FPrimitiveSceneProxy& Proxy, ID3D11Devic
 	{
 		Ctx->PSSetSamplers(0, 1, &Resources.DefaultSampler);
 		State.bSamplerBound = true;
+	}
+
+	if (Proxy.Pass == ERenderPass::Decal)
+	{
+		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
 	}
 
 	// Material CB 슬롯 바인딩 (1회)
@@ -857,7 +905,14 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	}
 
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
-	if (MaskProxies.empty())
+	const bool bHasMaskProxies = !MaskProxies.empty();
+	const bool bHasSelectedFont = FontBatcher.GetSelectedQuadCount() > 0;
+	const bool bHasSelectedSubUV = SubUVBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasSelectedBillboard = BillboardBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasAnySelectionMask =
+		bHasMaskProxies || bHasSelectedFont || bHasSelectedSubUV || bHasSelectedBillboard;
+
+	if (!bHasAnySelectionMask)
 	{
 		if (ViewportRTV)
 		{
@@ -868,20 +923,23 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 
 	Context->OMSetRenderTargets(1, &OutlineMaskRTV, nullptr);
 
-    ExecutePass(MaskProxies, Bus, Context);
+	if (bHasMaskProxies)
+	{
+		ExecutePass(MaskProxies, Bus, Context);
+	}
 
-	if (FontBatcher.GetSelectedQuadCount() > 0)
+	if (bHasSelectedFont)
 	{
 		const FFontResource* FontRes = FResourceManager::Get().FindFont(FName("Default"));
 		FontBatcher.DrawSelectionMaskBatch(Context, FontRes);
 	}
 
-	if (SubUVBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedSubUV)
 	{
 		SubUVBatcher.DrawSelectionMaskBatch(Context);
 	}
 
-	if (BillboardBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedBillboard)
 	{
 		BillboardBatcher.DrawSelectionMaskBatch(Context);
 	}
@@ -1198,7 +1256,7 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 		return;
 	}
 
-	ID3D11SamplerState* Sampler = Resources.DefaultSampler;
+	ID3D11SamplerState* Sampler = IdPickSampler ? IdPickSampler : Resources.DefaultSampler;
 	Context->PSSetSamplers(0, 1, &Sampler);
 
 	FMeshBuffer* LastMeshBuffer = nullptr;
@@ -1210,16 +1268,22 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 		{
 			continue;
 		}
+		if (!Proxy->Owner->SupportsPicking())
+		{
+			continue;
+		}
 		if (!Proxy->bVisible)
 		{
 			continue;
 		}
 
 		const bool bIsStaticMesh = (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::StaticMesh));
+		const bool bIsMeshDecal = (Proxy->Pass == ERenderPass::MeshDecal)
+			|| (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::MeshDecal));
 		const bool bIsBillboard = (Proxy->Pass == ERenderPass::Billboard);
-		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsBillboard;
+		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsMeshDecal || bIsBillboard;
 		FShader* IdShader = PrimitiveShader;
-		if (bIsStaticMesh)
+		if (bIsStaticMesh || bIsMeshDecal)
 		{
 			IdShader = StaticMeshShader;
 		}
@@ -1314,7 +1378,37 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 	}
 }
 
-void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView* IdPickRTV, ID3D11DepthStencilView* DSV)
+void FRenderer::RenderIdPickDebugVisualization(ID3D11DeviceContext* Context, ID3D11ShaderResourceView* IdPickSRV, ID3D11RenderTargetView* IdDebugRTV)
+{
+	if (!Context || !IdPickSRV || !IdDebugRTV)
+	{
+		return;
+	}
+
+	FShader* DebugShader = FShaderManager::Get().GetShader(EShaderType::IDPickDebugVisualize);
+	if (!DebugShader)
+	{
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &IdDebugRTV, nullptr);
+	DebugShader->Bind(Context);
+	Context->PSSetShaderResources(0, 1, &IdPickSRV);
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	Context->Draw(3, 0);
+
+	ID3D11ShaderResourceView* NullSRV = nullptr;
+	Context->PSSetShaderResources(0, 1, &NullSRV);
+}
+
+void FRenderer::RenderIdPickBuffer(
+	const FRenderBus& Bus,
+	ID3D11RenderTargetView* IdPickRTV,
+	ID3D11DepthStencilView* DSV,
+	ID3D11ShaderResourceView* IdPickSRV,
+	ID3D11RenderTargetView* IdDebugRTV)
 {
 	if (!IdPickRTV || !DSV)
 	{
@@ -1329,11 +1423,17 @@ void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView
 
 	const uint32 ClearValue[4] = { 0u, 0u, 0u, 0u };
 	Context->ClearRenderTargetView(IdPickRTV, reinterpret_cast<const float*>(ClearValue));
+	Context->ClearDepthStencilView(DSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	Context->OMSetRenderTargets(1, &IdPickRTV, DSV);
 
-	Device.SetDepthStencilState(EDepthStencilState::DepthReadOnly);
+	// ID 버퍼도 "실제로 보이는 표면" 기준으로 선택되도록 깊이 쓰기를 활성화한다.
+	// (DepthReadOnly면 draw order에 따라 뒤에 그린 프록시가 앞을 덮어 오선택이 발생한다.)
+	Device.SetDepthStencilState(EDepthStencilState::Default);
 	Device.SetBlendState(EBlendState::Opaque);
-	Device.SetRasterizerState(ERasterizerState::SolidBackCull);
+	// ID Picking은 배처 경로(예: Billboard)를 우회해 proxy 메시를 직접 그리므로
+	// winding/축 변환 차이로 백페이스 컬링에 걸리면 ID가 비어버릴 수 있다.
+	// 픽킹 정확도 우선을 위해 ID 패스는 양면 래스터로 고정한다.
+	Device.SetRasterizerState(ERasterizerState::SolidNoCull);
 	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	FShader* PrimitiveShader = FShaderManager::Get().GetShader(EShaderType::IDPickPrimitive);
@@ -1348,6 +1448,7 @@ void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView
 	{
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
+		ERenderPass::MeshDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Billboard
 	};
@@ -1355,6 +1456,8 @@ void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView
 	{
 		ExecuteIdPickPass(Bus.GetProxies(Pass), Context, PrimitiveShader, BillboardShader, StaticMeshShader);
 	}
+
+	RenderIdPickDebugVisualization(Context, IdPickSRV, IdDebugRTV);
 }
 
 // PostProcess 이후 fog 영향을 받지 않아야 하는 에디터 오버레이를 렌더링한다.

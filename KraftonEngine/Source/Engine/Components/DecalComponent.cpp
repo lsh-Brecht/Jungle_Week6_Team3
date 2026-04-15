@@ -1,333 +1,158 @@
-#include "Components/DecalComponent.h"
+﻿#include "Components/DecalComponent.h"
 
-#include "Materials/MaterialInterface.h"
+#include <cstring>
+#include <algorithm>
+
+#include "Collision/RayUtils.h"
 #include "Mesh/ObjManager.h"
-#include "GameFramework/AActor.h"
-#include "GameFramework/World.h"
+#include "Materials/MaterialInterface.h"
 #include "Object/ObjectFactory.h"
 #include "Resource/ResourceManager.h"
-#include "Render/Pipeline/RenderBus.h"
-#include "Render/Pipeline/RenderConstants.h"
-#include "Serialization/Archive.h"
-#include "Core/DecalTypes.h"
-#include "Mesh/DecalMeshBuilder.h"
+#include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Render/Proxy/DecalSceneProxy.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstring>
-
-namespace
-{
-	static constexpr const char* GDecalTextureMaterialPrefix = "Texture:";
-
-	static const FVector GDecalLocalCorners[8] =
-	{
-		FVector(-0.5f, -0.5f, -0.5f),
-		FVector(0.5f, -0.5f, -0.5f),
-		FVector(0.5f,  0.5f, -0.5f),
-		FVector(-0.5f,  0.5f, -0.5f),
-
-		FVector(-0.5f, -0.5f,  0.5f),
-		FVector(0.5f, -0.5f,  0.5f),
-		FVector(0.5f,  0.5f,  0.5f),
-		FVector(-0.5f,  0.5f,  0.5f),
-	};
-
-	static constexpr int32 GBoxEdges[12][2] =
-	{
-		{0,1}, {1,2}, {2,3}, {3,0},
-		{4,5}, {5,6}, {6,7}, {7,4},
-		{0,4}, {1,5}, {2,6}, {3,7}
-	};
-
-	FVector SanitizeDecalSize(const FVector& InSize)
-	{
-		return FVector(
-			std::max(std::abs(InSize.X), 0.001f),
-			std::max(std::abs(InSize.Y), 0.001f),
-			std::max(std::abs(InSize.Z), 0.001f));
-	}
-
-	void AddDebugLine(FRenderBus& RenderBus, const FVector& Start, const FVector& End, const FColor& Color)
-	{
-		FDebugLineEntry Entry;
-		Entry.Start = Start;
-		Entry.End = End;
-		Entry.Color = Color;
-		RenderBus.AddDebugLineEntry(std::move(Entry));
-	}
-
-	FVector MultiplyComponents(const FVector& A, const FVector& B)
-	{
-		return FVector(A.X * B.X, A.Y * B.Y, A.Z * B.Z);
-	}
-
-	bool NearlyEqual(float A, float B, float Epsilon = 0.0001f)
-	{
-		return std::abs(A - B) <= Epsilon;
-	}
-
-	bool IsTextureMaterialPath(const FString& Path)
-	{
-		return Path.rfind(GDecalTextureMaterialPrefix, 0) == 0;
-	}
-
-	FString GetTextureNameFromMaterialPath(const FString& Path)
-	{
-		return IsTextureMaterialPath(Path)
-			? Path.substr(std::strlen(GDecalTextureMaterialPrefix))
-			: FString();
-	}
-
-	FString MakeTextureMaterialPath(const FName& TextureName)
-	{
-		return FString(GDecalTextureMaterialPrefix) + TextureName.ToString();
-	}
-}
+#include "Render/Proxy/FScene.h"
+#include "Serialization/Archive.h"
+#include "Texture/Texture2D.h"
 
 IMPLEMENT_CLASS(UDecalComponent, UPrimitiveComponent)
 
-FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
+namespace
 {
-	if (bDecalDirty)
+	constexpr const char* DecalTextureMaterialPrefix = "Texture:";
+
+	bool IsDecalTextureMaterialPath(const FString& Path)
 	{
-		BuildDecalMesh();
-		ClearDecalDirty();
+		return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
 	}
 
-	return new FDecalSceneProxy(this);
-}
-
-void UDecalComponent::BuildDecalMesh()
-{
-	UWorld* World = GetWorld();
-	if (!World)
+	FString GetDecalTextureNameFromMaterialPath(const FString& Path)
 	{
-		RenderableMesh.Clear();
-		DebugReceiverTriangles.clear();
-		DebugClippedTriangles.clear();
-		return;
+		return IsDecalTextureMaterialPath(Path)
+			? Path.substr(std::strlen(DecalTextureMaterialPrefix))
+			: FString();
 	}
 
-	TArray<FDecalPrimitiveCandidate> Candidates;
-	TArray<FDecalPrimitiveCandidate> SATFilteredCandidates;
-
-	/*
-		현재 decal 경로:
-		1) 월드 AABB로 1차 후보 mesh 수집
-		2) decal OBB vs mesh AABB SAT로 실제 겹치는 mesh만 남김
-		3) 통과한 mesh 전체를 decal local 공간으로 GPU에 업로드
-		4) pixel shader에서 localPos를 검사해 decal box 밖 픽셀 discard
-		5) localPos(YZ)로 UV를 계산해 texture를 샘플링
-
-		즉 SAT는 "primitive bounds 필터"에만 쓰고,
-		삼각형 clip은 하지 않는 projection 스타일 경로입니다.
-	*/
-	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, nullptr);
-	FDecalMeshBuilder::FilterPrimitiveCandidatesByDecalOBBSAT(*this, Candidates, SATFilteredCandidates);
-	FDecalMeshBuilder::BuildProjectedRenderableMeshFromCandidates(*this, SATFilteredCandidates, RenderableMesh);
-
-	DebugReceiverTriangles.clear();
-	DebugClippedTriangles.clear();
-}
-
-void UDecalComponent::RebuildDecalMeshNow()
-{
-	BuildDecalMesh();
-	ClearDecalDirty();
-	MarkRenderStateDirty();
-}
-
-void UDecalComponent::EnsureDecalMeshBuilt()
-{
-	if (!bDecalDirty)
+	FString MakeDecalTextureMaterialPath(const FName& TextureName)
 	{
-		return;
-	}
-
-	BuildDecalMesh();
-	ClearDecalDirty();
-}
-
-void UDecalComponent::OnTransformDirty()
-{
-	UPrimitiveComponent::OnTransformDirty();
-	MarkDecalDirty();
-}
-
-void UDecalComponent::UpdateWorldAABB() const
-{
-	const FBoundingBox WorldBounds = GetDecalWorldAABB();
-
-	WorldAABBMinLocation = WorldBounds.Min;
-	WorldAABBMaxLocation = WorldBounds.Max;
-
-	bWorldAABBDirty = false;
-	bHasValidWorldAABB = WorldBounds.IsValid();
-}
-
-void UDecalComponent::Serialize(FArchive& Ar)
-{
-	UPrimitiveComponent::Serialize(Ar);
-
-	if (Ar.IsSaving())
-	{
-		DecalMaterialPath = DecalMaterial ? DecalMaterial->GetAssetPathFileName() : "None";
-	}
-
-	Ar << DecalSize;
-	Ar << DecalMaterialPath;
-	Ar << SortOrder;
-	Ar << TargetFilter;
-	Ar << bDrawDebugOBB;
-	Ar << bDrawDebugReceiverTriangles;
-	Ar << DebugTriangleDrawLimit;
-
-	if (Ar.IsLoading())
-	{
-		DecalSize = SanitizeDecalSize(DecalSize);
-		ReloadMaterialFromPath();
-		bDecalDirty = true;
-		SyncTargetFilterOptionsFromMask();
-		MarkWorldBoundsDirty();
+		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
 	}
 }
 
-void UDecalComponent::PostDuplicate()
+UDecalComponent::UDecalComponent()
 {
-	UPrimitiveComponent::PostDuplicate();
-
-	ReloadMaterialFromPath();
-	bDecalDirty = true;
-	SyncTargetFilterOptionsFromMask();
-	MarkWorldBoundsDirty();
+	bTickEnable = true;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
+   OriginalAlpha = DecalColor.A;
 }
 
-void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
-{
-	UPrimitiveComponent::GetEditableProperties(OutProps);
+float UDecalComponent::GetFadeStartDelay() const { return FadeStartDelay; }
+float UDecalComponent::GetFadeDuration() const { return FadeDuration; }
+float UDecalComponent::GetFadeInStartDelay() const { return FadeInStartDelay; }
+float UDecalComponent::GetFadeInDuration() const { return FadeInDuration; }
 
-	OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
-	OutProps.push_back({ "Decal Material", EPropertyType::MaterialRef, &DecalMaterialPath });
-	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
-	OutProps.push_back({ "Target Static Mesh", EPropertyType::Bool, &bTargetStaticMeshComponent });
-	OutProps.push_back({ "Target Receives Decal Only", EPropertyType::Bool, &bTargetReceivesDecalOnly });
-	OutProps.push_back({ "Exclude Same Owner", EPropertyType::Bool, &bExcludeSameOwner });
-	OutProps.push_back({ "Draw Debug OBB", EPropertyType::Bool, &bDrawDebugOBB });
-	OutProps.push_back({ "Draw Debug Receiver Triangles", EPropertyType::Bool, &bDrawDebugReceiverTriangles });
-	OutProps.push_back({ "Debug Triangle Draw Limit", EPropertyType::Int, &DebugTriangleDrawLimit });
+void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
+{
+	FadeStartDelay = StartDelay;
+	FadeDuration = Duration;
+	bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
+
+  bIsFadeInActive = false;
+	FadeOutTimeElapsed = 0.0f;
+	bIsFadeOutActive = true;
+   bPendingFadeOutAfterFadeIn = false;
+	OriginalAlpha = DecalColor.A;
+   SetVisibility(true);
+	SetComponentTickEnabled(true);
 }
 
-void UDecalComponent::PostEditProperty(const char* PropertyName)
+void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 {
-	UPrimitiveComponent::PostEditProperty(PropertyName);
+	FadeInStartDelay = StartDelay;
+	FadeInDuration = Duration;
 
-	if (strcmp(PropertyName, "Decal Size") == 0)
+   bIsFadeOutActive = false;
+	FadeInTimeElapsed = 0.0f;
+	bIsFadeInActive = true;
+
+   // 목표 알파(OriginalAlpha)는 기존 값을 유지하고, 시작 시점에는 0(투명)으로 설정
+	if (OriginalAlpha <= 0.0f)
 	{
-		DecalSize = SanitizeDecalSize(DecalSize);
-		MarkWorldBoundsDirty();
-		MarkDecalDirty();
+		OriginalAlpha = (DecalColor.A > 0.0f) ? DecalColor.A : 1.0f;
 	}
-	else if (strcmp(PropertyName, "Decal Material") == 0)
-	{
-		ReloadMaterialFromPath();
-		MarkDecalDirty();
-	}
-	else if (strcmp(PropertyName, "Sort Order") == 0)
-	{
-		MarkProxyDirty(EDirtyFlag::Material);
-	}
-	else if (strcmp(PropertyName, "Target Static Mesh") == 0 ||
-		strcmp(PropertyName, "Target Receives Decal Only") == 0 ||
-		strcmp(PropertyName, "Exclude Same Owner") == 0)
-	{
-		SyncTargetFilterMaskFromOptions();
-		MarkDecalDirty();
-	}
-	else if (strcmp(PropertyName, "Debug Triangle Draw Limit") == 0)
-	{
-		DebugTriangleDrawLimit = std::max(DebugTriangleDrawLimit, 0);
-	}
+	DecalColor.A = 0.0f;
+	SetVisibility(true);
+	SetComponentTickEnabled(true);
+
+	// 첫 프레임부터 즉시 렌더 스레드에 반영되도록Dirty 마킹
+	MarkProxyDirty(EDirtyFlag::Transform);
 }
 
-void UDecalComponent::CollectEditorVisualizations(FRenderBus& RenderBus) const
+void UDecalComponent::RestartFadePreviewSequence()
 {
-	const bool bShouldDrawOBB = bDrawDebugOBB;
-	const bool bShouldDrawReceiverTriangles = bDrawDebugReceiverTriangles;
-	if ((!bShouldDrawOBB && !bShouldDrawReceiverTriangles) || !IsVisible())
-	{
-		return;
-	}
-
-	if (bDecalDirty)
-	{
-		const_cast<UDecalComponent*>(this)->EnsureDecalMeshBuilt();
-	}
-
-	if (bShouldDrawOBB)
-	{
-		const FColor BoxColor = bDecalDirty ? FColor::Yellow() : FColor::Green();
-		AddDebugOBBLines(RenderBus, BoxColor);
-	}
-
-	if (bShouldDrawReceiverTriangles)
-	{
-		AddDebugReceiverTriangleLines(RenderBus, FColor(96, 255, 96, 255));
-		AddDebugClippedTriangleLines(RenderBus, FColor::White());
-	}
+	bPendingFadeOutAfterFadeIn = true;
+	SetFadeIn(FadeInStartDelay, FadeInDuration);
 }
 
-void UDecalComponent::SetDecalSize(const FVector& InSize)
+void UDecalComponent::SetDecalColor(const FLinearColor& Color)
 {
-	const FVector NewSize = SanitizeDecalSize(InSize);
-
-	if (NearlyEqual(DecalSize.X, NewSize.X) &&
-		NearlyEqual(DecalSize.Y, NewSize.Y) &&
-		NearlyEqual(DecalSize.Z, NewSize.Z))
+    DecalColor = Color;
+  if (!bIsFadeInActive && !bIsFadeOutActive)
 	{
-		return;
+		OriginalAlpha = Color.A;
 	}
-
-	DecalSize = NewSize;
-	MarkWorldBoundsDirty();
-	MarkDecalDirty();
+    MarkProxyDirty(EDirtyFlag::Transform);
 }
 
 void UDecalComponent::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
 {
-	if (DecalMaterial == NewDecalMaterial)
-	{
-		return;
-	}
-
 	DecalMaterial = NewDecalMaterial;
-	DecalMaterialPath = DecalMaterial ? DecalMaterial->GetAssetPathFileName() : "None";
 	DecalTextureName = FName();
-
-	MarkDecalDirty();
+	DecalTexture = nullptr;
+	DecalMaterialSlot.Path = (DecalMaterial != nullptr) ? DecalMaterial->GetAssetPathFileName() : "None";
 	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+UMaterialInterface* UDecalComponent::GetDecalMaterial() const
+{
+	return DecalMaterial;
 }
 
 void UDecalComponent::SetDecalTexture(const FName& TextureName)
 {
 	DecalMaterial = nullptr;
 	DecalTextureName = TextureName;
-	DecalMaterialPath = TextureName.IsValid() ? MakeTextureMaterialPath(TextureName) : "None";
-
-	MarkDecalDirty();
+	DecalTexture = FResourceManager::Get().FindTexture(TextureName);
+	DecalMaterialSlot.Path = DecalTexture ? MakeDecalTextureMaterialPath(TextureName) : "None";
 	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+const FTextureResource* UDecalComponent::GetDecalTexture() const
+{
+	return DecalTexture;
 }
 
 bool UDecalComponent::FitSizeToTextureAspect()
 {
-	if (!DecalTextureName.IsValid())
+	uint32 TextureWidth = 0;
+	uint32 TextureHeight = 0;
+
+	if (DecalTexture)
 	{
-		return false;
+		TextureWidth = DecalTexture->Width;
+		TextureHeight = DecalTexture->Height;
+	}
+	else if (DecalMaterial)
+	{
+		if (UTexture2D* DiffuseTexture = DecalMaterial->GetDiffuseTexture())
+		{
+			TextureWidth = DiffuseTexture->GetWidth();
+			TextureHeight = DiffuseTexture->GetHeight();
+		}
 	}
 
-	const FTextureResource* Texture = FResourceManager::Get().FindTexture(DecalTextureName);
-	if (!Texture || Texture->Width == 0 || Texture->Height == 0)
+	if (TextureWidth == 0 || TextureHeight == 0)
 	{
 		return false;
 	}
@@ -337,218 +162,330 @@ bool UDecalComponent::FitSizeToTextureAspect()
 		DecalSize.Y = 1.0f;
 	}
 
-	const FVector WorldScale = GetWorldMatrix().GetScale();
-	const float SafeWorldScaleY = (std::abs(WorldScale.Y) > 0.001f) ? std::abs(WorldScale.Y) : 1.0f;
-	const float SafeWorldScaleZ = (std::abs(WorldScale.Z) > 0.001f) ? std::abs(WorldScale.Z) : 1.0f;
-	const float TextureAspectYZ = static_cast<float>(Texture->Height) / static_cast<float>(Texture->Width);
-
+	const FVector WorldScale = GetWorldScale();
+	const float SafeWorldScaleY = (WorldScale.Y > 0.001f) ? WorldScale.Y : 1.0f;
+	const float SafeWorldScaleZ = (WorldScale.Z > 0.001f) ? WorldScale.Z : 1.0f;
+	const float TextureAspectYZ = static_cast<float>(TextureHeight) / static_cast<float>(TextureWidth);
 	DecalSize.Z = (DecalSize.Y * SafeWorldScaleY * TextureAspectYZ) / SafeWorldScaleZ;
+	MarkProxyDirty(EDirtyFlag::Transform);
 	MarkWorldBoundsDirty();
-	MarkDecalDirty();
 	return true;
 }
 
-void UDecalComponent::SetSortOrder(int32 Value)
+void UDecalComponent::SetDecalSize(const FVector& InSize)
 {
-	if (SortOrder == Value)
+	DecalSize = InSize;
+	MarkProxyDirty(EDirtyFlag::Transform);
+	MarkWorldBoundsDirty();
+}
+
+FMatrix UDecalComponent::GetTransformIncludingDecalSize() const
+{
+    return FMatrix::MakeScaleMatrix(DecalSize) * GetWorldMatrix();
+}
+
+void UDecalComponent::UpdateWorldAABB() const
+{
+	// 1. DecalSize가 반영된 로컬 Extent(반지름)를 계산합니다.
+	// 렌더링에 쓰이는 큐브 메쉬가 크기 1(-0.5 ~ 0.5)이므로 0.5를 곱해줍니다.
+	FVector LExt = DecalSize * 0.5f;
+
+	// 2. 부모(UPrimitiveComponent)의 투영 공식을 그대로 사용하여 OBB의 꼭짓점들을 AABB로 변환합니다.
+	FMatrix worldMatrix = GetWorldMatrix();
+
+	float NewEx = std::abs(worldMatrix.M[0][0]) * LExt.X + std::abs(worldMatrix.M[1][0]) * LExt.Y + std::abs(worldMatrix.M[2][0]) * LExt.Z;
+	float NewEy = std::abs(worldMatrix.M[0][1]) * LExt.X + std::abs(worldMatrix.M[1][1]) * LExt.Y + std::abs(worldMatrix.M[2][1]) * LExt.Z;
+	float NewEz = std::abs(worldMatrix.M[0][2]) * LExt.X + std::abs(worldMatrix.M[1][2]) * LExt.Y + std::abs(worldMatrix.M[2][2]) * LExt.Z;
+
+	// 3. 엔진 AABB 변수에 갱신
+	FVector WorldCenter = GetWorldLocation();
+	WorldAABBMinLocation = WorldCenter - FVector(NewEx, NewEy, NewEz);
+	WorldAABBMaxLocation = WorldCenter + FVector(NewEx, NewEy, NewEz);
+
+	bWorldAABBDirty = false;
+	bHasValidWorldAABB = true;
+}
+
+bool UDecalComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult)
+{
+	const FMeshData* Data = GetMeshData();
+	if (!Data || Data->Indices.empty())
+	{
+		return false;
+	}
+
+	const FMatrix DecalWorldMatrix = GetTransformIncludingDecalSize();
+	const FMatrix DecalWorldInverseMatrix = DecalWorldMatrix.GetInverse();
+	const bool bHit = FRayUtils::RaycastTriangles(
+		Ray,
+		DecalWorldMatrix,
+		DecalWorldInverseMatrix,
+		&Data->Vertices[0].Position,
+		sizeof(FVertex),
+		Data->Indices,
+		OutHitResult);
+
+	if (bHit)
+	{
+		OutHitResult.HitComponent = this;
+	}
+	return bHit;
+}
+
+FMeshBuffer* UDecalComponent::GetMeshBuffer() const
+{
+    return &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::Cube);
+}
+
+const FMeshData* UDecalComponent::GetMeshData() const
+{
+    return &FMeshBufferManager::Get().GetMeshData(EMeshShape::Cube);
+}
+
+FPrimitiveSceneProxy* UDecalComponent::CreateSceneProxy()
+{
+    return new FDecalSceneProxy(this);
+}
+
+void UDecalComponent::CreateRenderState()
+{
+	if (SceneProxy)
 	{
 		return;
 	}
 
-	SortOrder = Value;
-	MarkProxyDirty(EDirtyFlag::Material);
-}
-
-void UDecalComponent::SetTargetFilter(int32 InFilter)
-{
-	if (TargetFilter == InFilter)
+	UPrimitiveComponent::CreateRenderState();
+	if (!SceneProxy)
 	{
 		return;
 	}
 
-	TargetFilter = InFilter;
-	SyncTargetFilterOptionsFromMask();
-	MarkDecalDirty();
-}
-
-void UDecalComponent::SyncTargetFilterMaskFromOptions()
-{
-	TargetFilter = DecalTarget_None;
-
-	if (bTargetStaticMeshComponent)
+	FScene* Scene = nullptr;
+	if (Owner && Owner->GetWorld())
 	{
-		TargetFilter |= DecalTarget_StaticMeshComponent;
-	}
-	if (bTargetReceivesDecalOnly)
-	{
-		TargetFilter |= DecalTarget_ReceivesDecalOnly;
-	}
-	if (bExcludeSameOwner)
-	{
-		TargetFilter |= DecalTarget_ExcludeSameOwner;
-	}
-}
-
-void UDecalComponent::SyncTargetFilterOptionsFromMask()
-{
-	bTargetStaticMeshComponent = (TargetFilter & DecalTarget_StaticMeshComponent) != 0;
-	bTargetReceivesDecalOnly = (TargetFilter & DecalTarget_ReceivesDecalOnly) != 0;
-	bExcludeSameOwner = (TargetFilter & DecalTarget_ExcludeSameOwner) != 0;
-}
-
-void UDecalComponent::MarkDecalDirty()
-{
-	bDecalDirty = true;
-	MarkProxyDirty(EDirtyFlag::Mesh);
-}
-
-FTransform UDecalComponent::GetTransformIncludingDecalSize() const
-{
-	const FMatrix WorldMatrix = GetWorldMatrix();
-	const FVector CombinedScale = MultiplyComponents(WorldMatrix.GetScale(), DecalSize);
-
-	return FTransform(
-		WorldMatrix.GetLocation(),
-		WorldMatrix.ToQuat(),
-		CombinedScale);
-}
-
-FMatrix UDecalComponent::GetDecalLocalToWorldMatrix() const
-{
-	return FMatrix::MakeScaleMatrix(DecalSize) * GetWorldMatrix();
-}
-
-FMatrix UDecalComponent::GetWorldToDecalMatrix() const
-{
-	return GetDecalLocalToWorldMatrix().GetInverse();
-}
-
-void UDecalComponent::GetDecalBoxCorners(FVector(&OutCorners)[8]) const
-{
-	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
-
-	for (int32 i = 0; i < 8; ++i)
-	{
-		OutCorners[i] = DecalLocalToWorld.TransformPositionWithW(GDecalLocalCorners[i]);
-	}
-}
-
-FBoundingBox UDecalComponent::GetDecalWorldAABB() const
-{
-	FVector Corners[8];
-	GetDecalBoxCorners(Corners);
-
-	FBoundingBox Bounds;
-	for (int32 i = 0; i < 8; ++i)
-	{
-		Bounds.Expand(Corners[i]);
+		Scene = &Owner->GetWorld()->GetScene();
 	}
 
-	return Bounds;
+	if (!Scene)
+	{
+		return;
+	}
+
+	ArrowOuterProxy = new FDecalArrowSceneProxy(this, false);
+	Scene->RegisterProxy(ArrowOuterProxy);
+
+	ArrowInnerProxy = new FDecalArrowSceneProxy(this, true);
+	Scene->RegisterProxy(ArrowInnerProxy);
 }
 
-void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
+void UDecalComponent::DestroyRenderState()
 {
-	(void)StartDelay;
-	(void)Duration;
-	(void)DestroyOwnerAfterFade;
+	if (Owner && Owner->GetWorld())
+	{
+		FScene& Scene = Owner->GetWorld()->GetScene();
+		if (ArrowInnerProxy)
+		{
+			Scene.RemovePrimitive(ArrowInnerProxy);
+			ArrowInnerProxy = nullptr;
+		}
+		if (ArrowOuterProxy)
+		{
+			Scene.RemovePrimitive(ArrowOuterProxy);
+			ArrowOuterProxy = nullptr;
+		}
+	}
+
+	UPrimitiveComponent::DestroyRenderState();
 }
 
-void UDecalComponent::ReloadMaterialFromPath()
+void UDecalComponent::Serialize(FArchive& Ar)
 {
-	if (DecalMaterialPath.empty() || DecalMaterialPath == "None")
+    UPrimitiveComponent::Serialize(Ar);
+
+    Ar << FadeStartDelay;
+    Ar << FadeDuration;
+    Ar << FadeInDuration;
+    Ar << FadeInStartDelay;
+    Ar << bDestroyOwnerAfterFade;
+    Ar << DecalSize;
+    Ar << DecalColor;
+    Ar << DecalMaterialSlot.Path;
+    Ar << DecalMaterialSlot.bUVScroll;
+}
+
+void UDecalComponent::PostDuplicate()
+{
+    UPrimitiveComponent::PostDuplicate();
+
+	if (IsDecalTextureMaterialPath(DecalMaterialSlot.Path))
+	{
+		SetDecalTexture(FName(GetDecalTextureNameFromMaterialPath(DecalMaterialSlot.Path)));
+	}
+	else if (!DecalMaterialSlot.Path.empty() && DecalMaterialSlot.Path != "None")
+	{
+		DecalMaterial = FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path);
+		DecalTextureName = FName();
+		DecalTexture = nullptr;
+	}
+	else
 	{
 		DecalMaterial = nullptr;
 		DecalTextureName = FName();
-		return;
+		DecalTexture = nullptr;
 	}
 
-	if (IsTextureMaterialPath(DecalMaterialPath))
-	{
-		DecalMaterial = nullptr;
-		DecalTextureName = FName(GetTextureNameFromMaterialPath(DecalMaterialPath));
-		return;
-	}
-
-	DecalMaterial = FObjManager::GetOrLoadMaterial(DecalMaterialPath);
-	DecalTextureName = FName();
+    MarkRenderStateDirty();
 }
 
-void UDecalComponent::AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxColor) const
+void UDecalComponent::BeginPlay()
 {
-	FVector Corners[8];
-	GetDecalBoxCorners(Corners);
+	UPrimitiveComponent::BeginPlay();
 
-	for (int32 EdgeIndex = 0; EdgeIndex < 12; ++EdgeIndex)
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig && bHasFadeOutConfig)
 	{
-		const int32 A = GBoxEdges[EdgeIndex][0];
-		const int32 B = GBoxEdges[EdgeIndex][1];
-		AddDebugLine(RenderBus, Corners[A], Corners[B], BoxColor);
+		RestartFadePreviewSequence();
 	}
-
-	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
-	const FVector Center = DecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
-	const FVector ForwardTip = DecalLocalToWorld.TransformPositionWithW(FVector(0.5f, 0.0f, 0.0f));
-	AddDebugLine(RenderBus, Center, ForwardTip, FColor::Red());
-}
-
-void UDecalComponent::AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const
-{
-	if (DebugReceiverTriangles.empty() || DebugTriangleDrawLimit <= 0)
+	else if (bHasFadeInConfig)
 	{
-		return;
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
 	}
-
-	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
-	const int32 TriangleCountToDraw = std::min<int32>(static_cast<int32>(DebugReceiverTriangles.size()), DebugTriangleDrawLimit);
-
-	for (int32 TriangleIndex = 0; TriangleIndex < TriangleCountToDraw; ++TriangleIndex)
+	else if (bHasFadeOutConfig)
 	{
-		const FDecalSATTriangle& Triangle = DebugReceiverTriangles[TriangleIndex];
-
-		const FVector WorldP0 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[0]);
-		const FVector WorldP1 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[1]);
-		const FVector WorldP2 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[2]);
-
-		AddDebugLine(RenderBus, WorldP0, WorldP1, TriangleColor);
-		AddDebugLine(RenderBus, WorldP1, WorldP2, TriangleColor);
-		AddDebugLine(RenderBus, WorldP2, WorldP0, TriangleColor);
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
 	}
 }
 
-void UDecalComponent::AddDebugClippedTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const
+void UDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
 {
-	if (DebugClippedTriangles.empty() || DebugTriangleDrawLimit <= 0)
-	{
-		return;
-	}
-
-	const FMatrix DecalLocalToWorld = GetDecalLocalToWorldMatrix();
-	const int32 TriangleCountToDraw = std::min<int32>(static_cast<int32>(DebugClippedTriangles.size()), DebugTriangleDrawLimit);
-
-	for (int32 TriangleIndex = 0; TriangleIndex < TriangleCountToDraw; ++TriangleIndex)
-	{
-		const FDecalTriangulatedTriangle& Triangle = DebugClippedTriangles[TriangleIndex];
-
-		const FVector WorldP0 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[0]);
-		const FVector WorldP1 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[1]);
-		const FVector WorldP2 = DecalLocalToWorld.TransformPositionWithW(Triangle.DecalPositions[2]);
-
-		AddDebugLine(RenderBus, WorldP0, WorldP1, TriangleColor);
-		AddDebugLine(RenderBus, WorldP1, WorldP2, TriangleColor);
-		AddDebugLine(RenderBus, WorldP2, WorldP0, TriangleColor);
-	}
+    UPrimitiveComponent::GetEditableProperties(OutProps);
+	OutProps.push_back({ "Decal Material", EPropertyType::MaterialSlot, &DecalMaterialSlot });
+	OutProps.push_back({ "Fade Start Delay", EPropertyType::Float, &FadeStartDelay });
+	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
+	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
+	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
+	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
+    OutProps.push_back({ "Decal Size", EPropertyType::Vec3, &DecalSize });
+    OutProps.push_back({ "Decal Color", EPropertyType::Vec4, &DecalColor });
+    
 }
 
-void UDecalComponent::DebugRunBroadPhase() const
+void UDecalComponent::PostEditProperty(const char* PropertyName)
 {
-	UWorld* World = GetWorld();
-	if (!World)
+    UPrimitiveComponent::PostEditProperty(PropertyName);
+
+    if (std::strcmp(PropertyName, "Decal Size") == 0)
+    {
+        MarkProxyDirty(EDirtyFlag::Transform);
+		MarkWorldBoundsDirty();
+    }
+    else if (std::strcmp(PropertyName, "Decal Color") == 0)
+    {
+        SetDecalColor(DecalColor);
+    }
+    else if (std::strcmp(PropertyName, "Decal Material") == 0 || std::strcmp(PropertyName, "Element 0") == 0)
+    {
+		if (DecalMaterialSlot.Path.empty() || DecalMaterialSlot.Path == "None")
+		{
+			SetDecalMaterial(nullptr);
+		}
+		else if (IsDecalTextureMaterialPath(DecalMaterialSlot.Path))
+		{
+			SetDecalTexture(FName(GetDecalTextureNameFromMaterialPath(DecalMaterialSlot.Path)));
+		}
+		else
+		{
+			SetDecalMaterial(FObjManager::GetOrLoadMaterial(DecalMaterialSlot.Path));
+		}
+    }
+	else if (std::strcmp(PropertyName, "Fade Start Delay") == 0
+		|| std::strcmp(PropertyName, "Fade Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Start Delay") == 0)
 	{
-		return;
+       if (Owner && Owner->HasActorBegunPlay())
+		{
+			RestartFadePreviewSequence();
+		}
 	}
 
-	TArray<FDecalPrimitiveCandidate> Candidates;
-	FDecalBroadPhaseStats Stats;
-	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, &Stats);
+}
+
+void UDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+{
+	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	bool bColorChanged = false;
+
+	// 1. 페이드 인 (서서히 나타남)
+	if (bIsFadeInActive)
+	{
+		FadeInTimeElapsed += DeltaTime;
+
+		// 시작 지연 시간이 지났을 때부터 알파값 증가
+		if (FadeInTimeElapsed >= FadeInStartDelay)
+		{
+			if (FadeInDuration > 0.0f)
+			{
+				float Progress = (FadeInTimeElapsed - FadeInStartDelay) / FadeInDuration;
+				DecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
+			}
+			else
+			{
+				DecalColor.A = OriginalAlpha;
+			}
+
+			bColorChanged = true;
+
+			// 완료 체크
+			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
+			{
+				bIsFadeInActive = false;
+               if (bPendingFadeOutAfterFadeIn)
+				{
+					SetFadeOut(FadeStartDelay, FadeDuration, false);
+				}
+			}
+		}
+	}
+
+	// 2. 페이드 아웃 (서서히 사라짐)
+	if (bIsFadeOutActive)
+	{
+		FadeOutTimeElapsed += DeltaTime;
+
+		// 시작 지연 시간이 지났을 때부터 알파값 감소
+		if (FadeOutTimeElapsed >= FadeStartDelay)
+		{
+			if (FadeDuration > 0.0f)
+			{
+				float Progress = (FadeOutTimeElapsed - FadeStartDelay) / FadeDuration;
+				DecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
+			}
+			else
+			{
+				DecalColor.A = 0.0f;
+			}
+
+			bColorChanged = true;
+
+			// 완료 체크
+			if (FadeOutTimeElapsed >= FadeStartDelay + FadeDuration)
+			{
+				bIsFadeOutActive = false;
+
+				// 액터를 삭제하지 않는 대신 가시성과 틱을 꺼서 렌더링/연산 비용 제거
+				SetVisibility(false);
+				SetComponentTickEnabled(false);
+			}
+		}
+	}
+
+	if (bColorChanged)
+	{
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
+
 }

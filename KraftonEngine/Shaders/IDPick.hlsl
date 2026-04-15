@@ -58,3 +58,17 @@ uint PS_TexturedCutout(VS_Output_Tex input) : SV_TARGET
 
     return PickingId;
 }
+
+// Billboard 컬러 패스(ShaderBillboard.hlsl)와 동일한 컷오프로 맞춘다.
+// 화면에 실제로 그려지지 않는 픽셀(alpha < 0.5)은 ID 패스에서도 버린다.
+uint PS_BillboardCutout(VS_Output_Tex input) : SV_TARGET
+{
+    const float2 uv = saturate(input.texcoord);
+    const float alpha = g_txColor.Sample(g_Sample, uv).a;
+    if (alpha < 0.01f)
+    {
+        discard;
+    }
+
+    return PickingId;
+}

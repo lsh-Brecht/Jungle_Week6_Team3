@@ -1,114 +1,81 @@
+﻿#pragma once
 #pragma once
 
 #include "Components/PrimitiveComponent.h"
-#include "Core/DecalTypes.h"
+#include "Core/EngineTypes.h"
+#include "Core/PropertyTypes.h"
+#include "Core/ResourceTypes.h"
+#include "Render/Resource/MeshBufferManager.h"
 
 class UMaterialInterface;
-class FArchive;
-class FRenderBus;
-
-enum EDecalTargetFilterBits : int32
-{
-	DecalTarget_None = 0,
-	DecalTarget_StaticMeshComponent = 1 << 0,
-	DecalTarget_ReceivesDecalOnly = 1 << 1,
-	DecalTarget_ExcludeSameOwner = 1 << 2,
-	DecalTarget_AllPrimitive = 1 << 3,
-};
+class FPrimitiveSceneProxy;
 
 class UDecalComponent : public UPrimitiveComponent
 {
 public:
-	DECLARE_CLASS(UDecalComponent, UPrimitiveComponent)
+ DECLARE_CLASS(UDecalComponent, UPrimitiveComponent)
 
-	UDecalComponent() = default;
+	UDecalComponent();
 	~UDecalComponent() override = default;
 
-	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
-	void PostEditProperty(const char* PropertyName) override;
-	void CollectEditorVisualizations(FRenderBus& RenderBus) const override;
+	// 페이드 아웃 관련 데이터
+	float FadeStartDelay = 0.0f;
+	float FadeDuration = 0.0f;
+	float FadeInDuration = 0.0f;
+	float FadeInStartDelay = 0.0f;
+	bool bDestroyOwnerAfterFade = true;
 
-	void Serialize(FArchive& AR) override;
-	void PostDuplicate() override;
+	float GetFadeStartDelay() const;
+	float GetFadeDuration() const;
+	float GetFadeInStartDelay() const;
+	float GetFadeInDuration() const;
 
-public:
-	void MarkDecalDirty();
-	void ClearDecalDirty() { bDecalDirty = false; }
-	bool IsDecalDirty() const { return bDecalDirty; }
-	void EnsureDecalMeshBuilt();
-
-	FPrimitiveSceneProxy* CreateSceneProxy() override;
-
-	void RebuildDecalMeshNow();
-	void OnTransformDirty() override;
-
-	void UpdateWorldAABB() const override;
-	bool SupportsOutline() const override { return false; }
-
-public:
-	void SetDecalSize(const FVector& InSize);
-	const FVector& GetDecalSize() const { return DecalSize; }
-
+	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
+	FLinearColor DecalColor = FLinearColor::White();
+	
+	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
+	void SetFadeIn(float StartDelay, float Duration);
+	void SetDecalColor(const FLinearColor& Color);
 	void SetDecalMaterial(UMaterialInterface* NewDecalMaterial);
-	UMaterialInterface* GetDecalMaterial() const { return DecalMaterial; }
-	const FString& GetDecalMaterialPath() const { return DecalMaterialPath; }
+	UMaterialInterface* GetDecalMaterial() const;
 	void SetDecalTexture(const FName& TextureName);
-	const FName& GetDecalTextureName() const { return DecalTextureName; }
+	const FTextureResource* GetDecalTexture() const;
 	bool FitSizeToTextureAspect();
 
-	void SetSortOrder(int32 Value);
-	int32 GetSortOrder() const { return SortOrder; }
-	int32 GetSortPriority() const override { return SortOrder; }
+	void SetDecalSize(const FVector& InSize);
+	FMatrix GetTransformIncludingDecalSize() const;
 
-	void SetTargetFilter(int32 InFilter);
-	int32 GetTargetFilter() const { return TargetFilter; }
+	void UpdateWorldAABB() const override;
+	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
+	bool SupportsPicking() const override { return false; }
+	FMeshBuffer* GetMeshBuffer() const override;
+	const FMeshData* GetMeshData() const override;
+	FPrimitiveSceneProxy* CreateSceneProxy() override;
+	void CreateRenderState() override;
+	void DestroyRenderState() override;
 
-	void SetDrawDebugOBB(bool bEnable) { bDrawDebugOBB = bEnable; }
-	bool IsDrawDebugOBBEnabled() const { return bDrawDebugOBB; }
-	void SetDrawDebugReceiverTriangles(bool bEnable) { bDrawDebugReceiverTriangles = bEnable; }
-	bool IsDrawDebugReceiverTrianglesEnabled() const { return bDrawDebugReceiverTriangles; }
+	void Serialize(FArchive& Ar) override;
+	void PostDuplicate() override;
+ void BeginPlay() override;
+	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
+	void PostEditProperty(const char* PropertyName) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
-	FTransform GetTransformIncludingDecalSize() const;
-	FMatrix GetDecalLocalToWorldMatrix() const;
-	FMatrix GetWorldToDecalMatrix() const;
-
-	void GetDecalBoxCorners(FVector (&OutCorners)[8]) const;
-	FBoundingBox GetDecalWorldAABB() const;
-
-	void SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade = true);
-
-	void DebugRunBroadPhase() const;
-
-	const FDecalRenderableMesh& GetRenderableMesh() const { return RenderableMesh; }
-
-private:
-	void BuildDecalMesh();
-	void SyncTargetFilterMaskFromOptions();
-	void SyncTargetFilterOptionsFromMask();
-	void ReloadMaterialFromPath();
-	void AddDebugOBBLines(FRenderBus& RenderBus, const FColor& BoxColor) const;
-	void AddDebugReceiverTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const;
-	void AddDebugClippedTriangleLines(FRenderBus& RenderBus, const FColor& TriangleColor) const;
-
-private:
-	FVector DecalSize = FVector(1.0f, 1.0f, 1.0f);
+protected:
 	UMaterialInterface* DecalMaterial = nullptr;
-	FString DecalMaterialPath = "None";
+	FMaterialSlot DecalMaterialSlot;
 	FName DecalTextureName;
+	FTextureResource* DecalTexture = nullptr;
+	FPrimitiveSceneProxy* ArrowOuterProxy = nullptr;
+	FPrimitiveSceneProxy* ArrowInnerProxy = nullptr;
 
-	FDecalRenderableMesh RenderableMesh;
-	TArray<FDecalSATTriangle> DebugReceiverTriangles;
-	TArray<FDecalTriangulatedTriangle> DebugClippedTriangles;
+private:
+	float FadeOutTimeElapsed = 0.0f;
+	float FadeInTimeElapsed = 0.0f;
+	bool bIsFadeOutActive = false;
+	bool bIsFadeInActive = false;
+ bool bPendingFadeOutAfterFadeIn = false;
+	float OriginalAlpha = 1.0f;
 
-	int32 SortOrder = 0;
-	int32 DebugTriangleDrawLimit = 256;
-
-	int32 TargetFilter = DecalTarget_StaticMeshComponent | DecalTarget_ReceivesDecalOnly;
-
-	bool bDecalDirty = true;
-	bool bDrawDebugOBB = true;
-	bool bDrawDebugReceiverTriangles = false;
-	bool bTargetStaticMeshComponent = true;
-	bool bTargetReceivesDecalOnly = true;
-	bool bExcludeSameOwner = false;
+	void RestartFadePreviewSequence();
 };

@@ -4,6 +4,7 @@
 #include "Collision/RayUtilsSIMD.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "GameFramework/AActor.h"
 
 #include <algorithm>
@@ -55,6 +56,12 @@ void FWorldPrimitivePickingBVH::BuildNow(const TArray<AActor*>& Actors)
 		for (UPrimitiveComponent* Primitive : Actor->GetPrimitiveComponents())
 		{
 			if (!Primitive || !Primitive->IsVisible())
+			{
+				continue;
+			}
+			// 에디터 가이드/라벨/볼륨 등 선택 대상이 아닌 프리미티브는 월드 피킹 BVH에서 제외한다.
+			// (예: UUID 텍스트, Decal/SpotLight 볼륨)
+			if (!Primitive->SupportsPicking() || Primitive->IsA<UTextRenderComponent>())
 			{
 				continue;
 			}

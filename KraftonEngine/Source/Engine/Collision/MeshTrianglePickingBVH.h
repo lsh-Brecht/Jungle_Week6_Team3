@@ -16,8 +16,6 @@ public:
 	void EnsureBuilt(const FStaticMesh& Mesh);
 	// 로컬 공간 ray로 BVH를 순회해 가장 가까운 삼각형 hit를 찾습니다.
 	bool RaycastLocal(const FVector& LocalOrigin, const FVector& LocalDirection, const FStaticMesh& Mesh, FHitResult& OutHitResult) const;
-	// 로컬 공간 AABB와 겹치는 삼각형 leaf를 열거합니다.
-	void QueryTrianglesIntersectingAABBLocal(const FBoundingBox& LocalBounds, TArray<int32>& OutTriangleStartIndices) const;
 
 	// 월드 primitive BVH와 dirty 플래그 의미가 겹쳐 혼동을 줄 수 있어,
 	// 메시 변경 대응용 API는 일단 주석으로 남겨 둡니다.

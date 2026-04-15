@@ -3,6 +3,7 @@
 #include "Render/Resource/ShaderManager.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Pipeline/RenderConstants.h"
+#include <algorithm>
 
 // ============================================================
 // FBillboardSceneProxy
@@ -89,8 +90,23 @@ void FBillboardSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	bVisible = Comp->IsVisible();
 	if (!bVisible) return;
 
-	// Bus 카메라 벡터로 per-view 빌보드 행렬 계산
-	FMatrix BillboardMatrix = Comp->ComputeBillboardMatrix(Bus.GetCameraForward());
+	// 컬러 패스(BillboardBatcher)와 ID/Selection 패스의 축 기준을 완전히 동일하게 맞춘다.
+	// 기존 WorldUp x Forward 재구성은 카메라 right 축 부호가 달라져 스프라이트가 반전될 수 있다.
+	const FVector CameraForward = (Bus.GetCameraForward() * -1.0f).Normalized();
+	const FVector CameraRight = Bus.GetCameraRight().Normalized();
+	const FVector CameraUp = Bus.GetCameraUp().Normalized();
+
+	FMatrix BillboardMatrix;
+	BillboardMatrix.SetAxes(CameraForward, CameraRight, CameraUp);
+	BillboardMatrix = BillboardMatrix * FMatrix::MakeTranslationMatrix(Comp->GetWorldLocation());
+
+	// 주의: 컬러 렌더(BillboardBatcher)는 Width/Height를 반영해 쿼드를 만들지만,
+	// ID/Selection 경로는 Proxy의 PerObject 행렬을 사용한다.
+	// 여기서 같은 스케일을 반영하지 않으면 "보이는 이미지보다 큰 영역"이 피킹된다.
+	const float WidthScale = (std::max)(0.0001f, Comp->GetWidth() * 0.5f);
+	const float HeightScale = (std::max)(0.0001f, Comp->GetHeight() * 0.5f);
+	const FMatrix SpriteSizeScale = FMatrix::MakeScaleMatrix(FVector(1.0f, WidthScale, HeightScale));
+	BillboardMatrix = SpriteSizeScale * BillboardMatrix;
 
 	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(BillboardMatrix);
 	MarkPerObjectCBDirty();

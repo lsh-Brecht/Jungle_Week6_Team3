@@ -233,17 +233,22 @@ bool FMeshTrianglePickingBVH::RaycastLocal(const FVector& LocalOrigin, const FVe
 	return bHit;
 }
 
-void FMeshTrianglePickingBVH::QueryTrianglesIntersectingAABBLocal(const FBoundingBox& LocalBounds, TArray<int32>& OutTriangleStartIndices) const
+void FMeshTrianglePickingBVH::QueryAABBLocal(const FBoundingBox& LocalBox, TArray<FVector>& OutTriangles) const
 {
-	OutTriangleStartIndices.clear();
-
-	if (Nodes.empty() || !LocalBounds.IsValid())
+	if (Nodes.empty())
 	{
 		return;
 	}
 
+	// 루트 AABB 사전 검사
+	if (!Nodes[0].Bounds.IsIntersected(LocalBox))
+	{
+		return;
+	}
+
+	// 스택 기반 DFS 순회
 	int32 NodeStack[MeshBVHMaxTraversalStack];
-	int32 StackSize = 0;
+	int32  StackSize = 0;
 	NodeStack[StackSize++] = 0;
 
 	while (StackSize > 0)
@@ -251,30 +256,50 @@ void FMeshTrianglePickingBVH::QueryTrianglesIntersectingAABBLocal(const FBoundin
 		const int32 NodeIndex = NodeStack[--StackSize];
 		const FNode& Node = Nodes[NodeIndex];
 
-		if (!Node.Bounds.IsIntersected(LocalBounds))
-		{
-			continue;
-		}
-
 		if (Node.IsLeaf())
 		{
-			for (int32 LeafOffset = 0; LeafOffset < Node.LeafCount; ++LeafOffset)
+			// FTrianglePacket: V0 + Edge1(=V1-V0) + Edge2(=V2-V0) 형태로 저장됨
+			const FTrianglePacket& Packet = LeafPackets[Node.PacketIndex];
+			const uint32 Count = Packet.TriangleCount;
+
+			for (uint32 Lane = 0; Lane < Count; ++Lane)
 			{
-				const FTriangleLeaf& Leaf = TriangleLeaves[Node.FirstLeaf + LeafOffset];
-				if (Leaf.Bounds.IsIntersected(LocalBounds))
+				if (!(Packet.LaneMask & (1u << Lane)))
 				{
-					OutTriangleStartIndices.push_back(Leaf.TriangleStartIndex);
+					continue;
+				}
+
+				// 정점 복원
+				const FVector V0(Packet.V0X[Lane], Packet.V0Y[Lane], Packet.V0Z[Lane]);
+				const FVector V1(Packet.V0X[Lane] + Packet.Edge1X[Lane], Packet.V0Y[Lane] + Packet.Edge1Y[Lane], Packet.V0Z[Lane] + Packet.Edge1Z[Lane]);
+				const FVector V2(Packet.V0X[Lane] + Packet.Edge2X[Lane], Packet.V0Y[Lane] + Packet.Edge2Y[Lane], Packet.V0Z[Lane] + Packet.Edge2Z[Lane]);
+		
+				// 삼각형 AABB vs 쿼리 AABB
+				FBoundingBox TriBounds;
+				TriBounds.Expand(V0);
+				TriBounds.Expand(V1);
+				TriBounds.Expand(V2);
+
+				if (TriBounds.IsIntersected(LocalBox))
+				{
+					// V0, V1, V2 순서로 3개 push (호출자가 3개씩 읽음)
+					OutTriangles.push_back(V0);
+					OutTriangles.push_back(V1);
+					OutTriangles.push_back(V2);
 				}
 			}
 			continue;
 		}
 
-		for (int32 ChildIndex = 0; ChildIndex < Node.ChildCount && StackSize < MeshBVHMaxTraversalStack; ++ChildIndex)
+		// 내부 노드: 교차하는 자식을 스택에 추가
+		for (int32 ChildSlot = 0; ChildSlot < Node.ChildCount; ++ChildSlot)
 		{
-			const int32 ChildNodeIndex = Node.Children[ChildIndex];
-			if (ChildNodeIndex >= 0)
+			const FBoundingBox ChildBounds(
+				FVector(Node.ChildMinX[ChildSlot], Node.ChildMinY[ChildSlot], Node.ChildMinZ[ChildSlot]),
+				FVector(Node.ChildMaxX[ChildSlot], Node.ChildMaxY[ChildSlot], Node.ChildMaxZ[ChildSlot]));
+			if (ChildBounds.IsIntersected(LocalBox) && StackSize < MeshBVHMaxTraversalStack)
 			{
-				NodeStack[StackSize++] = ChildNodeIndex;
+				NodeStack[StackSize++] = Node.Children[ChildSlot];
 			}
 		}
 	}

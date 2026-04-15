@@ -17,22 +17,6 @@ TArray<FMeshAssetListItem> FObjManager::AvailableMeshFiles;
 TArray<FMeshAssetListItem> FObjManager::AvailableObjFiles;
 TArray<FMaterialAssetListItem> FObjManager::AvailableMaterialFiles;
 
-static std::wstring ToLowerWide(std::wstring Value)
-{
-	std::transform(Value.begin(), Value.end(), Value.begin(), ::towlower);
-	return Value;
-}
-
-static bool IsSupportedImageExtension(const std::wstring& Ext)
-{
-	const std::wstring LowerExt = ToLowerWide(Ext);
-	return LowerExt == L".png"
-		|| LowerExt == L".jpg"
-		|| LowerExt == L".jpeg"
-		|| LowerExt == L".bmp"
-		|| LowerExt == L".tga";
-}
-
 static void ResolveMaterialInstanceParent(UMaterialInterface* Material)
 {
 	UMaterialInstance* InstMat = Cast<UMaterialInstance>(Material);
@@ -138,42 +122,30 @@ void FObjManager::ScanMaterialAssets()
 {
 	AvailableMaterialFiles.clear();
 
+	// .mbin 파일도 .bin과 동일하게 MeshCache 폴더에 생성됨
 	const std::filesystem::path MeshCacheRoot = FPaths::RootDir() + L"Asset\\MeshCache\\";
-	const std::filesystem::path MeshTextureRoot = FPaths::RootDir() + L"Asset\\Mesh\\";
+
+	if (!std::filesystem::exists(MeshCacheRoot))
+	{
+		return;
+	}
 
 	const std::filesystem::path ProjectRoot(FPaths::RootDir());
 
-	if (std::filesystem::exists(MeshCacheRoot))
+	for (const auto& Entry : std::filesystem::recursive_directory_iterator(MeshCacheRoot))
 	{
-		for (const auto& Entry : std::filesystem::recursive_directory_iterator(MeshCacheRoot))
-		{
-			if (!Entry.is_regular_file()) continue;
+		if (!Entry.is_regular_file()) continue;
 
-			const std::filesystem::path& Path = Entry.path();
-			if (ToLowerWide(Path.extension().wstring()) != L".mbin") continue;
-			if (Path.stem() == L"None") continue;
+		const std::filesystem::path& Path = Entry.path();
 
-			FMaterialAssetListItem Item;
-			Item.DisplayName = FPaths::ToUtf8(Path.stem().wstring());
-			Item.FullPath = FPaths::ToUtf8(Path.lexically_relative(ProjectRoot).generic_wstring());
-			AvailableMaterialFiles.push_back(std::move(Item));
-		}
-	}
+		// 확장자가 .mbin인지 확인
+		if (Path.extension() != L".mbin") continue;
+		if (Path.stem() == L"None") continue; // Fallback 머티리얼은 목록에서 제외
 
-	if (std::filesystem::exists(MeshTextureRoot))
-	{
-		for (const auto& Entry : std::filesystem::recursive_directory_iterator(MeshTextureRoot))
-		{
-			if (!Entry.is_regular_file()) continue;
-
-			const std::filesystem::path& Path = Entry.path();
-			if (!IsSupportedImageExtension(Path.extension().wstring())) continue;
-
-			FMaterialAssetListItem Item;
-			Item.DisplayName = FPaths::ToUtf8(Path.filename().wstring());
-			Item.FullPath = FPaths::ToUtf8(Path.lexically_relative(ProjectRoot).generic_wstring());
-			AvailableMaterialFiles.push_back(std::move(Item));
-		}
+		FMaterialAssetListItem Item;
+		Item.DisplayName = FPaths::ToUtf8(Path.stem().wstring());
+		Item.FullPath = FPaths::ToUtf8(Path.lexically_relative(ProjectRoot).generic_wstring());
+		AvailableMaterialFiles.push_back(std::move(Item));
 	}
 }
 
@@ -432,8 +404,6 @@ UMaterialInterface* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 	// 머티리얼 슬롯 이름을 그대로 캐시 키로 사용
 	// stem()을 쓰면 "MatID_1.001" 같은 블렌더 이름에서 ".001"이 확장자로 잘려나감
 	const FString& FileNameOnly = MaterialName;
-	const std::filesystem::path SourcePath(FPaths::ToWide(MaterialName));
-	const bool bIsTextureFile = IsSupportedImageExtension(SourcePath.extension().wstring());
 
 	// 1. 캐시(RAM)에 이미 있는지 검사
 	if (MaterialCache.contains(FileNameOnly))
@@ -455,9 +425,9 @@ UMaterialInterface* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 	FString MBinPath = GetMBinaryFilePath(MaterialName);
 	std::filesystem::path MBinPathW = FPaths::ToWide(MBinPath);
 	std::filesystem::path SrcPath = FPaths::ToWide(MaterialName);
-	bool bNeedRebuild = bIsTextureFile;
+	bool bNeedRebuild = true;
 
-	if (!bIsTextureFile && std::filesystem::exists(MBinPathW))
+	if (std::filesystem::exists(MBinPathW))
 	{
 		// 원본 파일이 없거나, 이미 mbin 경로가 들어왔거나,
 		// mbin 파일의 수정 날짜가 원본 파일보다 최신(또는 같음)인 경우 리빌드 생략
@@ -501,16 +471,6 @@ UMaterialInterface* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 	// 3. 하드디스크(.bin)에 있다면 로드
 	if (bNeedRebuild)
 	{
-		if (bIsTextureFile)
-		{
-			UMaterial* TextureMaterial = UObjectManager::Get().CreateObject<UMaterial>();
-			TextureMaterial->PathFileName = FileNameOnly;
-			TextureMaterial->DiffuseTextureFilePath = FileNameOnly;
-			TextureMaterial->DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
-			NewMaterial = TextureMaterial;
-		}
-		else
-		{
 		// [리빌드 진행 영역]
 		// 현재 첨부된 코드 상에는 ObjImporter에서 Material을 같이 추출하지만,
 		// 추후 Material 단독 파일(예: .mat, .json 등)을 파싱하는 전용 Importer가 있다면 이 부분에서 파싱을 수행해야 합니다.
@@ -542,7 +502,6 @@ UMaterialInterface* FObjManager::GetOrLoadMaterial(const FString& MaterialName)
 
 				NewMaterial->Serialize(Writer);
 			}
-		}
 		}
 	}
 

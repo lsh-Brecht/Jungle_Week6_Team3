@@ -75,7 +75,12 @@ public:
 	void RegisterPostEffect(EPostEffectType Type, FPostEffectCallback Callback);
 	void SetPostEffectEnabled(EPostEffectType Type, bool bEnabled);
 	bool IsPostEffectEnabled(EPostEffectType Type) const;
-	void RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView* IdPickRTV, ID3D11DepthStencilView* DSV);
+	void RenderIdPickBuffer(
+		const FRenderBus& Bus,
+		ID3D11RenderTargetView* IdPickRTV,
+		ID3D11DepthStencilView* DSV,
+		ID3D11ShaderResourceView* IdPickSRV = nullptr,
+		ID3D11RenderTargetView* IdDebugRTV = nullptr);
 	void SetFXAAConstants(const FFXAAConstants& InConstants) { FXAAConstants = InConstants; }
 	const FFXAAConstants& GetFXAAConstants() const { return FXAAConstants; }
 
@@ -135,6 +140,7 @@ private:
 	void DrawScenenDepthVisualize(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 	void DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11DeviceContext* Context, bool bDrawFontOverlay);
 	void ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Proxies, ID3D11DeviceContext* Context, FShader* PrimitiveShader, FShader* BillboardShader, FShader* StaticMeshShader);
+	void RenderIdPickDebugVisualization(ID3D11DeviceContext* Context, ID3D11ShaderResourceView* IdPickSRV, ID3D11RenderTargetView* IdDebugRTV);
 	//	SelectionMask 패스를 전용 마스크 RT로 실행
 	void ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceContext* Context);
 
@@ -161,6 +167,7 @@ private:
 	TArray<FBillboardEntry> SortedBillboardBuffer;
 	TArray<FConstantBuffer> PerObjectCBPool;
 	FConstantBuffer IdPickPerObjectCB;
+	ID3D11SamplerState* IdPickSampler = nullptr;
 	ID3D11ShaderResourceView* ActiveDepthSRV = nullptr;
 
 	FPassRenderState    PassRenderStates[(uint32)ERenderPass::MAX];

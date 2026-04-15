@@ -19,6 +19,7 @@ namespace Key
 	constexpr const char* CameraMoveSmoothSpeed = "CameraMoveSmoothSpeed";
 	constexpr const char* CameraRotateSmoothSpeed = "CameraRotateSmoothSpeed";
 	constexpr const char* PickingMode = "PickingMode";
+	constexpr const char* ShowIdBufferOverlay = "ShowIdBufferOverlay";
 	constexpr const char* InitViewPos = "InitViewPos";
 	constexpr const char* InitLookAt = "InitLookAt";
 	constexpr const char* FXAAStage = "FXAAStage";
@@ -84,6 +85,7 @@ void FEditorSettings::SaveToFile(const FString& Path) const
 	Viewport[Key::CameraMoveSmoothSpeed] = CameraMoveSmoothSpeed;
 	Viewport[Key::CameraRotateSmoothSpeed] = CameraRotateSmoothSpeed;
 	Viewport[Key::PickingMode] = static_cast<int32>(PickingMode);
+	Viewport[Key::ShowIdBufferOverlay] = bShowIdBufferOverlay;
 	Viewport[Key::FXAAStage] = FXAAStage;
 	Viewport[Key::FXAAEdgeThreshold] = FXAAEdgeThreshold;
 	Viewport[Key::FXAAEdgeThresholdMin] = FXAAEdgeThresholdMin;
@@ -207,6 +209,8 @@ void FEditorSettings::LoadFromFile(const FString& Path)
 			PickingMode = static_cast<EEditorPickingMode>(Viewport[Key::PickingMode].ToInt());
 		if (PickingMode != EEditorPickingMode::Id && PickingMode != EEditorPickingMode::RayTriangle)
 			PickingMode = EEditorPickingMode::Id;
+		if (Viewport.hasKey(Key::ShowIdBufferOverlay))
+			bShowIdBufferOverlay = Viewport[Key::ShowIdBufferOverlay].ToBool();
 		if (Viewport.hasKey(Key::FXAAStage))
 			FXAAStage = Viewport[Key::FXAAStage].ToInt();
 		if (Viewport.hasKey(Key::FXAAEdgeThreshold))

@@ -13,7 +13,6 @@ public:
 
 private:
 	ID3D11RasterizerState* BackCull = nullptr;
-	ID3D11RasterizerState* BackCullDepthBias = nullptr;
 	ID3D11RasterizerState* FrontCull = nullptr;
 	ID3D11RasterizerState* NoCull = nullptr;
 	ID3D11RasterizerState* WireFrame = nullptr;

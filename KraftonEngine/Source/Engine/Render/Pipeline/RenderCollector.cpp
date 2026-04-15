@@ -175,7 +175,7 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 
 		if (!Proxy->bVisible) continue;
 
-		if (!bShowDecal && Proxy->Pass == ERenderPass::Decal) continue;
+		if (!bShowDecal && (Proxy->Pass == ERenderPass::Decal || Proxy->Pass == ERenderPass::MeshDecal)) continue;
 
 		// AABB 수집 — 오클루전 체크 전에 수집해야 다음 프레임에 재평가 가능
 		if (OcclusionMut)
@@ -196,7 +196,11 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 		// 선택된 오브젝트
 		if (Proxy->bSelected)
 		{
-			if (bShowSelectionOutline && Proxy->bSupportsOutline)
+			// Batcher 경로(Font/SubUV/Billboard)는 SelectionMask를 각 배처의 DrawSelectionMaskBatch에서
+			// 알파 컷아웃까지 반영해 그린다.
+			// 여기서 프록시로도 중복 등록하면 Primitive 경로로 쿼드 마스크가 찍혀
+			// billboard outline이 사각형으로 보이는 회귀가 발생한다.
+			if (bShowSelectionOutline && Proxy->bSupportsOutline && !Proxy->bBatcherRendered)
 				RenderBus.AddProxy(ERenderPass::SelectionMask, Proxy);
 
 			if (bShowBoundingVolume && Proxy->bShowAABB)

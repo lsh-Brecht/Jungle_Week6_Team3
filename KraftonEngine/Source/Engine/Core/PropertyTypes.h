@@ -18,7 +18,6 @@ enum class EPropertyType : uint8_t
 	Name,		  // FName — 문자열 풀 기반 이름 (리소스 키 등)
 	SceneComponentRef, // Owner actor 내부 USceneComponent 참조
 	StaticMeshRef, // UStaticMesh* 에셋 레퍼런스 (드롭다운 선택)
-	MaterialRef,   // UMaterialInterface* 경로 문자열 기반 에셋 레퍼런스 (드롭다운 선택)
 	MaterialSlot,  // FMaterialSlot — 머티리얼 경로 + UVScroll 플래그 묶음
 	// 필요 시 Enum, Color 등 추가
 };

@@ -86,7 +86,6 @@ public:
 	void InsertActorToOctree(AActor* actor);
 	void RemoveActorToOctree(AActor* actor);
 	void UpdateActorInOctree(AActor* actor);
-	void NotifyPrimitiveTransformChanged(UPrimitiveComponent* Primitive);
 
 private:
 	bool NeedsVisibleProxyRebuild() const;
