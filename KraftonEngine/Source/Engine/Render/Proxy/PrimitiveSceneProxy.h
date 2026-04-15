@@ -77,6 +77,7 @@ public:
 
 	// --- Sort Keys (Shader|MeshBuffer + Material layout) ---
 	uint64 SortKey = 0;
+	int32 SortPriority = 0;
 	uint32 MaterialSortKey = 0;
 	void UpdateSortKey();
 

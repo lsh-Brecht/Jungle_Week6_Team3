@@ -27,7 +27,6 @@ public:
 	float CameraMoveSmoothSpeed = 4.0f;
 	float CameraRotateSmoothSpeed = 2.0f;
 	EEditorPickingMode PickingMode = EEditorPickingMode::Id;
-	bool bShowIdBufferOverlay = false;
 	FVector InitViewPos = FVector(10, 0, 5);
 	FVector InitLookAt = FVector(0, 0, 0);
 	int32 FXAAStage = 1; // 0:Low, 1:Medium, 2:High, 3:Epic, 4:Cinematic, -1:Custom

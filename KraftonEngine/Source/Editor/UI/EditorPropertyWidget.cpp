@@ -623,6 +623,47 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		}
 		break;
 	}
+	case EPropertyType::MaterialRef:
+	{
+		FString* Val = static_cast<FString*>(Prop.ValuePtr);
+
+		FString Preview = (Val->empty() || *Val == "None") ? "None" : GetStemFromPath(*Val);
+
+		ImGui::Text("%s", Prop.Name.c_str());
+		ImGui::SameLine(120);
+		ImGui::SetNextItemWidth(-1);
+
+		if (ImGui::BeginCombo("##MaterialRef", Preview.c_str()))
+		{
+			bool bSelectedNone = (*Val == "None" || Val->empty());
+			if (ImGui::Selectable("None", bSelectedNone))
+			{
+				*Val = "None";
+				bChanged = true;
+			}
+			if (bSelectedNone)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+
+			const TArray<FMaterialAssetListItem>& MatFiles = FObjManager::GetAvailableMaterialFiles();
+			for (const FMaterialAssetListItem& Item : MatFiles)
+			{
+				bool bSelected = (*Val == Item.FullPath);
+				if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+				{
+					*Val = Item.FullPath;
+					bChanged = true;
+				}
+				if (bSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+		break;
+	}
 	case EPropertyType::SceneComponentRef:
 	{
 		FString* Val = static_cast<FString*>(Prop.ValuePtr);

@@ -12,11 +12,8 @@
 #include "Engine/Runtime/WindowsWindow.h"
 
 #include "Components/CameraComponent.h"
-#include "Components/BillboardComponent.h"
-#include "Components/DecalComponent.h"
 #include "Components/GizmoComponent.h"
 #include "Components/PrimitiveComponent.h"
-#include "Components/TextRenderComponent.h"
 #include "Collision/RayUtils.h"
 #include "Object/Object.h"
 #include "Editor/Selection/SelectionManager.h"
@@ -28,116 +25,6 @@
 #include "Engine/Runtime/Engine.h"
 #include "ImGui/imgui.h"
 #include <cmath>
-#include <cstdarg>
-#include <cstdio>
-#include <windows.h>
-#include <d3d11.h>
-
-namespace
-{
-	// Billboard ID picking mismatch 분석용 임시 로그 스위치.
-	// 원인 확인 후 false로 내리면 된다.
-	constexpr bool bDebugIdPickingTrace = true;
-	constexpr float BillboardPickAlphaThreshold = 0.01f;
-
-	void DebugIdPickTrace(const char* Format, ...)
-	{
-		char Buffer[1024] = {};
-		va_list Args;
-		va_start(Args, Format);
-		vsnprintf(Buffer, sizeof(Buffer), Format, Args);
-		va_end(Args);
-
-		UE_LOG("%s", Buffer);
-		::OutputDebugStringA(Buffer);
-		::OutputDebugStringA("\n");
-	}
-
-	bool SampleTextureAlphaAtUV(ID3D11DeviceContext* Context, ID3D11ShaderResourceView* SRV, float U, float V, float& OutAlpha01)
-	{
-		OutAlpha01 = 1.0f;
-		if (!Context || !SRV)
-		{
-			return false;
-		}
-
-		ID3D11Resource* Resource = nullptr;
-		SRV->GetResource(&Resource);
-		if (!Resource)
-		{
-			return false;
-		}
-
-		ID3D11Texture2D* Texture = nullptr;
-		const HRESULT QIHR = Resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&Texture));
-		Resource->Release();
-		if (FAILED(QIHR) || !Texture)
-		{
-			return false;
-		}
-
-		D3D11_TEXTURE2D_DESC SrcDesc = {};
-		Texture->GetDesc(&SrcDesc);
-		if (SrcDesc.Width == 0 || SrcDesc.Height == 0)
-		{
-			Texture->Release();
-			return false;
-		}
-
-		D3D11_TEXTURE2D_DESC StagingDesc = SrcDesc;
-		StagingDesc.BindFlags = 0;
-		StagingDesc.MiscFlags = 0;
-		StagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-		StagingDesc.Usage = D3D11_USAGE_STAGING;
-		StagingDesc.MipLevels = 1;
-		StagingDesc.ArraySize = 1;
-
-		ID3D11Device* Device = nullptr;
-		Context->GetDevice(&Device);
-		if (!Device)
-		{
-			Texture->Release();
-			return false;
-		}
-
-		ID3D11Texture2D* Staging = nullptr;
-		const HRESULT CreateHR = Device->CreateTexture2D(&StagingDesc, nullptr, &Staging);
-		Device->Release();
-		if (FAILED(CreateHR) || !Staging)
-		{
-			Texture->Release();
-			return false;
-		}
-
-		D3D11_BOX SrcBox = {};
-		const uint32 X = static_cast<uint32>(Clamp(U, 0.0f, 1.0f) * static_cast<float>(SrcDesc.Width - 1));
-		const uint32 Y = static_cast<uint32>(Clamp(V, 0.0f, 1.0f) * static_cast<float>(SrcDesc.Height - 1));
-		SrcBox.left = X;
-		SrcBox.right = X + 1;
-		SrcBox.top = Y;
-		SrcBox.bottom = Y + 1;
-		SrcBox.front = 0;
-		SrcBox.back = 1;
-
-		Context->CopySubresourceRegion(Staging, 0, 0, 0, 0, Texture, 0, &SrcBox);
-		Texture->Release();
-
-		D3D11_MAPPED_SUBRESOURCE Mapped = {};
-		const HRESULT MapHR = Context->Map(Staging, 0, D3D11_MAP_READ, 0, &Mapped);
-		if (FAILED(MapHR) || !Mapped.pData)
-		{
-			Staging->Release();
-			return false;
-		}
-
-		const uint8* Pixel = static_cast<const uint8*>(Mapped.pData);
-		const uint8 Alpha8 = Pixel[3];
-		OutAlpha01 = static_cast<float>(Alpha8) / 255.0f;
-		Context->Unmap(Staging, 0);
-		Staging->Release();
-		return true;
-	}
-}
 
 UWorld* FEditorViewportClient::GetWorld() const
 {
@@ -482,32 +369,6 @@ bool FEditorViewportClient::PickActorByIdAtLocalPoint(const POINT& InLocalPoint,
 	const uint32 PixelY = (InLocalPoint.y >= 0) ? static_cast<uint32>(InLocalPoint.y) : 0u;
 	if (!Viewport->ReadIdPickAt(PixelX, PixelY, Context, PickedId) || PickedId == 0u)
 	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			const uint32 W = Viewport->GetWidth();
-			const uint32 H = Viewport->GetHeight();
-			DebugIdPickTrace("[IDPickTrace] Miss Local=(%d,%d) Pixel=(%u,%u) Viewport=(%u,%u) PickedId=%u",
-				InLocalPoint.x, InLocalPoint.y, PixelX, PixelY, W, H, PickedId);
-
-			for (int32 dy = -1; dy <= 1; ++dy)
-			{
-				for (int32 dx = -1; dx <= 1; ++dx)
-				{
-					const int32 sx = static_cast<int32>(PixelX) + dx;
-					const int32 sy = static_cast<int32>(PixelY) + dy;
-					if (sx < 0 || sy < 0)
-					{
-						continue;
-					}
-
-					uint32 NeighborId = 0u;
-					if (Viewport->ReadIdPickAt(static_cast<uint32>(sx), static_cast<uint32>(sy), Context, NeighborId))
-					{
-						DebugIdPickTrace("[IDPickTrace] Neighbor dx=%d dy=%d id=%u", dx, dy, NeighborId);
-					}
-				}
-			}
-		}
 		return false;
 	}
 
@@ -515,147 +376,19 @@ bool FEditorViewportClient::PickActorByIdAtLocalPoint(const POINT& InLocalPoint,
 	const TArray<FPrimitiveSceneProxy*>& Proxies = InteractionWorld->GetScene().GetAllProxies();
 	if (ProxyId >= static_cast<uint32>(Proxies.size()))
 	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			DebugIdPickTrace("[IDPickTrace] InvalidProxyId PickedId=%u ProxyId=%u ProxyCount=%d", PickedId, ProxyId, static_cast<int32>(Proxies.size()));
-		}
 		return false;
 	}
 
 	FPrimitiveSceneProxy* Proxy = Proxies[ProxyId];
 	if (!Proxy || !Proxy->Owner || !Proxy->Owner->GetOwner())
 	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			DebugIdPickTrace("[IDPickTrace] NullProxy PickedId=%u ProxyId=%u Proxy=%p OwnerComp=%p", PickedId, ProxyId, Proxy, Proxy ? Proxy->Owner : nullptr);
-		}
-		return false;
-	}
-	if (!Proxy->Owner->SupportsPicking() || Proxy->Owner->IsA<UTextRenderComponent>())
-	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			DebugIdPickTrace("[IDPickTrace] RejectedComp PickedId=%u ProxyId=%u SupportsPicking=%d IsText=%d IsBillboard=%d IsDecal=%d Pass=%d",
-				PickedId,
-				ProxyId,
-				Proxy->Owner->SupportsPicking() ? 1 : 0,
-				Proxy->Owner->IsA<UTextRenderComponent>() ? 1 : 0,
-				Proxy->Owner->IsA<UBillboardComponent>() ? 1 : 0,
-				Proxy->Owner->IsA<UDecalComponent>() ? 1 : 0,
-				static_cast<int32>(Proxy->Pass));
-		}
-		return false;
-	}
-
-	// 현재 프레임 가시 집합이 아닌 프록시 ID는 stale ID로 간주하고 무시한다.
-	// (RT readback 지연/프레임 경계에서 이전 ID가 섞일 수 있음)
-	if (!Proxy->bInVisibleSet || !Proxy->bVisible)
-	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			DebugIdPickTrace("[IDPickTrace] StaleProxy PickedId=%u ProxyId=%u bInVisibleSet=%d bVisible=%d",
-				PickedId, ProxyId, Proxy->bInVisibleSet ? 1 : 0, Proxy->bVisible ? 1 : 0);
-		}
 		return false;
 	}
 
 	AActor* PickedActor = Proxy->Owner->GetOwner();
 	if (!PickedActor->IsVisible() || PickedActor->GetWorld() != InteractionWorld)
 	{
-		if constexpr (bDebugIdPickingTrace)
-		{
-			DebugIdPickTrace("[IDPickTrace] RejectedActor PickedId=%u ProxyId=%u Actor=%s Visible=%d SameWorld=%d",
-				PickedId,
-				ProxyId,
-				PickedActor->GetFName().ToString().c_str(),
-				PickedActor->IsVisible() ? 1 : 0,
-				PickedActor->GetWorld() == InteractionWorld ? 1 : 0);
-		}
 		return false;
-	}
-
-	// Billboard는 ID 픽셀을 맞췄더라도 최종적으로 클릭 지점의 텍스처 alpha를 한 번 더 확인한다.
-	// (셰이더/샘플러/LOD 차이로 인한 투명부 오선택 방지)
-	if (const UBillboardComponent* BillboardComp = Cast<UBillboardComponent>(Proxy->Owner))
-	{
-		if (BillboardComp->GetTexture() && BillboardComp->GetTexture()->SRV && Camera && Viewport)
-		{
-			const float VPWidth = static_cast<float>(Viewport->GetWidth());
-			const float VPHeight = static_cast<float>(Viewport->GetHeight());
-			const FRay PickRay = Camera->DeprojectScreenToWorld(
-				static_cast<float>(InLocalPoint.x),
-				static_cast<float>(InLocalPoint.y),
-				VPWidth,
-				VPHeight);
-
-			const FMatrix BillboardWorld = BillboardComp->ComputeBillboardMatrix(Camera->GetForwardVector());
-			const float WidthScale = (std::max)(0.0001f, BillboardComp->GetWidth() * 0.5f);
-			const float HeightScale = (std::max)(0.0001f, BillboardComp->GetHeight() * 0.5f);
-			const FMatrix SpriteSizeScale = FMatrix::MakeScaleMatrix(FVector(1.0f, WidthScale, HeightScale));
-			const FMatrix FullWorld = SpriteSizeScale * BillboardWorld;
-			const FVector PlaneCenter = FullWorld.GetLocation();
-			FVector PlaneNormal = FullWorld.TransformVector(FVector(1.0f, 0.0f, 0.0f));
-			PlaneNormal.Normalize();
-
-			const float Denom = PlaneNormal.Dot(PickRay.Direction);
-			if (std::abs(Denom) > 1e-6f)
-			{
-				const float T = (PlaneCenter - PickRay.Origin).Dot(PlaneNormal) / Denom;
-				if (T >= 0.0f)
-				{
-					const FVector HitPoint = PickRay.Origin + PickRay.Direction * T;
-					const FMatrix InvWorld = FullWorld.GetInverse();
-					const FVector LocalHit = HitPoint * InvWorld;
-					const float U = LocalHit.Y + 0.5f;
-					const float V = 0.5f - LocalHit.Z;
-					if (U >= 0.0f && U <= 1.0f && V >= 0.0f && V <= 1.0f)
-					{
-						float Alpha01 = 1.0f;
-						const bool bAlphaSampled = SampleTextureAlphaAtUV(Context, BillboardComp->GetTexture()->SRV, U, V, Alpha01);
-						if (bAlphaSampled && Alpha01 < BillboardPickAlphaThreshold)
-						{
-							if constexpr (bDebugIdPickingTrace)
-							{
-								DebugIdPickTrace("[IDPickTrace] BillboardAlphaReject U=%.4f V=%.4f Alpha=%.4f Threshold=%.4f Actor=%s",
-									U, V, Alpha01, BillboardPickAlphaThreshold, PickedActor->GetFName().ToString().c_str());
-							}
-							return false;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if constexpr (bDebugIdPickingTrace)
-	{
-		const uint32 SectionCount = static_cast<uint32>(Proxy->SectionDraws.size());
-		ID3D11ShaderResourceView* FirstSRV = nullptr;
-		if (!Proxy->SectionDraws.empty())
-		{
-			FirstSRV = Proxy->SectionDraws.front().DiffuseSRV;
-		}
-
-		const UBillboardComponent* BillboardComp = Cast<UBillboardComponent>(Proxy->Owner);
-		const FTextureResource* BillboardTex = BillboardComp ? BillboardComp->GetTexture() : nullptr;
-		const char* TexturePath = (BillboardTex && !BillboardTex->Path.empty()) ? BillboardTex->Path.c_str() : "None";
-
-		DebugIdPickTrace("[IDPickTrace] Hit Local=(%d,%d) Pixel=(%u,%u) PickedId=%u ProxyId=%u Actor=%s Comp=%s Pass=%d Mesh=%p Shader=%p Sections=%u FirstSRV=%p BillboardTex=%p TexPath=%s",
-			InLocalPoint.x,
-			InLocalPoint.y,
-			PixelX,
-			PixelY,
-			PickedId,
-			ProxyId,
-			PickedActor->GetFName().ToString().c_str(),
-			Proxy->Owner->GetFName().ToString().c_str(),
-			static_cast<int32>(Proxy->Pass),
-			Proxy->MeshBuffer,
-			Proxy->Shader,
-			SectionCount,
-			FirstSRV,
-			BillboardTex,
-			TexturePath);
 	}
 
 	OutActor = PickedActor;
@@ -794,23 +527,10 @@ void FEditorViewportClient::UpdateLayoutRect()
 
 void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport, bool bDrawActiveOutline)
 {
-	if (!Viewport) return;
+	if (!Viewport || !Viewport->GetSRV()) return;
 
 	const FRect& R = ViewportScreenRect;
 	if (R.Width <= 0 || R.Height <= 0) return;
-
-	ID3D11ShaderResourceView* ViewSRV = Viewport->GetSRV();
-	if (FEditorSettings::Get().bShowIdBufferOverlay)
-	{
-		if (ID3D11ShaderResourceView* IdDebugSRV = Viewport->GetIdPickDebugSRV())
-		{
-			ViewSRV = IdDebugSRV;
-		}
-	}
-	if (!ViewSRV)
-	{
-		return;
-	}
 
 	ImDrawList* DrawList = ImGui::GetWindowDrawList();
 	ImVec2 Min(R.X, R.Y);
@@ -818,7 +538,7 @@ void FEditorViewportClient::RenderViewportImage(bool bIsActiveViewport, bool bDr
 	constexpr float ToolbarBorderOffsetY = 34.0f;
 	const ImVec2 OutlineMin(R.X, R.Y + ToolbarBorderOffsetY);
 
-	DrawList->AddImage((ImTextureID)ViewSRV, Min, Max);
+	DrawList->AddImage((ImTextureID)Viewport->GetSRV(), Min, Max);
 
 	// 활성 뷰포트 테두리 강조
 	if (bIsActiveViewport && bDrawActiveOutline)

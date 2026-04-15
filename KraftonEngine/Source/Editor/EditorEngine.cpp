@@ -13,7 +13,6 @@
 #include "GameFramework/AActor.h"
 #include "GameFramework/StaticMeshActor.h"
 #include "GameFramework/DecalActor.h"
-#include "GameFramework/MeshDecalActor.h"
 #include "GameFramework/SpotLightActor.h"
 #include "Components/BillboardComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -112,9 +111,7 @@ bool TryComputeSpawnLocationFromViewportPoint(FLevelEditorViewportClient* InView
 
 constexpr const char* GPlaceableIdCube = "basic_shape_cube";
 constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
-constexpr const char* GPlaceableIdCylinder = "basic_shape_cylinder";
 constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
-constexpr const char* GPlaceableIdMeshDecal = "basic_actor_mesh_decal";
 constexpr const char* GPlaceableIdSpotLight = "basic_actor_spotlight";
 constexpr const char* GPlaceableIdEmptyActor = "basic_actor_empty";
 
@@ -1161,25 +1158,6 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 	});
 
 	RegisterPlaceableActor({
-		GPlaceableIdCylinder,
-		"Cylinder",
-		[](UWorld* World) -> AActor*
-		{
-			return World ? static_cast<AActor*>(World->SpawnActor<AStaticMeshActor>()) : nullptr;
-		},
-		[](AActor* Actor) -> bool
-		{
-			AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Actor);
-			if (!StaticMeshActor)
-			{
-				return false;
-			}
-			StaticMeshActor->InitDefaultComponents("Data/BasicShape/Cylinder.obj");
-			return true;
-		}
-	});
-
-	RegisterPlaceableActor({
 		GPlaceableIdDecal,
 		"Decal",
 		[](UWorld* World) -> AActor*
@@ -1196,20 +1174,6 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 			}
 
 			return true;
-		}
-		});
-
-	RegisterPlaceableActor({
-		GPlaceableIdMeshDecal,
-		"Mesh Decal",
-		[](UWorld* World) -> AActor*
-		{
-			return World ? static_cast<AActor*>(World->SpawnActor<AMeshDecalActor>()) : nullptr;
-		},
-		[](AActor* Actor) -> bool
-		{
-			AMeshDecalActor* MeshDecalActor = Cast<AMeshDecalActor>(Actor);
-			return MeshDecalActor != nullptr;
 		}
 		});
 

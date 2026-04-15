@@ -193,15 +193,17 @@ bool UStaticMesh::RaycastMeshTrianglesWithBVHLocal(const FVector& LocalOrigin, c
 	return MeshTrianglePickingBVH.RaycastLocal(LocalOrigin, LocalDirection, *StaticMeshAsset, OutHitResult);
 }
 
-void UStaticMesh::QueryMeshTrianglesInBox(const FBoundingBox& LocalBox, TArray<FVector>& OutLocalTriVerts) const
+void UStaticMesh::QueryMeshTriangleCandidatesByBVHLocal(const FBoundingBox& LocalBounds, TArray<int32>& OutTriangleStartIndices) const
 {
+	OutTriangleStartIndices.clear();
+
 	if (!StaticMeshAsset)
 	{
 		return;
 	}
 
 	EnsureMeshTrianglePickingBVHBuilt();
-	MeshTrianglePickingBVH.QueryAABBLocal(LocalBox, OutLocalTriVerts);
+	MeshTrianglePickingBVH.QueryTrianglesIntersectingAABBLocal(LocalBounds, OutTriangleStartIndices);
 }
 
 FMeshBuffer* UStaticMesh::GetLODMeshBuffer(uint32 LODLevel) const

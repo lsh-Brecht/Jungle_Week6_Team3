@@ -135,7 +135,7 @@ bool FViewport::CreateResources()
 	IdPickDesc.Format = DXGI_FORMAT_R32_UINT;
 	IdPickDesc.SampleDesc.Count = 1;
 	IdPickDesc.Usage = D3D11_USAGE_DEFAULT;
-	IdPickDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	IdPickDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
 
 	hr = Device->CreateTexture2D(&IdPickDesc, nullptr, &IdPickTexture);
 	if (FAILED(hr)) return false;
@@ -145,14 +145,6 @@ bool FViewport::CreateResources()
 	IdRTVDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	IdRTVDesc.Texture2D.MipSlice = 0;
 	hr = Device->CreateRenderTargetView(IdPickTexture, &IdRTVDesc, &IdPickRTV);
-	if (FAILED(hr)) return false;
-
-	D3D11_SHADER_RESOURCE_VIEW_DESC IdSRVDesc = {};
-	IdSRVDesc.Format = DXGI_FORMAT_R32_UINT;
-	IdSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	IdSRVDesc.Texture2D.MipLevels = 1;
-	IdSRVDesc.Texture2D.MostDetailedMip = 0;
-	hr = Device->CreateShaderResourceView(IdPickTexture, &IdSRVDesc, &IdPickSRV);
 	if (FAILED(hr)) return false;
 
 	D3D11_TEXTURE2D_DESC IdReadbackDesc = {};
@@ -165,24 +157,6 @@ bool FViewport::CreateResources()
 	IdReadbackDesc.Usage = D3D11_USAGE_STAGING;
 	IdReadbackDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	hr = Device->CreateTexture2D(&IdReadbackDesc, nullptr, &IdPickReadbackTexture);
-	if (FAILED(hr)) return false;
-
-	D3D11_TEXTURE2D_DESC IdDebugDesc = {};
-	IdDebugDesc.Width = Width;
-	IdDebugDesc.Height = Height;
-	IdDebugDesc.MipLevels = 1;
-	IdDebugDesc.ArraySize = 1;
-	IdDebugDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	IdDebugDesc.SampleDesc.Count = 1;
-	IdDebugDesc.Usage = D3D11_USAGE_DEFAULT;
-	IdDebugDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	hr = Device->CreateTexture2D(&IdDebugDesc, nullptr, &IdPickDebugTexture);
-	if (FAILED(hr)) return false;
-
-	hr = Device->CreateRenderTargetView(IdPickDebugTexture, nullptr, &IdPickDebugRTV);
-	if (FAILED(hr)) return false;
-
-	hr = Device->CreateShaderResourceView(IdPickDebugTexture, nullptr, &IdPickDebugSRV);
 	if (FAILED(hr)) return false;
 
 	// ── 뎁스/스텐실 (TYPELESS → DSV + StencilSRV) ──
@@ -242,10 +216,6 @@ bool FViewport::CreateResources()
 void FViewport::ReleaseResources()
 {
 	if (IdPickReadbackTexture) { IdPickReadbackTexture->Release(); IdPickReadbackTexture = nullptr; }
-	if (IdPickDebugSRV) { IdPickDebugSRV->Release(); IdPickDebugSRV = nullptr; }
-	if (IdPickDebugRTV) { IdPickDebugRTV->Release(); IdPickDebugRTV = nullptr; }
-	if (IdPickDebugTexture) { IdPickDebugTexture->Release(); IdPickDebugTexture = nullptr; }
-	if (IdPickSRV) { IdPickSRV->Release(); IdPickSRV = nullptr; }
 	if (IdPickRTV) { IdPickRTV->Release(); IdPickRTV = nullptr; }
 	if (IdPickTexture) { IdPickTexture->Release(); IdPickTexture = nullptr; }
 	if (StencilSRV) { StencilSRV->Release(); StencilSRV = nullptr; }

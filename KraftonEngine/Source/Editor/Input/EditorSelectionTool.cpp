@@ -16,27 +16,6 @@
 #include "Math/MathUtils.h"
 #include "Viewport/Viewport.h"
 #include "UI/EditorConsoleWidget.h"
-#include <windows.h>
-
-namespace
-{
-	constexpr bool bDebugPickingBranchTrace = true;
-
-	void EmitPickingBuildTagOnce()
-	{
-		static bool bEmitted = false;
-		if (bEmitted)
-		{
-			return;
-		}
-		bEmitted = true;
-
-		const char* Tag = "[PickingBranch] BuildTag=Week06_IDTrace_2026-04-15";
-		UE_LOG("%s", Tag);
-		::OutputDebugStringA(Tag);
-		::OutputDebugStringA("\n");
-	}
-}
 
 FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 	: Owner(InOwner)
@@ -46,11 +25,6 @@ FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 bool FEditorSelectionTool::HandleInput(float DeltaTime)
 {
 	(void)DeltaTime;
-	if constexpr (bDebugPickingBranchTrace)
-	{
-		EmitPickingBuildTagOnce();
-	}
-
 	UWorld* InteractionWorld = Owner ? Owner->GetInteractionWorld() : nullptr;
 	if (!Owner || !Owner->GetCamera() || !Owner->GetGizmo() || !InteractionWorld || !Owner->GetSelectionManager())
 	{
@@ -207,28 +181,15 @@ void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray, const POINT& Cl
 	FHitResult HitResult{};
 	AActor* BestActor = nullptr;
 	const FEditorSettings& Settings = FEditorSettings::Get();
-	if constexpr (bDebugPickingBranchTrace)
-	{
-		const char* ModeName = (Settings.PickingMode == EEditorPickingMode::Id) ? "ID" : "RayTriangle";
-		UE_LOG("[PickingBranch] Mode=%s ClickLocal=(%d,%d)", ModeName, ClickLocal.x, ClickLocal.y);
-	}
 	if (Settings.PickingMode == EEditorPickingMode::RayTriangle)
 	{
 		InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
-		if constexpr (bDebugPickingBranchTrace)
-		{
-			UE_LOG("[PickingBranch] Used=RayTriangle HitActor=%s",
-				BestActor ? BestActor->GetFName().ToString().c_str() : "None");
-		}
 	}
 	else
 	{
-		const bool bPickedById = Owner->PickActorByIdAtLocalPoint(ClickLocal, BestActor);
-		if constexpr (bDebugPickingBranchTrace)
+		if (!Owner->PickActorByIdAtLocalPoint(ClickLocal, BestActor))
 		{
-			UE_LOG("[PickingBranch] Used=ID Success=%d HitActor=%s",
-				bPickedById ? 1 : 0,
-				BestActor ? BestActor->GetFName().ToString().c_str() : "None");
+			InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
 		}
 	}
 	if (!BestActor)
