@@ -5,6 +5,7 @@
 #include "ImGui/imgui.h"
 #include "Components/GizmoComponent.h"
 #include "Components/DecalComponent.h"
+#include "Components/MeshDecalComponent.h"
 #include "Components/MovementComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -775,7 +776,8 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::BeginGroup();
 		ImGui::SetNextItemWidth(-1);
 
-			const bool bDecalMaterialSlot = !bElementSlot && Prop.Name == "Decal Material";
+			const bool bDecalMaterialSlot = !bElementSlot
+				&& (Prop.Name == "Decal Material" || Prop.Name == "Mesh Decal Material");
 			FString Preview = GetMaterialSlotPreviewName(Slot->Path);
 			if (ImGui::BeginCombo("##Mat", Preview.c_str()))
 			{
@@ -861,12 +863,18 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 					DrawList->AddImage((ImTextureID)Texture->SRV, ImageMin, ImageMax);
 					DrawList->AddRect(ImageMin, ImageMax, IM_COL32(180, 180, 180, 180));
 
-					if (Texture->Width > 0 && Texture->Height > 0
-						&& SelectedComponent && SelectedComponent->IsA<UDecalComponent>())
+					if (Texture->Width > 0 && Texture->Height > 0 && SelectedComponent)
 					{
 						if (ImGui::Button("Fit Size To Texture"))
 						{
-							bChanged = static_cast<UDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+							if (SelectedComponent->IsA<UDecalComponent>())
+							{
+								bChanged = static_cast<UDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+							}
+							else if (SelectedComponent->IsA<UMeshDecalComponent>())
+							{
+								bChanged = static_cast<UMeshDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+							}
 						}
 					}
 				}

@@ -5,8 +5,11 @@
 #include "Mesh/ObjManager.h"
 #include "Object/ObjectFactory.h"
 #include "GameFramework/World.h"
+#include "Render/Proxy/FScene.h"
 #include "Render/Proxy/MeshDecalSceneProxy.h"
+#include "Resource/ResourceManager.h"
 #include "Serialization/Archive.h"
+#include "Texture/Texture2D.h"
 
 #include <algorithm>
 #include <cstring>
@@ -15,12 +18,31 @@ IMPLEMENT_CLASS(UMeshDecalComponent, UPrimitiveComponent)
 
 namespace
 {
+	constexpr const char* DecalTextureMaterialPrefix = "Texture:";
+
 	FVector SanitizeSize(const FVector& InSize)
 	{
 		return FVector(
 			std::max(std::abs(InSize.X), 0.001f),
 			std::max(std::abs(InSize.Y), 0.001f),
 			std::max(std::abs(InSize.Z), 0.001f));
+	}
+
+	bool IsDecalTextureMaterialPath(const FString& Path)
+	{
+		return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
+	}
+
+	FString GetDecalTextureNameFromMaterialPath(const FString& Path)
+	{
+		return IsDecalTextureMaterialPath(Path)
+			? Path.substr(std::strlen(DecalTextureMaterialPrefix))
+			: FString();
+	}
+
+	FString MakeDecalTextureMaterialPath(const FName& TextureName)
+	{
+		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
 	}
 }
 
@@ -30,7 +52,14 @@ void UMeshDecalComponent::Serialize(FArchive& Ar)
 
 	if (Ar.IsSaving())
 	{
-		MeshDecalMaterialPath = MeshDecalMaterial ? MeshDecalMaterial->GetAssetPathFileName() : "None";
+		if (MeshDecalTextureName.IsValid())
+		{
+			MeshDecalMaterialPath = MakeDecalTextureMaterialPath(MeshDecalTextureName);
+		}
+		else
+		{
+			MeshDecalMaterialPath = MeshDecalMaterial ? MeshDecalMaterial->GetAssetPathFileName() : "None";
+		}
 		MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
 	}
 
@@ -112,10 +141,62 @@ void UMeshDecalComponent::SetMeshDecalSize(const FVector& InSize)
 void UMeshDecalComponent::SetMeshDecalMaterial(UMaterialInterface* InMaterial)
 {
 	MeshDecalMaterial = InMaterial;
+	MeshDecalTextureName = FName();
+	MeshDecalTexture = nullptr;
 	MeshDecalMaterialPath = MeshDecalMaterial ? MeshDecalMaterial->GetAssetPathFileName() : "None";
 	MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
 	MarkMeshDecalDirty();
 	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+void UMeshDecalComponent::SetMeshDecalTexture(const FName& TextureName)
+{
+	MeshDecalMaterial = nullptr;
+	MeshDecalTextureName = TextureName;
+	MeshDecalTexture = FResourceManager::Get().FindTexture(TextureName);
+	MeshDecalMaterialPath = MeshDecalTexture ? MakeDecalTextureMaterialPath(TextureName) : "None";
+	MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
+	MarkMeshDecalDirty();
+	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+bool UMeshDecalComponent::FitSizeToTextureAspect()
+{
+	uint32 TextureWidth = 0;
+	uint32 TextureHeight = 0;
+
+	if (MeshDecalTexture)
+	{
+		TextureWidth = MeshDecalTexture->Width;
+		TextureHeight = MeshDecalTexture->Height;
+	}
+	else if (MeshDecalMaterial)
+	{
+		if (UTexture2D* DiffuseTexture = MeshDecalMaterial->GetDiffuseTexture())
+		{
+			TextureWidth = DiffuseTexture->GetWidth();
+			TextureHeight = DiffuseTexture->GetHeight();
+		}
+	}
+
+	if (TextureWidth == 0 || TextureHeight == 0)
+	{
+		return false;
+	}
+
+	if (MeshDecalSize.Y <= 0.0f)
+	{
+		MeshDecalSize.Y = 1.0f;
+	}
+
+	const FVector WorldScale = GetWorldScale();
+	const float SafeWorldScaleY = (WorldScale.Y > 0.001f) ? WorldScale.Y : 1.0f;
+	const float SafeWorldScaleZ = (WorldScale.Z > 0.001f) ? WorldScale.Z : 1.0f;
+	const float TextureAspectYZ = static_cast<float>(TextureHeight) / static_cast<float>(TextureWidth);
+	MeshDecalSize.Z = (MeshDecalSize.Y * SafeWorldScaleY * TextureAspectYZ) / SafeWorldScaleZ;
+	MarkWorldBoundsDirty();
+	MarkMeshDecalDirty();
+	return true;
 }
 
 void UMeshDecalComponent::SetSortOrder(int32 InSortOrder)
@@ -196,6 +277,57 @@ FPrimitiveSceneProxy* UMeshDecalComponent::CreateSceneProxy()
 	return new FMeshDecalSceneProxy(this);
 }
 
+void UMeshDecalComponent::CreateRenderState()
+{
+	if (SceneProxy)
+	{
+		return;
+	}
+
+	UPrimitiveComponent::CreateRenderState();
+	if (!SceneProxy)
+	{
+		return;
+	}
+
+	FScene* Scene = nullptr;
+	if (Owner && Owner->GetWorld())
+	{
+		Scene = &Owner->GetWorld()->GetScene();
+	}
+
+	if (!Scene)
+	{
+		return;
+	}
+
+	ArrowOuterProxy = new FMeshDecalArrowSceneProxy(this, false);
+	Scene->RegisterProxy(ArrowOuterProxy);
+
+	ArrowInnerProxy = new FMeshDecalArrowSceneProxy(this, true);
+	Scene->RegisterProxy(ArrowInnerProxy);
+}
+
+void UMeshDecalComponent::DestroyRenderState()
+{
+	if (Owner && Owner->GetWorld())
+	{
+		FScene& Scene = Owner->GetWorld()->GetScene();
+		if (ArrowInnerProxy)
+		{
+			Scene.RemovePrimitive(ArrowInnerProxy);
+			ArrowInnerProxy = nullptr;
+		}
+		if (ArrowOuterProxy)
+		{
+			Scene.RemovePrimitive(ArrowOuterProxy);
+			ArrowOuterProxy = nullptr;
+		}
+	}
+
+	UPrimitiveComponent::DestroyRenderState();
+}
+
 void UMeshDecalComponent::BuildMeshDecalMesh()
 {
 	UWorld* World = GetWorld();
@@ -213,8 +345,21 @@ void UMeshDecalComponent::ReloadMaterialFromPath()
 	if (MeshDecalMaterialPath.empty() || MeshDecalMaterialPath == "None")
 	{
 		MeshDecalMaterial = nullptr;
+		MeshDecalTextureName = FName();
+		MeshDecalTexture = nullptr;
 		return;
 	}
+
+	if (IsDecalTextureMaterialPath(MeshDecalMaterialPath))
+	{
+		MeshDecalMaterial = nullptr;
+		MeshDecalTextureName = FName(GetDecalTextureNameFromMaterialPath(MeshDecalMaterialPath));
+		MeshDecalTexture = FResourceManager::Get().FindTexture(MeshDecalTextureName);
+		return;
+	}
+
 	MeshDecalMaterial = FObjManager::GetOrLoadMaterial(MeshDecalMaterialPath);
+	MeshDecalTextureName = FName();
+	MeshDecalTexture = nullptr;
 }
 

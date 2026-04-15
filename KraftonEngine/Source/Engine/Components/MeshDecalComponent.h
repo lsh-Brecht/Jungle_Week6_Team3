@@ -3,6 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Core/MeshDecalTypes.h"
 #include "Core/PropertyTypes.h"
+#include "Core/ResourceTypes.h"
 
 class UMaterialInterface;
 class FPrimitiveSceneProxy;
@@ -21,12 +22,17 @@ public:
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
 	void PostEditProperty(const char* PropertyName) override;
 	void OnTransformDirty() override;
+	void CreateRenderState() override;
+	void DestroyRenderState() override;
 
 	void SetMeshDecalSize(const FVector& InSize);
 	const FVector& GetMeshDecalSize() const { return MeshDecalSize; }
 
 	void SetMeshDecalMaterial(UMaterialInterface* InMaterial);
 	UMaterialInterface* GetMeshDecalMaterial() const { return MeshDecalMaterial; }
+	void SetMeshDecalTexture(const FName& TextureName);
+	const FTextureResource* GetMeshDecalTexture() const { return MeshDecalTexture; }
+	bool FitSizeToTextureAspect();
 
 	void SetSortOrder(int32 InSortOrder);
 	int32 GetSortOrder() const { return SortOrder; }
@@ -60,9 +66,13 @@ private:
 private:
 	FVector MeshDecalSize = FVector(1.0f, 1.0f, 1.0f);
 	UMaterialInterface* MeshDecalMaterial = nullptr;
+	FName MeshDecalTextureName;
+	FTextureResource* MeshDecalTexture = nullptr;
 	FMaterialSlot MeshDecalMaterialSlot;
 	FString MeshDecalMaterialPath = "None";
 	FMeshDecalRenderableMesh RenderableMesh;
+	FPrimitiveSceneProxy* ArrowOuterProxy = nullptr;
+	FPrimitiveSceneProxy* ArrowInnerProxy = nullptr;
 	int32 SortOrder = 0;
 	bool bMeshDecalDirty = true;
 	bool bReceivesDecalOnly = true;
