@@ -826,7 +826,11 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				if (Texture && Texture->SRV)
 				{
 					ImGui::Text("Preview (%u x %u)", Texture->Width, Texture->Height);
-					ImVec2 PreviewSize(160.0f, 160.0f);
+					constexpr float PreviewFrameSize = 176.0f;
+					constexpr float PreviewFramePadding = 8.0f;
+					const float PreviewMaxSize = PreviewFrameSize - PreviewFramePadding * 2.0f;
+
+					ImVec2 PreviewSize(PreviewMaxSize, PreviewMaxSize);
 					if (Texture->Width > 0 && Texture->Height > 0)
 					{
 						const float Aspect = static_cast<float>(Texture->Width) / static_cast<float>(Texture->Height);
@@ -839,7 +843,23 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 							PreviewSize.x = PreviewSize.y * Aspect;
 						}
 					}
-					ImGui::Image((ImTextureID)Texture->SRV, PreviewSize);
+
+					const ImVec2 FrameMin = ImGui::GetCursorScreenPos();
+					const ImVec2 FrameSize(PreviewFrameSize, PreviewFrameSize);
+					const ImVec2 FrameMax(FrameMin.x + FrameSize.x, FrameMin.y + FrameSize.y);
+					ImGui::InvisibleButton("##DecalTexturePreviewFrame", FrameSize);
+
+					ImDrawList* DrawList = ImGui::GetWindowDrawList();
+					DrawList->AddRectFilled(FrameMin, FrameMax, IM_COL32(36, 36, 36, 255), 4.0f);
+					DrawList->AddRect(FrameMin, FrameMax, IM_COL32(125, 125, 125, 255), 4.0f);
+
+					const ImVec2 ImageMin(
+						FrameMin.x + (FrameSize.x - PreviewSize.x) * 0.5f,
+						FrameMin.y + (FrameSize.y - PreviewSize.y) * 0.5f
+					);
+					const ImVec2 ImageMax(ImageMin.x + PreviewSize.x, ImageMin.y + PreviewSize.y);
+					DrawList->AddImage((ImTextureID)Texture->SRV, ImageMin, ImageMax);
+					DrawList->AddRect(ImageMin, ImageMax, IM_COL32(180, 180, 180, 180));
 
 					if (Texture->Width > 0 && Texture->Height > 0
 						&& SelectedComponent && SelectedComponent->IsA<UDecalComponent>())
