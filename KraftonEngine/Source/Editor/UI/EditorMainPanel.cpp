@@ -713,7 +713,7 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 			ImGui::EndCombo();
 		}
 
-     const bool bCustomStage = (Settings.FXAAStage == GFXAACustomStage);
+		const bool bCustomStage = (Settings.FXAAStage == GFXAACustomStage);
 		ImGui::BeginDisabled(!bCustomStage);
 		if (ImGui::DragFloat("Edge Threshold", &Settings.FXAAEdgeThreshold, 0.0005f, 0.001f, 0.5f, "%.4f"))
 		{
@@ -725,7 +725,7 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 			if (Settings.FXAAEdgeThresholdMin < 0.001f) Settings.FXAAEdgeThresholdMin = 0.001f;
 			if (Settings.FXAAEdgeThresholdMin > 0.5f) Settings.FXAAEdgeThresholdMin = 0.5f;
 		}
-       if (ImGui::DragInt("Search Steps", &Settings.FXAASearchSteps, 1.0f, 1, 20, "%d"))
+		if (ImGui::DragInt("Search Steps", &Settings.FXAASearchSteps, 1.0f, 1, 20, "%d"))
 		{
 			if (Settings.FXAASearchSteps < 1) Settings.FXAASearchSteps = 1;
 			if (Settings.FXAASearchSteps > 20) Settings.FXAASearchSteps = 20;

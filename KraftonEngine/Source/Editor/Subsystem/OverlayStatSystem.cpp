@@ -44,7 +44,7 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 	if (bShowDecal)
 	{
 		FOverlayStatGroup Group;
-      {
+		{
 			char Buffer[160] = {};
 			snprintf(Buffer, sizeof(Buffer), "Decal Actors : %u", FDecalStats::GetDecalActorCount());
 			Group.Lines.push_back(FString(Buffer));
@@ -70,10 +70,6 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 
 			const FString StatName = Entry.Name;
 			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
-			{
-				continue;
-			}
-			if (StatName == "RenderPass::Decal" || StatName == "Renderpass::decal")
 			{
 				continue;
 			}
@@ -280,10 +276,6 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 
 			const FString StatName = Entry.Name;
 			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
-			{
-				continue;
-			}
-			if (StatName == "RenderPass::Decal" || StatName == "Renderpass::decal")
 			{
 				continue;
 			}

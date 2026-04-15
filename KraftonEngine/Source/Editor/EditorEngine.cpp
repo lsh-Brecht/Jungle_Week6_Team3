@@ -204,9 +204,9 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 		{
 			Settings.FXAASearchSteps = 1;
 		}
-		if (Settings.FXAASearchSteps > 100)
+		if (Settings.FXAASearchSteps > 20)
 		{
-			Settings.FXAASearchSteps = 100;
+			Settings.FXAASearchSteps = 20;
 		}
 
 		FFXAAConstants FXAA = {};
