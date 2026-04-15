@@ -417,8 +417,8 @@ void FRenderer::InitializePassRenderStates()
 	S[(uint32)E::SelectionMask] =	{ EDepthStencilState::NoDepth,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::Editor] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		true };
 	S[(uint32)E::Grid] =			{ EDepthStencilState::Default,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_LINELIST,		false };
-	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutside,		EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
-	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInside,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoOuter] =		{ EDepthStencilState::GizmoOutsideDepthWrite, EBlendState::Opaque,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
+	S[(uint32)E::GizmoInner] =		{ EDepthStencilState::GizmoInsideDepthWrite, EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::OverlayFont] =		{ EDepthStencilState::NoDepth,			EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false };
 
 }
@@ -1208,6 +1208,12 @@ void FRenderer::DrawPostProcessOverlays(const FRenderBus& InRenderBus, ID3D11Dev
 {
 	if (InRenderBus.GetShowFlags().bGizmo)
 	{
+		ID3D11DepthStencilView* DSV = InRenderBus.GetViewportDSV();
+		if (DSV)
+		{
+			Context->ClearDepthStencilView(DSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
+		}
+
 		const auto& GizmoOuterProxies = InRenderBus.GetProxies(ERenderPass::GizmoOuter);
 		if (!GizmoOuterProxies.empty())
 		{
