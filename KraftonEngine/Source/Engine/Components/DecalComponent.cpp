@@ -226,7 +226,9 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 
 	if (strcmp(PropertyName, "Decal Size") == 0)
 	{
-		SetDecalSize(DecalSize);
+		DecalSize = SanitizeDecalSize(DecalSize);
+		MarkWorldBoundsDirty();
+		MarkDecalDirty();
 	}
 	else if (strcmp(PropertyName, "Decal Material") == 0)
 	{
@@ -235,14 +237,14 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 	}
 	else if (strcmp(PropertyName, "Sort Order") == 0)
 	{
-		SetSortOrder(SortOrder);
+		MarkProxyDirty(EDirtyFlag::Material);
 	}
 	else if (strcmp(PropertyName, "Target Static Mesh") == 0 ||
 		strcmp(PropertyName, "Target Receives Decal Only") == 0 ||
 		strcmp(PropertyName, "Exclude Same Owner") == 0)
 	{
 		SyncTargetFilterMaskFromOptions();
-		SetTargetFilter(TargetFilter);
+		MarkDecalDirty();
 	}
 	else if (strcmp(PropertyName, "Debug Triangle Draw Limit") == 0)
 	{
