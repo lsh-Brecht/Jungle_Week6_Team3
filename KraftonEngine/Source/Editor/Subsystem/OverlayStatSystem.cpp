@@ -61,21 +61,52 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 		}
 
 		const TArray<FStatEntry>& Entries = FStatManager::Get().GetSnapshot();
+		double DecalPassMs = 0.0;
+		double MeshDecalPassMs = 0.0;
 		for (const FStatEntry& Entry : Entries)
 		{
-			if (!Entry.Name)
-			{
-				continue;
-			}
-
+			if (!Entry.Name) continue;
 			const FString StatName = Entry.Name;
-			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
+			if (StatName == "RenderPass::Decal")
 			{
-				continue;
+				DecalPassMs = Entry.LastTime * 1000.0;
 			}
+			else if (StatName == "RenderPass::MeshDecal")
+			{
+				MeshDecalPassMs = Entry.LastTime * 1000.0;
+			}
+		}
 
+		{
 			char Buffer[196] = {};
-			snprintf(Buffer, sizeof(Buffer), "%s : %.3f ms", Entry.Name, Entry.LastTime * 1000.0);
+			Group.Lines.push_back("[ Decal ]");
+			snprintf(Buffer, sizeof(Buffer), "Actors : %u", FDecalStats::GetDecalActorCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Rendered : %u", FDecalStats::GetRenderedDecalCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Affected Objects Sum : %u", FDecalStats::GetAffectedObjectCountSum());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Affected Objects Max : %u", FDecalStats::GetAffectedObjectCountMax());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "RenderPass Time : %.3f ms", DecalPassMs);
+			Group.Lines.push_back(FString(Buffer));
+		}
+
+		{
+			char Buffer[196] = {};
+			Group.Lines.push_back("----------------");
+			Group.Lines.push_back("[ Mesh Decal ]");
+			snprintf(Buffer, sizeof(Buffer), "Actors : %u", FDecalStats::GetMeshDecalActorCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Rendered : %u", FDecalStats::GetRenderedMeshDecalCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Projected Vertices : %u", FDecalStats::GetMeshDecalVertexCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Projected Triangles : %u", FDecalStats::GetMeshDecalTriangleCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "Renderable Sections : %u", FDecalStats::GetMeshDecalSectionCount());
+			Group.Lines.push_back(FString(Buffer));
+			snprintf(Buffer, sizeof(Buffer), "RenderPass Time : %.3f ms", MeshDecalPassMs);
 			Group.Lines.push_back(FString(Buffer));
 		}
 
@@ -177,9 +208,9 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	{
 		EstimatedLineCount += 8;
 	}
-   if (bShowDecal)
+	if (bShowDecal)
 	{
-		EstimatedLineCount += 8;
+		EstimatedLineCount += 14;
 	}
 	OutLines.reserve(EstimatedLineCount);
 
@@ -253,38 +284,81 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 
 	if (bShowDecal)
 	{
-      char Buffer[160] = {};
-		snprintf(Buffer, sizeof(Buffer), "Decal Actors : %u", FDecalStats::GetDecalActorCount());
-		AppendLine(OutLines, CurrentY, FString(Buffer));
-		CurrentY += Layout.LineHeight;
-
-		snprintf(Buffer, sizeof(Buffer), "Rendered Decals : %u", FDecalStats::GetRenderedDecalCount());
-		AppendLine(OutLines, CurrentY, FString(Buffer));
-		CurrentY += Layout.LineHeight;
-
-		snprintf(Buffer, sizeof(Buffer), "Affected Objects (sum) : %u", FDecalStats::GetAffectedObjectCount());
-		AppendLine(OutLines, CurrentY, FString(Buffer));
-		CurrentY += Layout.LineHeight;
-
 		const TArray<FStatEntry>& Entries = FStatManager::Get().GetSnapshot();
+		double DecalPassMs = 0.0;
+		double MeshDecalPassMs = 0.0;
 		for (const FStatEntry& Entry : Entries)
 		{
-			if (!Entry.Name)
-			{
-				continue;
-			}
-
+			if (!Entry.Name) continue;
 			const FString StatName = Entry.Name;
-			if (StatName.find("Decal") == FString::npos && StatName.find("decal") == FString::npos)
+			if (StatName == "RenderPass::Decal")
 			{
-				continue;
+				DecalPassMs = Entry.LastTime * 1000.0;
 			}
 
 			char Buffer[196] = {};
 			snprintf(Buffer, sizeof(Buffer), "%s : %.3f ms", Entry.Name, Entry.LastTime * 1000.0);
 			AppendLine(OutLines, CurrentY, FString(Buffer));
 			CurrentY += Layout.LineHeight;
+			else if (StatName == "RenderPass::MeshDecal")
+			{
+				MeshDecalPassMs = Entry.LastTime * 1000.0;
+			}
 		}
+
+		char Buffer[196] = {};
+		AppendLine(OutLines, CurrentY, "[ Decal ]");
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Actors : %u", FDecalStats::GetDecalActorCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Rendered : %u", FDecalStats::GetRenderedDecalCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Affected Objects Sum : %u", FDecalStats::GetAffectedObjectCountSum());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Affected Objects Max : %u", FDecalStats::GetAffectedObjectCountMax());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "RenderPass Time : %.3f ms", DecalPassMs);
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		AppendLine(OutLines, CurrentY, "----------------");
+		CurrentY += Layout.LineHeight;
+
+		AppendLine(OutLines, CurrentY, "[ Mesh Decal ]");
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Actors : %u", FDecalStats::GetMeshDecalActorCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Rendered : %u", FDecalStats::GetRenderedMeshDecalCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Projected Vertices : %u", FDecalStats::GetMeshDecalVertexCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Projected Triangles : %u", FDecalStats::GetMeshDecalTriangleCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Renderable Sections : %u", FDecalStats::GetMeshDecalSectionCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "RenderPass Time : %.3f ms", MeshDecalPassMs);
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
 	}
 }
 

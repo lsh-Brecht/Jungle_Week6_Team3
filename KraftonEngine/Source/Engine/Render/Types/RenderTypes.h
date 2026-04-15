@@ -33,6 +33,7 @@ enum class ERenderPass : uint32
 {
 	Opaque,
 	Decal,
+	MeshDecal,
 	Translucent,
 	SubUV,			// SubUVComponent     → SubUVBatcher 경유
 	Billboard,		// BillboardComponent → BillboardBatcher 경유
@@ -52,6 +53,7 @@ inline const char* GetRenderPassName(ERenderPass Pass)
 	static const char* Names[] = {
 		"RenderPass::Opaque",
 		"RenderPass::Decal",
+		"RenderPass::MeshDecal",
 		"RenderPass::Translucent",
 		"RenderPass::SubUV",
 		"RenderPass::Billboard",

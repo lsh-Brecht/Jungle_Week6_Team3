@@ -175,7 +175,7 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 
 		if (!Proxy->bVisible) continue;
 
-		if (!bShowDecal && Proxy->Pass == ERenderPass::Decal) continue;
+		if (!bShowDecal && (Proxy->Pass == ERenderPass::Decal || Proxy->Pass == ERenderPass::MeshDecal)) continue;
 
 		// AABB 수집 — 오클루전 체크 전에 수집해야 다음 프레임에 재평가 가능
 		if (OcclusionMut)
