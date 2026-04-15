@@ -22,6 +22,12 @@ namespace
 	}
 }
 
+USubUVComponent::USubUVComponent()
+{
+	SetVisibility(false);
+	SyncFrameDisplayFromInternal();
+}
+
 FPrimitiveSceneProxy* USubUVComponent::CreateSceneProxy()
 {
 	return new FSubUVSceneProxy(this);
@@ -38,6 +44,7 @@ void USubUVComponent::Serialize(FArchive& Ar)
 	Ar << FrameIndex;
 	Ar << Columns;
 	Ar << Rows;
+	Ar << StartFrameIndex;
 	Ar << EndFrameIndex;
 	Ar << PlayRate;
 	Ar << bLoop;
@@ -46,8 +53,26 @@ void USubUVComponent::Serialize(FArchive& Ar)
 	{
 		Columns = std::max(1, Columns);
 		Rows = std::max(1, Rows);
-		EndFrameIndex = ClampSubUVEndFrame(EndFrameIndex, Columns, Rows);
-		FrameIndex = std::min<uint32>(FrameIndex, static_cast<uint32>(EndFrameIndex));
+
+		const int32 Total = std::max(1, Columns) * std::max(1, Rows);
+		StartFrameIndex = std::max(0, std::min(StartFrameIndex, Total - 1));
+		EndFrameIndex = std::max(0, std::min(EndFrameIndex, Total - 1));
+
+		if (StartFrameIndex > EndFrameIndex)
+		{
+			EndFrameIndex = StartFrameIndex;
+		}
+
+		if (FrameIndex < static_cast<uint32>(StartFrameIndex))
+		{
+			FrameIndex = static_cast<uint32>(StartFrameIndex);
+		}
+		else if (FrameIndex > static_cast<uint32>(EndFrameIndex))
+		{
+			FrameIndex = static_cast<uint32>(EndFrameIndex);
+		}
+
+		SyncFrameDisplayFromInternal();
 	}
 }
 
@@ -56,11 +81,6 @@ void USubUVComponent::PostDuplicate()
 	UBillboardComponent::PostDuplicate();
 	// 파티클 리소스 재바인딩
 	SetParticle(ParticleName);
-}
-
-USubUVComponent::USubUVComponent()
-{
-	SetVisibility(false);
 }
 
 void USubUVComponent::SetParticle(const FName& InParticleName)
@@ -75,14 +95,17 @@ void USubUVComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProp
 	// UPrimitiveComponent로 직접 올라가 공통 트랜스폼 등만 가져온 뒤,
 	// Width/Height(상속 멤버)와 SubUV 고유 프로퍼티만 노출한다.
 	UPrimitiveComponent::GetEditableProperties(OutProps);
-	OutProps.push_back({ "Particle",  EPropertyType::Name,  &ParticleName });
-	OutProps.push_back({ "Width",     EPropertyType::Float, &Width,  0.1f, 100.0f, 0.1f });
-	OutProps.push_back({ "Height",    EPropertyType::Float, &Height, 0.1f, 100.0f, 0.1f });
-	OutProps.push_back({ "Columns",   EPropertyType::Int,   &Columns });
-	OutProps.push_back({ "Rows",      EPropertyType::Int,   &Rows });
-	OutProps.push_back({ "End Frame", EPropertyType::Int,   &EndFrameIndex });
-	OutProps.push_back({ "Play Rate", EPropertyType::Float, &PlayRate, 1.0f, 120.0f, 1.0f });
-	OutProps.push_back({ "bLoop",     EPropertyType::Bool,  &bLoop });
+	SyncFrameDisplayFromInternal();
+		
+	OutProps.push_back({ "Particle",    EPropertyType::Name,  &ParticleName });
+	OutProps.push_back({ "Width",		EPropertyType::Float, &Width,  0.1f, 100.0f, 0.1f });
+	OutProps.push_back({ "Height",		EPropertyType::Float, &Height, 0.1f, 100.0f, 0.1f });
+	OutProps.push_back({ "Columns",		EPropertyType::Int,   &Columns });
+	OutProps.push_back({ "Rows",		EPropertyType::Int,   &Rows });
+	OutProps.push_back({ "Start Frame", EPropertyType::Int,   &StartFrameDisplay });
+	OutProps.push_back({ "End Frame",	EPropertyType::Int,   &EndFrameDisplay });
+	OutProps.push_back({ "Play Rate",	EPropertyType::Float, &PlayRate, 1.0f, 120.0f, 1.0f });
+	OutProps.push_back({ "bLoop",		EPropertyType::Bool,  &bLoop });
 }
 
 void USubUVComponent::PostEditProperty(const char* PropertyName)
@@ -102,12 +125,29 @@ void USubUVComponent::PostEditProperty(const char* PropertyName)
 		MarkProxyDirty(EDirtyFlag::Transform);
 		MarkWorldBoundsDirty();
 	}
-	else if (strcmp(PropertyName, "Columns") == 0 || strcmp(PropertyName, "Rows") == 0 || strcmp(PropertyName, "End Frame") == 0)
+	else if (strcmp(PropertyName, "Columns") == 0 ||
+		strcmp(PropertyName, "Rows") == 0 ||
+		strcmp(PropertyName, "Start Frame") == 0 ||
+		strcmp(PropertyName, "End Frame") == 0)
 	{
 		Columns = std::max(1, Columns);
 		Rows = std::max(1, Rows);
-		EndFrameIndex = ClampSubUVEndFrame(EndFrameIndex, Columns, Rows);
-		FrameIndex = std::min<uint32>(FrameIndex, static_cast<uint32>(EndFrameIndex));
+		
+		SetStartFrameDisplay(StartFrameDisplay);
+		SetEndFrameDisplay(EndFrameDisplay);
+
+		const uint32 MinFrame = static_cast<uint32>(StartFrameIndex);
+		const uint32 MaxFrame = static_cast<uint32>(EndFrameIndex);
+
+		if (FrameIndex < MinFrame)
+		{
+			FrameIndex = MinFrame;
+		}
+		else if (FrameIndex > MaxFrame)
+		{
+			FrameIndex = MaxFrame;
+		}
+		
 		MarkProxyDirty(EDirtyFlag::Mesh);
 	}
 }
@@ -147,29 +187,33 @@ void USubUVComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	if (!CachedParticle) return;
 	if (!bLoop && bIsExecute) return; // 단발 재생 완료 후 정지
 
-	const uint32 TotalFrames = static_cast<uint32>(ClampSubUVEndFrame(EndFrameIndex, Columns, Rows) + 1);
-	if (TotalFrames == 0) return;
-
 	TimeAccumulator += DeltaTime;
 	const float FrameDuration = 1.0f / PlayRate;
 	while (TimeAccumulator >= FrameDuration)
 	{
 		TimeAccumulator -= FrameDuration;
+		const uint32 Start = static_cast<uint32>(StartFrameIndex);
+		const uint32 End = static_cast<uint32>(EndFrameIndex);
+
+		if (FrameIndex < Start) FrameIndex = Start;
+		else if (FrameIndex > End) FrameIndex = End;
+
+		const uint32 Range = End - Start + 1;
 
 		if (bLoop)
 		{
 			bIsExecute = false;
-			FrameIndex = (FrameIndex + 1) % TotalFrames; // 무한 반복
+			FrameIndex = Start + (FrameIndex - Start + 1) % Range; // 무한 반복
 		}
 		else
 		{
-			if (FrameIndex < TotalFrames - 1)
+			if (FrameIndex < End)
 			{
 				FrameIndex++;
 			}
 			else
 			{
-				bIsExecute = true;    // 마지막 프레임 도달 → 완료
+				bIsExecute = true;
 				TimeAccumulator = 0.0f;
 				break;
 			}
