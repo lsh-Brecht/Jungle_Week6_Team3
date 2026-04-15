@@ -305,6 +305,34 @@ bool FEditorViewportClient::ProcessInput(FViewportInputContext& Context)
 	return false;
 }
 
+bool FEditorViewportClient::ConvertScreenToViewportLocal(const POINT& InScreenPos, POINT& OutLocal, bool bClampToViewport) const
+{
+	const FRect& ViewRect = GetViewportScreenRect();
+	if (ViewRect.Width <= 0.0f || ViewRect.Height <= 0.0f)
+	{
+		return false;
+	}
+
+	POINT ClientPos = InScreenPos;
+	if (Window)
+	{
+		ScreenToClient(Window->GetHWND(), &ClientPos);
+	}
+
+	const float LocalX = static_cast<float>(ClientPos.x) - ViewRect.X;
+	const float LocalY = static_cast<float>(ClientPos.y) - ViewRect.Y;
+	if (!bClampToViewport)
+	{
+		OutLocal.x = static_cast<LONG>(LocalX);
+		OutLocal.y = static_cast<LONG>(LocalY);
+		return true;
+	}
+
+	OutLocal.x = static_cast<LONG>(Clamp(LocalX, 0.0f, (std::max)(0.0f, ViewRect.Width - 1.0f)));
+	OutLocal.y = static_cast<LONG>(Clamp(LocalY, 0.0f, (std::max)(0.0f, ViewRect.Height - 1.0f)));
+	return true;
+}
+
 bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
 {
 	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
@@ -366,6 +394,52 @@ bool FEditorViewportClient::WantsRelativeMouseMode(const FViewportInputContext& 
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavDollyAltRightDown)
 		|| EditorViewportInputMapping::IsTriggered(Context, EditorViewportInputMapping::EEditorViewportAction::NavPanAltMiddleDown)
 		|| bLeftRelativeDrag;
+}
+
+bool FEditorViewportClient::WantsAbsoluteMouseClip(const FViewportInputContext& Context, RECT& OutClipScreenRect) const
+{
+	OutClipScreenRect = { 0, 0, 0, 0 };
+	if (!Gizmo || !Context.Frame.IsDown(VK_LBUTTON))
+	{
+		return false;
+	}
+
+	// Gizmo 드래그(또는 핸들 press 직후) 중에는 커서가 viewport 밖으로 빠져나가
+	// drag state가 흔들리는 것을 방지하기 위해 viewport rect로 커서를 제한한다.
+	if (!(Gizmo->IsHolding() || Gizmo->IsPressedOnHandle()))
+	{
+		return false;
+	}
+
+	const FRect& R = ViewportScreenRect;
+	if (R.Width <= 1.0f || R.Height <= 1.0f || !Window)
+	{
+		return false;
+	}
+
+	POINT TopLeft =
+	{
+		static_cast<LONG>(R.X),
+		static_cast<LONG>(R.Y)
+	};
+	POINT BottomRight =
+	{
+		static_cast<LONG>(R.X + R.Width),
+		static_cast<LONG>(R.Y + R.Height)
+	};
+	POINT ClientTopLeft = { 0, 0 };
+	::ClientToScreen(Window->GetHWND(), &TopLeft);
+	::ClientToScreen(Window->GetHWND(), &BottomRight);
+	::ClientToScreen(Window->GetHWND(), &ClientTopLeft);
+
+	OutClipScreenRect.left = TopLeft.x;
+	OutClipScreenRect.top =
+		(TopLeft.y + EditorViewportInputUtils::PaneToolbarHeight > ClientTopLeft.y)
+		? (TopLeft.y + EditorViewportInputUtils::PaneToolbarHeight)
+		: ClientTopLeft.y;
+	OutClipScreenRect.right = BottomRight.x;
+	OutClipScreenRect.bottom = BottomRight.y;
+	return true;
 }
 
 void FEditorViewportClient::UpdateLayoutRect()

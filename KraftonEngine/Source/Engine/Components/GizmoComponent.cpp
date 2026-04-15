@@ -298,10 +298,12 @@ void UGizmoComponent::RotateTarget(float DragAmount)
 
 	FVector RotationAxis = GetVectorForAxis(SelectedAxis);
 	FQuat DeltaQuat = FQuat::FromAxisAngle(RotationAxis, DragAmount);
+	DeltaQuat.Normalize();
+	const FVector PivotLocation = TargetActor->GetActorLocation();
 
 	const float DeltaDeg = DragAmount * RAD_TO_DEG;
 
-	auto ApplyRotation = [&](AActor* Actor)
+	auto ApplyRotation = [&](AActor* Actor, bool bApplyPivotOrbit)
 		{
 			if (!Actor || !Actor->GetRootComponent()) return;
 			USceneComponent* Root = Actor->GetRootComponent();
@@ -330,18 +332,29 @@ void UGizmoComponent::RotateTarget(float DragAmount)
 				}
 			}
 			Root->SetRelativeRotationWithEulerHint(NewQuat, EulerHint);
+
+			// Multi-select rotate는 마지막 선택(Primary) 액터를 피벗으로
+			// 나머지 선택 액터의 월드 위치를 함께 공전시킨다. (UE 동작과 동일)
+			if (bApplyPivotOrbit)
+			{
+				const FVector CurrentLocation = Actor->GetActorLocation();
+				const FVector OffsetFromPivot = CurrentLocation - PivotLocation;
+				const FVector RotatedOffset = DeltaQuat.RotateVector(OffsetFromPivot);
+				Actor->SetActorLocation(PivotLocation + RotatedOffset);
+			}
 		};
 
 	if (AllSelectedActors)
 	{
 		for (AActor* Actor : *AllSelectedActors)
 		{
-			ApplyRotation(Actor);
+			const bool bApplyPivotOrbit = (Actor && Actor != TargetActor);
+			ApplyRotation(Actor, bApplyPivotOrbit);
 		}
 	}
 	else
 	{
-		ApplyRotation(TargetActor);
+		ApplyRotation(TargetActor, false);
 	}
 }
 

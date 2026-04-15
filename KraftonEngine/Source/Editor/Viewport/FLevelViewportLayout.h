@@ -14,6 +14,7 @@ class FWindowsWindow;
 class FRenderer;
 class UWorld;
 class UEditorEngine;
+struct ImVec2;
 
 // 뷰포트 레이아웃 종류 (12가지, UE 동일)
 enum class EViewportLayout : uint8
@@ -106,6 +107,10 @@ private:
 	void ApplyFocusCollapseRecursive(SSplitter* InNode, int32 FocusSlotIndex);
 	void CollectSplitterRatios(TArray<float>& OutRatios) const;
 	void ApplySplitterRatios(const TArray<float>& InRatios);
+	bool IsViewportInteractiveHover(int32 SlotIndex, float MouseX, float MouseY) const;
+	void HandleSplitterInteraction(const ImVec2& MousePos, const POINT& MousePoint);
+	void HandleViewportActivationOnClick(const ImVec2& MousePos, int32 ActiveSlotCount, int32 OnePaneSlotIndex);
+	void RenderPlaceActorPopup(bool bPlaceActorPopupWasOpen);
 
 	SSplitter* BuildSplitterTree(EViewportLayout Layout);
 	void EnsureViewportSlots(int32 RequiredCount);
@@ -161,4 +166,22 @@ private:
 	float LayoutTransitionDuration = 0.18f;
 	TArray<float> TransitionStartRatios;
 	TArray<float> TransitionTargetRatios;
+
+	struct FViewportContextMenuState
+	{
+		struct FContextMenuPos
+		{
+			float X = 0.0f;
+			float Y = 0.0f;
+		};
+
+		bool RightClickTracking[MaxViewportSlots] = { false, false, false, false };
+		float RightClickTravelSq[MaxViewportSlots] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		FContextMenuPos RightClickPressPos[MaxViewportSlots] = {};
+		int32 PendingPopupSlot = -1;
+		FContextMenuPos PendingPopupPos = {};
+		FContextMenuPos PendingSpawnPos = {};
+		bool bForceNextPopupPos = false;
+	};
+	FViewportContextMenuState ContextMenuState;
 };

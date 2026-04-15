@@ -5,6 +5,7 @@
 #include "Components/CameraComponent.h"
 #include "GameFramework/World.h"
 #include "Editor/EditorRenderPipeline.h"
+#include "Editor/Input/EditorViewportInputMapping.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Object/ObjectFactory.h"
 #include "Mesh/ObjManager.h"
@@ -141,7 +142,6 @@ bool SpawnPlacedActors(
 
 		const FVector SpawnLocation = InBaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
 		Actor->SetActorLocation(SpawnLocation);
-		InWorld->InsertActorToOctree(Actor);
 		bSpawnedAny = true;
 	}
 
@@ -260,40 +260,80 @@ void UEditorEngine::Tick(float DeltaTime)
 	MainPanel.Update();
 
 	const bool bAnyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+	UpdateViewportMouseSuppression(bAnyPopupOpen);
+	ConfigureInputRouterCapture(bAnyPopupOpen);
+	RegisterInputRouterTargets();
+
+	FViewportInputContext RoutedInputContext;
+	FInteractionBinding InteractionBinding;
+	if (InputRouter.Tick(RoutedInputContext, InteractionBinding))
+	{
+		HandlePostRoutingInput(RoutedInputContext, InteractionBinding, bAnyPopupOpen);
+	}
+
+	for (FEditorViewportClient* VC : ViewportLayout.GetAllViewportClients())
+	{
+		VC->Tick(DeltaTime);
+	}
+
+	WorldTick(DeltaTime);
+	Render(DeltaTime);
+	SelectionManager.Tick();
+	bHadAnyPopupOpenLastFrame = bAnyPopupOpen;
+}
+
+void UEditorEngine::UpdateViewportMouseSuppression(bool bAnyPopupOpen)
+{
 	if (bHadAnyPopupOpenLastFrame && !bAnyPopupOpen)
 	{
 		bSuppressViewportMouseUntilButtonsReleased = true;
 	}
+
 	const bool bSuppressRequestedByViewportLayout = ViewportLayout.ConsumeViewportMouseSuppressRequest();
 	if (bSuppressRequestedByViewportLayout)
 	{
 		bSuppressViewportMouseUntilButtonsReleased = true;
 	}
 
-	InputSystem& Input = InputSystem::Get();
-	const bool bAnyMouseButtonDown =
-		Input.GetKey(VK_LBUTTON)
-		|| Input.GetKey(VK_RBUTTON)
-		|| Input.GetKey(VK_MBUTTON)
-		|| Input.GetKey(VK_XBUTTON1)
-		|| Input.GetKey(VK_XBUTTON2)
-		|| Input.GetLeftDragging()
-		|| Input.GetRightDragging();
+	const bool bAnyMouseButtonDown = InputSystem::Get().IsAnyMouseButtonDownOrDragging();
 	if (bSuppressViewportMouseUntilButtonsReleased && !bAnyMouseButtonDown && !bSuppressRequestedByViewportLayout)
 	{
 		bSuppressViewportMouseUntilButtonsReleased = false;
 	}
+}
 
-	const FGuiInputState& GuiInputState = Input.GetGuiInputState();
-	const bool bRouteMouseToImGui =
-		GuiInputState.bUsingMouse
-		|| bSuppressViewportMouseUntilButtonsReleased;
+void UEditorEngine::ConfigureInputRouterCapture(bool bAnyPopupOpen)
+{
+	const FGuiInputState& GuiInputState = InputSystem::Get().GetGuiInputState();
+	const bool bRouteMouseToImGui = GuiInputState.bUsingMouse || bSuppressViewportMouseUntilButtonsReleased;
+
 	InputRouter.SetForceViewportMouseBlock(bAnyPopupOpen || bSuppressViewportMouseUntilButtonsReleased);
 	InputRouter.SetImGuiCaptureState(
 		bRouteMouseToImGui,
 		GuiInputState.bUsingKeyboard || GuiInputState.bUsingTextInput);
 	InputRouter.ClearTargets();
+}
 
+void UEditorEngine::ResolveViewportRoutingTarget(FLevelEditorViewportClient* VC, FViewportClient*& OutReceiverClient, EInteractionDomain& OutDomain)
+{
+	OutReceiverClient = VC;
+	OutDomain = GetCurrentInteractionDomain();
+	UGameViewportClient* GameViewportClient = GetGameViewportClient();
+
+	if (!IsPIEPossessedMode()
+		|| VC != PIEEntryViewportClient
+		|| !GameViewportClient)
+	{
+		return;
+	}
+
+	OutReceiverClient = GameViewportClient;
+	OutDomain = EInteractionDomain::PIE;
+	GameViewportClient->SetViewport(VC->GetViewport());
+}
+
+void UEditorEngine::RegisterInputRouterTargets()
+{
 	for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
 	{
 		if (!VC || !VC->GetViewport())
@@ -301,17 +341,9 @@ void UEditorEngine::Tick(float DeltaTime)
 			continue;
 		}
 
-		FViewportClient* ReceiverClient = VC;
-		EInteractionDomain Domain = GetCurrentInteractionDomain();
-		if (IsPlayingInEditor()
-			&& PIEControlMode == EPIEControlMode::Possessed
-			&& VC == PIEEntryViewportClient
-			&& GetGameViewportClient())
-		{
-			ReceiverClient = GetGameViewportClient();
-			Domain = EInteractionDomain::PIE;
-			GetGameViewportClient()->SetViewport(VC->GetViewport());
-		}
+		FViewportClient* ReceiverClient = nullptr;
+		EInteractionDomain Domain = EInteractionDomain::Editor;
+		ResolveViewportRoutingTarget(VC, ReceiverClient, Domain);
 
 		InputRouter.RegisterTarget(
 			VC->GetViewport(),
@@ -332,55 +364,72 @@ void UEditorEngine::Tick(float DeltaTime)
 				return GetWorld();
 			});
 	}
+}
 
-	FViewportInputContext RoutedInputContext;
-	FInteractionBinding InteractionBinding;
-	if (InputRouter.Tick(RoutedInputContext, InteractionBinding))
+void UEditorEngine::SyncGameViewportPIEControlState(bool bPossessedMode)
+{
+	UGameViewportClient* PIEVC = GetGameViewportClient();
+	if (!PIEVC)
 	{
-		if (!bAnyPopupOpen && HandleGlobalShortcuts(RoutedInputContext))
-		{
-			RoutedInputContext.bConsumed = true;
-		}
-
-		if (!bAnyPopupOpen)
-		{
-			bool bHasMousePressEvent = false;
-			for (const FInputEvent& Event : RoutedInputContext.Events)
-			{
-				if (Event.Type != EInputEventType::KeyPressed)
-				{
-					continue;
-				}
-				if (Event.Key == VK_LBUTTON || Event.Key == VK_RBUTTON || Event.Key == VK_MBUTTON)
-				{
-					bHasMousePressEvent = true;
-					break;
-				}
-			}
-
-			if (bHasMousePressEvent)
-			{
-				for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
-				{
-					if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
-					{
-						ViewportLayout.SetActiveViewport(VC);
-						break;
-					}
-				}
-			}
-		}
+		return;
 	}
 
-	for (FEditorViewportClient* VC : ViewportLayout.GetAllViewportClients())
+	PIEVC->SetPIEPossessedInputEnabled(bPossessedMode);
+	if (!bPossessedMode || !PIEEntryViewportClient)
 	{
-		VC->Tick(DeltaTime);
+		return;
 	}
 
-	WorldTick(DeltaTime);
-	Render(DeltaTime);
-	SelectionManager.Tick();
-	bHadAnyPopupOpenLastFrame = bAnyPopupOpen;
+	PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
+	PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
+}
+
+bool UEditorEngine::HasViewportMousePressEvent(const FViewportInputContext& RoutedInputContext) const
+{
+	for (const FInputEvent& Event : RoutedInputContext.Events)
+	{
+		if (Event.Type != EInputEventType::KeyPressed)
+		{
+			continue;
+		}
+		if (Event.Key == VK_LBUTTON || Event.Key == VK_RBUTTON || Event.Key == VK_MBUTTON)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void UEditorEngine::ActivateViewportFromBinding(const FInteractionBinding& InteractionBinding)
+{
+	for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+	{
+		if (VC == InteractionBinding.ReceiverVC && VC != ViewportLayout.GetActiveViewport())
+		{
+			ViewportLayout.SetActiveViewport(VC);
+			return;
+		}
+	}
+}
+
+void UEditorEngine::HandlePostRoutingInput(FViewportInputContext& RoutedInputContext, const FInteractionBinding& InteractionBinding, bool bAnyPopupOpen)
+{
+	if (!bAnyPopupOpen && HandleGlobalShortcuts(RoutedInputContext))
+	{
+		RoutedInputContext.bConsumed = true;
+	}
+
+	if (bAnyPopupOpen)
+	{
+		return;
+	}
+
+	if (!HasViewportMousePressEvent(RoutedInputContext))
+	{
+		return;
+	}
+
+	ActivateViewportFromBinding(InteractionBinding);
 }
 
 UCameraComponent* UEditorEngine::GetCamera() const
@@ -513,7 +562,7 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 
 	// 6) Selection을 PIE 월드 기준으로 재바인딩 — 에디터 액터를 가리킨 채로 두면
 	//    픽킹(=PIE 월드) / outliner / outline 렌더가 모두 어긋난다.
-	SelectionManager.ClearSelection();
+	SelectionManager.ClearSelection(); 
 	//SelectionManager.SetGizmoEnabled(false); //PIE가 시작되면 gizmo 비활성화
 	SelectionManager.SetWorld(PIEWorld);
 
@@ -646,7 +695,17 @@ EInteractionDomain UEditorEngine::GetCurrentInteractionDomain() const
 	{
 		return EInteractionDomain::Editor;
 	}
-	return (PIEControlMode == EPIEControlMode::Possessed) ? EInteractionDomain::PIE : EInteractionDomain::EditorOnPIE;
+	return IsPIEPossessedMode() ? EInteractionDomain::PIE : EInteractionDomain::EditorOnPIE;
+}
+
+bool UEditorEngine::IsPIEPossessedMode() const
+{
+	return IsPlayingInEditor() && PIEControlMode == EPIEControlMode::Possessed;
+}
+
+bool UEditorEngine::IsPIEEjectedMode() const
+{
+	return IsPlayingInEditor() && PIEControlMode == EPIEControlMode::Ejected;
 }
 
 bool UEditorEngine::HandleGlobalShortcuts(const FViewportInputContext& InputContext)
@@ -656,25 +715,14 @@ bool UEditorEngine::HandleGlobalShortcuts(const FViewportInputContext& InputCont
 		return false;
 	}
 
-	for (const FInputEvent& Event : InputContext.Events)
+	if (EditorViewportInputMapping::IsTriggered(InputContext, EditorViewportInputMapping::EEditorViewportAction::EndPIE))
 	{
-		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_ESCAPE)
-		{
-			RequestEndPlayMap();
-			return true;
-		}
-		if (Event.Type == EInputEventType::KeyPressed && Event.Key == VK_F8)
-		{
-			return TogglePIEControlMode();
-		}
-		if (Event.Type == EInputEventType::KeyPressed
-			&& PIEControlMode == EPIEControlMode::Ejected
-			&& !InputContext.bImGuiCapturedMouse
-			&& (InputContext.bHovered || InputContext.bCaptured)
-			&& (Event.Key == VK_LBUTTON || Event.Key == VK_RBUTTON))
-		{
-			return EnterPIEPossessedMode();
-		}
+		RequestEndPlayMap();
+		return true;
+	}
+	if (EditorViewportInputMapping::IsTriggered(InputContext, EditorViewportInputMapping::EEditorViewportAction::TogglePIEPossessEject))
+	{
+		return TogglePIEControlMode();
 	}
 
 	return false;
@@ -702,14 +750,10 @@ bool UEditorEngine::EnterPIEPossessedMode()
 	}
 
 	PIEControlMode = EPIEControlMode::Possessed;
+	SyncGameViewportPIEControlState(true);
 	if (PIEEntryViewportClient)
 	{
 		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = false;
-		if (UGameViewportClient* PIEVC = GetGameViewportClient())
-		{
-			PIEVC->SetDrivingCamera(PIEEntryViewportClient->GetCamera());
-			PIEVC->SetViewport(PIEEntryViewportClient->GetViewport());
-		}
 		ViewportLayout.NotifyPIEPossessedViewport(PIEEntryViewportClient);
 	}
 	return true;
@@ -723,6 +767,7 @@ bool UEditorEngine::EnterPIEEjectedMode()
 	}
 
 	PIEControlMode = EPIEControlMode::Ejected;
+	SyncGameViewportPIEControlState(false);
 	if (PIEEntryViewportClient)
 	{
 		PIEEntryViewportClient->GetRenderOptions().ShowFlags.bGizmo = true;
@@ -741,6 +786,7 @@ void UEditorEngine::NewScene()
 
 	ResetViewport();
 	CurrentLevelFilePath.clear();
+	EnqueueFooterEventLog("New Scene created");
 }
 
 bool UEditorEngine::SaveSceneAs(const FString& InSceneName)
@@ -767,7 +813,12 @@ bool UEditorEngine::SaveScene()
 {
 	if (HasCurrentLevelFilePath())
 	{
-		return SaveSceneAs(GetFileStem(CurrentLevelFilePath));
+		const bool bSaved = SaveSceneAs(GetFileStem(CurrentLevelFilePath));
+		if (bSaved)
+		{
+			EnqueueFooterEventLog("Level saved");
+		}
+		return bSaved;
 	}
 
 	return SaveSceneAsWithDialog();
@@ -799,7 +850,12 @@ bool UEditorEngine::SaveSceneAsWithDialog()
 	}
 
 	const FString SelectedPath = FPaths::ToUtf8(std::wstring(FilePath));
-	return SaveSceneAs(GetFileStem(SelectedPath));
+	const bool bSaved = SaveSceneAs(GetFileStem(SelectedPath));
+	if (bSaved)
+	{
+		EnqueueFooterEventLog("Level saved as");
+	}
+	return bSaved;
 }
 
 bool UEditorEngine::LoadSceneFromPath(const FString& InScenePath)
@@ -841,6 +897,29 @@ bool UEditorEngine::LoadSceneFromPath(const FString& InScenePath)
 	}
 
 	CurrentLevelFilePath = InScenePath;
+	EnqueueFooterEventLog("Level loaded");
+	return true;
+}
+
+void UEditorEngine::EnqueueFooterEventLog(const FString& InMessage)
+{
+	if (InMessage.empty())
+	{
+		return;
+	}
+
+	PendingFooterEventLogs.push_back(InMessage);
+}
+
+bool UEditorEngine::DequeueFooterEventLog(FString& OutMessage)
+{
+	if (PendingFooterEventLogs.empty())
+	{
+		return false;
+	}
+
+	OutMessage = PendingFooterEventLogs.front();
+	PendingFooterEventLogs.erase(PendingFooterEventLogs.begin());
 	return true;
 }
 

@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "GameFramework/AActor.h"
+#include "Object/Object.h"
 #include <algorithm>
 
 namespace
@@ -49,7 +50,7 @@ void FSpatialPartition::ClearQueuedActorFlags()
 {
 	for (AActor* Actor : DirtyActors)
 	{
-		if (Actor)
+		if (Actor && UObjectManager::Get().IsAlivePointer(Actor))
 		{
 			Actor->SetQueuedForPartitionUpdate(false);
 		}
@@ -172,7 +173,7 @@ void FSpatialPartition::FlushPrimitive()
 	FBoundingBox DirtyBounds;
 	for (AActor* Actor : DirtyActors)
 	{
-		if (!Actor)
+		if (!Actor || !UObjectManager::Get().IsAlivePointer(Actor))
 		{
 			continue;
 		}
@@ -194,7 +195,7 @@ void FSpatialPartition::FlushPrimitive()
 
 	for (AActor* Actor : DirtyActors)
 	{
-		if (!Actor)
+		if (!Actor || !UObjectManager::Get().IsAlivePointer(Actor))
 		{
 			continue;
 		}
@@ -322,6 +323,16 @@ void FSpatialPartition::InsertActor(AActor* Actor)
 	{
 		if (!Prim || !Prim->IsVisible()) continue;
 
+		// InsertActor가 여러 번 호출돼도 같은 Primitive가 Octree/Overflow에 중복 등록되지 않도록
+		// 기존 엔트리를 모두 정리한 뒤 1회만 다시 삽입한다.
+		if (Octree)
+		{
+			while (Octree->Remove(Prim))
+			{
+			}
+		}
+		RemovePrimitive(Prim);
+
 		if (!Octree->Insert(Prim))
 		{
 			InsertPrimitive(Prim);
@@ -334,11 +345,10 @@ void FSpatialPartition::RemoveActor(AActor* Actor)
 	if (!Actor) return;
 
 	Actor->SetQueuedForPartitionUpdate(false);
-	auto DirtyIt = std::find(DirtyActors.begin(), DirtyActors.end(), Actor);
+	auto DirtyIt = std::remove(DirtyActors.begin(), DirtyActors.end(), Actor);
 	if (DirtyIt != DirtyActors.end())
 	{
-		*DirtyIt = DirtyActors.back();
-		DirtyActors.pop_back();
+		DirtyActors.erase(DirtyIt, DirtyActors.end());
 	}
 
 	for (UPrimitiveComponent* Prim : Actor->GetPrimitiveComponents())

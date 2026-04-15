@@ -3,6 +3,7 @@
 #include "Editor/EditorEngine.h"
 #include "Editor/Input/EditorNavigationTool.h"
 #include "Editor/Input/EditorViewportController.h"
+#include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Input/EditorViewportModes.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Editor/Settings/EditorSettings.h"
@@ -24,6 +25,121 @@
 
 #include <algorithm>
 #include <cfloat>
+
+namespace
+{
+bool IsPIEPlayingAndPossessed(const UEditorEngine* Editor)
+{
+	return Editor
+		&& Editor->IsPlayingInEditor()
+		&& Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
+}
+
+bool CanOpenPlaceActorMenuInViewport(const UEditorEngine* Editor)
+{
+	return Editor && (!Editor->IsPlayingInEditor() || Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Ejected);
+}
+
+enum class EToolbarIcon : int32
+{
+	Menu = 0,
+	Select,
+	Translate,
+	Rotate,
+	Scale,
+	WorldSpace,
+	LocalSpace,
+	TranslateSnap,
+	RotateSnap,
+	ScaleSnap,
+	Camera,
+	Setting,
+	Count
+};
+
+const wchar_t* GetToolbarIconFileName(EToolbarIcon Icon)
+{
+	switch (Icon)
+	{
+	case EToolbarIcon::Menu:          return L"Menu.png";
+	case EToolbarIcon::Select:        return L"Select.png";
+	case EToolbarIcon::Translate:     return L"Translate.png";
+	case EToolbarIcon::Rotate:        return L"Rotate.png";
+	case EToolbarIcon::Scale:         return L"Scale.png";
+	case EToolbarIcon::WorldSpace:    return L"WorldSpace.png";
+	case EToolbarIcon::LocalSpace:    return L"LocalSpace.png";
+	case EToolbarIcon::TranslateSnap: return L"Translate_Snap.png";
+	case EToolbarIcon::RotateSnap:    return L"Rotate_Snap.png";
+	case EToolbarIcon::ScaleSnap:     return L"Scale_Snap.png";
+	case EToolbarIcon::Camera:        return L"Camera.png";
+	case EToolbarIcon::Setting:       return L"Show_Flag.png";
+	default:                              return L"";
+	}
+}
+
+ID3D11ShaderResourceView** GetToolbarIconTable()
+{
+	static ID3D11ShaderResourceView* ToolbarIcons[static_cast<int32>(EToolbarIcon::Count)] = {};
+	return ToolbarIcons;
+}
+
+void EnsureToolbarIconsLoaded(FRenderer* RendererPtr)
+{
+	static bool bToolbarIconsLoaded = false;
+	if (bToolbarIconsLoaded || !RendererPtr)
+	{
+		return;
+	}
+
+	ID3D11ShaderResourceView** ToolbarIcons = GetToolbarIconTable();
+	ID3D11Device* Device = RendererPtr->GetFD3DDevice().GetDevice();
+	const std::wstring IconDir = FPaths::Combine(FPaths::RootDir(), L"Asset/Editor/ToolIcons/");
+	for (int32 i = 0; i < static_cast<int32>(EToolbarIcon::Count); ++i)
+	{
+		const std::wstring FilePath = IconDir + GetToolbarIconFileName(static_cast<EToolbarIcon>(i));
+		DirectX::CreateWICTextureFromFile(Device, FilePath.c_str(), nullptr, &ToolbarIcons[i]);
+	}
+	bToolbarIconsLoaded = true;
+}
+
+ImVec2 GetToolbarIconRenderSize(EToolbarIcon Icon, float FallbackSize, float MaxIconSize)
+{
+	ID3D11ShaderResourceView** ToolbarIcons = GetToolbarIconTable();
+	ID3D11ShaderResourceView* IconSRV = ToolbarIcons[static_cast<int32>(Icon)];
+	if (!IconSRV)
+	{
+		return ImVec2(FallbackSize, FallbackSize);
+	}
+
+	ID3D11Resource* Resource = nullptr;
+	IconSRV->GetResource(&Resource);
+	if (!Resource)
+	{
+		return ImVec2(FallbackSize, FallbackSize);
+	}
+
+	ImVec2 IconSize(FallbackSize, FallbackSize);
+	D3D11_RESOURCE_DIMENSION Dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+	Resource->GetType(&Dimension);
+	if (Dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D)
+	{
+		ID3D11Texture2D* Texture2D = static_cast<ID3D11Texture2D*>(Resource);
+		D3D11_TEXTURE2D_DESC Desc{};
+		Texture2D->GetDesc(&Desc);
+		IconSize = ImVec2(static_cast<float>(Desc.Width), static_cast<float>(Desc.Height));
+	}
+	Resource->Release();
+
+	if (IconSize.x > MaxIconSize || IconSize.y > MaxIconSize)
+	{
+		const float Scale = (IconSize.x > IconSize.y) ? (MaxIconSize / IconSize.x) : (MaxIconSize / IconSize.y);
+		IconSize.x *= Scale;
+		IconSize.y *= Scale;
+	}
+	return IconSize;
+}
+
+}
 
 // ─── 레이아웃별 슬롯 수 ─────────────────────────────────────
 
@@ -930,16 +1046,6 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 	bMouseOverViewport = false;
 	TickLayoutTransition(DeltaTime);
 	const bool bPlaceActorPopupWasOpen = ImGui::IsPopupOpen("##ViewportPlaceActorPopup");
-	static bool GRightClickTracking[MaxViewportSlots] = { false, false, false, false };
-	static float GRightClickTravelSq[MaxViewportSlots] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	static ImVec2 GRightClickPressPos[MaxViewportSlots] =
-	{
-		ImVec2(0.0f, 0.0f), ImVec2(0.0f, 0.0f), ImVec2(0.0f, 0.0f), ImVec2(0.0f, 0.0f)
-	};
-	static int32 GPendingPlaceActorPopupSlot = -1;
-	static ImVec2 GPendingPlaceActorPopupPos = ImVec2(0.0f, 0.0f);
-	static ImVec2 GPendingPlaceActorSpawnPos = ImVec2(0.0f, 0.0f);
-	static bool GForceNextPopupPos = false;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_None);
@@ -978,14 +1084,54 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 			ViewportWindows[OnePaneSlotIndex]->SetRect(ContentRect);
 		}
 
-		// 각 ViewportClient에 Rect 반영 + 이미지 렌더
+		// Temporary one-pane can render from a non-zero source slot.
+		// Keep that slot's layout rect synchronized to the full content rect,
+		// otherwise input routing still uses stale split rect from the old layout.
+		if (CurrentLayout == EViewportLayout::OnePane
+			&& OnePaneSlotIndex >= 0
+			&& OnePaneSlotIndex < MaxViewportSlots
+			&& ViewportWindows[OnePaneSlotIndex])
+		{
+			ViewportWindows[OnePaneSlotIndex]->SetRect(ContentRect);
+		}
+
+		bool bVisibleSlot[MaxViewportSlots] = { false, false, false, false };
+		for (int32 i = 0; i < ActiveSlotCount; ++i)
+		{
+			const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
+			if (SlotIndex >= 0 && SlotIndex < MaxViewportSlots)
+			{
+				bVisibleSlot[SlotIndex] = true;
+			}
+		}
+
+		// Hide stale split-rect targets: non-visible slots must not keep previous rects,
+		// otherwise input routing can still hit old quadrant areas after switching layouts.
+		for (int32 SlotIndex = 0; SlotIndex < MaxViewportSlots; ++SlotIndex)
+		{
+			if (!bVisibleSlot[SlotIndex] && ViewportWindows[SlotIndex])
+			{
+				ViewportWindows[SlotIndex]->SetRect(FRect{ 0.0f, 0.0f, 0.0f, 0.0f });
+			}
+		}
+
+		// 모든 ViewportClient의 스크린 rect를 동기화한다.
+		// (숨겨진 슬롯도 stale split rect가 남지 않도록 zero-rect까지 반영)
+		for (FLevelEditorViewportClient* VC : LevelViewportClients)
+		{
+			if (VC)
+			{
+				VC->UpdateLayoutRect();
+			}
+		}
+
+		// 각 ViewportClient에 이미지 렌더
 		for (int32 i = 0; i < ActiveSlotCount; ++i)
 		{
 			const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
 			if (SlotIndex < static_cast<int32>(LevelViewportClients.size()))
 			{
 				FLevelEditorViewportClient* VC = LevelViewportClients[SlotIndex];
-				VC->UpdateLayoutRect();
 				const bool bIsPIEFocusViewport = bPIEViewportMode && VC == PIEFocusedViewportClient;
 				VC->RenderViewportImage(VC == ActiveViewportClient, !bIsPIEFocusViewport);
 			}
@@ -1065,28 +1211,14 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 
 		// 입력 처리
-		ImVec2 MousePos = ImGui::GetIO().MousePos;
-		FPoint MP = { MousePos.x, MousePos.y };
-		constexpr float PaneToolbarInputBlockHeight = 34.0f;
-		auto IsViewportInteractiveHover = [&](int32 InSlotIndex) -> bool
-		{
-			if (InSlotIndex < 0 || InSlotIndex >= MaxViewportSlots || !ViewportWindows[InSlotIndex])
-			{
-				return false;
-			}
-			if (!ViewportWindows[InSlotIndex]->IsHover(MP))
-			{
-				return false;
-			}
-			const FRect& SlotRect = ViewportWindows[InSlotIndex]->GetRect();
-			return MousePos.y >= (SlotRect.Y + PaneToolbarInputBlockHeight);
-		};
+		const ImVec2 MousePos = ImGui::GetIO().MousePos;
+		const FPoint MP = { MousePos.x, MousePos.y };
 
 		// hover window 상태와 무관하게 실제 viewport 인터랙션 영역 여부를 계산한다.
 		for (int32 i = 0; i < ActiveSlotCount; ++i)
 		{
 			const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
-			if (IsViewportInteractiveHover(SlotIndex))
+			if (IsViewportInteractiveHover(SlotIndex, MousePos.x, MousePos.y))
 			{
 				bMouseOverViewport = true;
 				break;
@@ -1096,69 +1228,10 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		if (ImGui::IsWindowHovered())
 		{
 
-			// 분할 바 드래그
-			if (RootSplitter)
-			{
-				if (ImGui::IsMouseClicked(0))
-				{
-					DraggingSplitter = SSplitter::FindSplitterAtBar(RootSplitter, MP);
-				}
+			HandleSplitterInteraction(MousePos, POINT{ static_cast<LONG>(MP.X), static_cast<LONG>(MP.Y) });
+			HandleViewportActivationOnClick(MousePos, ActiveSlotCount, OnePaneSlotIndex);
 
-				if (ImGui::IsMouseReleased(0))
-				{
-					DraggingSplitter = nullptr;
-				}
-
-				if (DraggingSplitter)
-				{
-					const FRect& DR = DraggingSplitter->GetRect();
-					if (DraggingSplitter->GetOrientation() == ESplitOrientation::Horizontal)
-					{
-						float NewRatio = (MousePos.x - DR.X) / DR.Width;
-						DraggingSplitter->SetRatio(Clamp(NewRatio, 0.15f, 0.85f));
-						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-					}
-					else
-					{
-						float NewRatio = (MousePos.y - DR.Y) / DR.Height;
-						DraggingSplitter->SetRatio(Clamp(NewRatio, 0.15f, 0.85f));
-						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-					}
-				}
-				else
-				{
-					// 호버 커서 변경
-					SSplitter* Hovered = SSplitter::FindSplitterAtBar(RootSplitter, MP);
-					if (Hovered)
-					{
-						if (Hovered->GetOrientation() == ESplitOrientation::Horizontal)
-							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-						else
-							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-					}
-				}
-			}
-
-			// 활성 뷰포트 전환 (분할 바 드래그 중이 아닐 때)
-			if (!DraggingSplitter && (ImGui::IsMouseClicked(0) || ImGui::IsMouseClicked(1)))
-			{
-				for (int32 i = 0; i < ActiveSlotCount; ++i)
-				{
-					const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
-					if (SlotIndex < static_cast<int32>(LevelViewportClients.size())
-						&& SlotIndex < MaxViewportSlots
-						&& IsViewportInteractiveHover(SlotIndex))
-					{
-						LastUserActivatedViewportClient = LevelViewportClients[SlotIndex];
-						if (LevelViewportClients[SlotIndex] != ActiveViewportClient)
-							SetActiveViewport(LevelViewportClients[SlotIndex]);
-						break;
-					}
-				}
-			}
-
-			const bool bCanOpenPlaceActorMenu =
-				Editor && (!Editor->IsPlayingInEditor() || Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Ejected);
+			const bool bCanOpenPlaceActorMenu = CanOpenPlaceActorMenuInViewport(Editor);
 			if (bCanOpenPlaceActorMenu)
 			{
 				constexpr float RightClickPopupThresholdPx = 20.0f;
@@ -1177,10 +1250,10 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 					}
 					const FViewportInputContext& InputContext = VC->GetRoutedInputContext();
 
-					if (ImGui::IsMouseClicked(1) && InputContext.WasPressed(VK_RBUTTON) && IsViewportInteractiveHover(SlotIndex))
+					if (ImGui::IsMouseClicked(1) && InputContext.WasPressed(VK_RBUTTON) && IsViewportInteractiveHover(SlotIndex, MousePos.x, MousePos.y))
 					{
-						GRightClickTracking[SlotIndex] = true;
-						GRightClickTravelSq[SlotIndex] = 0.0f;
+						ContextMenuState.RightClickTracking[SlotIndex] = true;
+						ContextMenuState.RightClickTravelSq[SlotIndex] = 0.0f;
 						POINT PressClientPos =
 						{
 							static_cast<LONG>(MousePos.x),
@@ -1198,25 +1271,25 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 								break;
 							}
 						}
-						GRightClickPressPos[SlotIndex] = ImVec2(static_cast<float>(PressClientPos.x), static_cast<float>(PressClientPos.y));
+						ContextMenuState.RightClickPressPos[SlotIndex] = { static_cast<float>(PressClientPos.x), static_cast<float>(PressClientPos.y) };
 					}
-					if (GRightClickTracking[SlotIndex] && InputContext.Frame.IsDown(VK_RBUTTON))
+					if (ContextMenuState.RightClickTracking[SlotIndex] && InputContext.Frame.IsDown(VK_RBUTTON))
 					{
 						const LONG Dx = InputContext.Frame.MouseDelta.x;
 						const LONG Dy = InputContext.Frame.MouseDelta.y;
-						GRightClickTravelSq[SlotIndex] += static_cast<float>(Dx * Dx + Dy * Dy);
+						ContextMenuState.RightClickTravelSq[SlotIndex] += static_cast<float>(Dx * Dx + Dy * Dy);
 					}
 					if (ImGui::IsMouseReleased(1) && InputContext.WasReleased(VK_RBUTTON))
 					{
 						const bool bRightDragGesture =
 							InputContext.Frame.bRightDragging
 							|| InputContext.WasPointerDragEnded(EPointerButton::Right);
-						const bool bClickCandidate = GRightClickTracking[SlotIndex]
-							&& GRightClickTravelSq[SlotIndex] <= RightClickPopupThresholdSq
-							&& IsViewportInteractiveHover(SlotIndex)
+						const bool bClickCandidate = ContextMenuState.RightClickTracking[SlotIndex]
+							&& ContextMenuState.RightClickTravelSq[SlotIndex] <= RightClickPopupThresholdSq
+							&& IsViewportInteractiveHover(SlotIndex, MousePos.x, MousePos.y)
 							&& !bRightDragGesture;
-						GRightClickTracking[SlotIndex] = false;
-						GRightClickTravelSq[SlotIndex] = 0.0f;
+						ContextMenuState.RightClickTracking[SlotIndex] = false;
+						ContextMenuState.RightClickTravelSq[SlotIndex] = 0.0f;
 						const bool bHasModifier =
 							InputContext.Frame.IsCtrlDown()
 							|| InputContext.Frame.IsAltDown()
@@ -1236,11 +1309,11 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 								{
 									const FRect& ViewRect = VC->GetViewportScreenRect();
 									const float LocalMouseX = Clamp(
-										GRightClickPressPos[SlotIndex].x - ViewRect.X,
+										ContextMenuState.RightClickPressPos[SlotIndex].X - ViewRect.X,
 										0.0f,
 										(std::max)(0.0f, ViewRect.Width - 1.0f));
 									const float LocalMouseY = Clamp(
-										GRightClickPressPos[SlotIndex].y - ViewRect.Y,
+										ContextMenuState.RightClickPressPos[SlotIndex].Y - ViewRect.Y,
 										0.0f,
 										(std::max)(0.0f, ViewRect.Height - 1.0f));
 									const float VPWidth = VC->GetViewport() ? static_cast<float>(VC->GetViewport()->GetWidth()) : VC->GetWindowWidth();
@@ -1249,7 +1322,15 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 
 									FHitResult HitResult{};
 									AActor* BestActor = nullptr;
-									InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
+									const FEditorSettings& Settings = FEditorSettings::Get();
+									if (Settings.PickingMode == EEditorPickingMode::RayTriangle)
+									{
+										InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
+									}
+									else
+									{
+										InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+									}
 									if (BestActor)
 									{
 										SelectionManager->Select(BestActor);
@@ -1261,10 +1342,12 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 								}
 							}
 
-							GPendingPlaceActorPopupSlot = SlotIndex;
-							GPendingPlaceActorPopupPos = ImVec2(GRightClickPressPos[SlotIndex].x, GRightClickPressPos[SlotIndex].y + 2.0f);
-							GPendingPlaceActorSpawnPos = GRightClickPressPos[SlotIndex];
-							GForceNextPopupPos = true;
+							ContextMenuState.PendingPopupSlot = SlotIndex;
+							ContextMenuState.PendingPopupPos = {
+								ContextMenuState.RightClickPressPos[SlotIndex].X,
+								ContextMenuState.RightClickPressPos[SlotIndex].Y + 2.0f };
+							ContextMenuState.PendingSpawnPos = ContextMenuState.RightClickPressPos[SlotIndex];
+							ContextMenuState.bForceNextPopupPos = true;
 							break;
 						}
 					}
@@ -1273,31 +1356,134 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 	}
 
-	if (GPendingPlaceActorPopupSlot >= 0)
+	RenderPlaceActorPopup(bPlaceActorPopupWasOpen);
+
+	ImGui::End();
+	ImGui::PopStyleVar();
+}
+
+bool FLevelViewportLayout::IsViewportInteractiveHover(int32 SlotIndex, float MouseX, float MouseY) const
+{
+	if (SlotIndex < 0 || SlotIndex >= MaxViewportSlots || !ViewportWindows[SlotIndex])
 	{
-		if (GPendingPlaceActorPopupSlot < static_cast<int32>(LevelViewportClients.size()))
-		{
-			SetActiveViewport(LevelViewportClients[GPendingPlaceActorPopupSlot]);
-		}
-		ImGui::SetNextWindowPos(GPendingPlaceActorPopupPos, ImGuiCond_Always);
-		ImGui::OpenPopup("##ViewportPlaceActorPopup");
-		GPendingPlaceActorPopupSlot = -1;
+		return false;
 	}
+
+	const FPoint MousePoint = { MouseX, MouseY };
+	if (!ViewportWindows[SlotIndex]->IsHover(MousePoint))
+	{
+		return false;
+	}
+
+	const FRect& SlotRect = ViewportWindows[SlotIndex]->GetRect();
+	return MouseY >= (SlotRect.Y + EditorViewportInputUtils::PaneToolbarHeightF);
+}
+
+void FLevelViewportLayout::HandleSplitterInteraction(const ImVec2& MousePos, const POINT& MousePoint)
+{
+	if (!RootSplitter)
+	{
+		return;
+	}
+
+	if (ImGui::IsMouseClicked(0))
+	{
+		const FPoint QueryPoint = { static_cast<float>(MousePoint.x), static_cast<float>(MousePoint.y) };
+		DraggingSplitter = SSplitter::FindSplitterAtBar(RootSplitter, QueryPoint);
+	}
+
+	if (ImGui::IsMouseReleased(0))
+	{
+		DraggingSplitter = nullptr;
+	}
+
+	if (DraggingSplitter)
+	{
+		const FRect& DragRect = DraggingSplitter->GetRect();
+		if (DraggingSplitter->GetOrientation() == ESplitOrientation::Horizontal)
+		{
+			const float NewRatio = (MousePos.x - DragRect.X) / DragRect.Width;
+			DraggingSplitter->SetRatio(Clamp(NewRatio, 0.15f, 0.85f));
+			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+		}
+		else
+		{
+			const float NewRatio = (MousePos.y - DragRect.Y) / DragRect.Height;
+			DraggingSplitter->SetRatio(Clamp(NewRatio, 0.15f, 0.85f));
+			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+		}
+		return;
+	}
+
+	const FPoint HoverPoint = { static_cast<float>(MousePoint.x), static_cast<float>(MousePoint.y) };
+	SSplitter* Hovered = SSplitter::FindSplitterAtBar(RootSplitter, HoverPoint);
+	if (!Hovered)
+	{
+		return;
+	}
+
+	if (Hovered->GetOrientation() == ESplitOrientation::Horizontal)
+	{
+		ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+	}
+	else
+	{
+		ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+	}
+}
+
+void FLevelViewportLayout::HandleViewportActivationOnClick(const ImVec2& MousePos, int32 ActiveSlotCount, int32 OnePaneSlotIndex)
+{
+	if (DraggingSplitter || (!ImGui::IsMouseClicked(0) && !ImGui::IsMouseClicked(1)))
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < ActiveSlotCount; ++i)
+	{
+		const int32 SlotIndex = (CurrentLayout == EViewportLayout::OnePane) ? OnePaneSlotIndex : i;
+		if (SlotIndex < static_cast<int32>(LevelViewportClients.size())
+			&& SlotIndex < MaxViewportSlots
+			&& IsViewportInteractiveHover(SlotIndex, MousePos.x, MousePos.y))
+		{
+			LastUserActivatedViewportClient = LevelViewportClients[SlotIndex];
+			if (LevelViewportClients[SlotIndex] != ActiveViewportClient)
+			{
+				SetActiveViewport(LevelViewportClients[SlotIndex]);
+			}
+			break;
+		}
+	}
+}
+
+void FLevelViewportLayout::RenderPlaceActorPopup(bool bPlaceActorPopupWasOpen)
+{
+	if (ContextMenuState.PendingPopupSlot >= 0)
+	{
+		if (ContextMenuState.PendingPopupSlot < static_cast<int32>(LevelViewportClients.size()))
+		{
+			SetActiveViewport(LevelViewportClients[ContextMenuState.PendingPopupSlot]);
+		}
+		ImGui::SetNextWindowPos(ImVec2(ContextMenuState.PendingPopupPos.X, ContextMenuState.PendingPopupPos.Y), ImGuiCond_Always);
+		ImGui::OpenPopup("##ViewportPlaceActorPopup");
+		ContextMenuState.PendingPopupSlot = -1;
+	}
+
 	ImGui::SetNextWindowSize(ImVec2(110.0f, 0.0f), ImGuiCond_Appearing);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(110.0f, 0.0f), ImVec2(110.0f, FLT_MAX));
 	if (ImGui::BeginPopup("##ViewportPlaceActorPopup"))
 	{
-		if (GForceNextPopupPos)
+		if (ContextMenuState.bForceNextPopupPos)
 		{
-			ImGui::SetWindowPos(GPendingPlaceActorPopupPos, ImGuiCond_Always);
-			GForceNextPopupPos = false;
+			ImGui::SetWindowPos(ImVec2(ContextMenuState.PendingPopupPos.X, ContextMenuState.PendingPopupPos.Y), ImGuiCond_Always);
+			ContextMenuState.bForceNextPopupPos = false;
 		}
 		if (ImGui::BeginMenu("Place Actor"))
 		{
 			if (Editor)
 			{
-				const int32 SpawnX = static_cast<int32>(GPendingPlaceActorSpawnPos.x);
-				const int32 SpawnY = static_cast<int32>(GPendingPlaceActorSpawnPos.y);
+				const int32 SpawnX = static_cast<int32>(ContextMenuState.PendingSpawnPos.X);
+				const int32 SpawnY = static_cast<int32>(ContextMenuState.PendingSpawnPos.Y);
 				for (const UEditorEngine::FPlaceableActorEntry& Entry : Editor->GetPlaceableActorEntries())
 				{
 					if (ImGui::MenuItem(Entry.DisplayName.c_str()))
@@ -1308,6 +1494,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 			}
 			ImGui::EndMenu();
 		}
+
 		const bool bCanDeleteSelection = SelectionManager && !SelectionManager->IsEmpty();
 		if (ImGui::MenuItem("Delete", "Del", false, bCanDeleteSelection))
 		{
@@ -1323,6 +1510,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 		}
 		ImGui::EndPopup();
 	}
+
 	const bool bPlaceActorPopupIsOpen = ImGui::IsPopupOpen("##ViewportPlaceActorPopup");
 	if (bPlaceActorPopupWasOpen
 		&& !bPlaceActorPopupIsOpen
@@ -1330,9 +1518,6 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 	{
 		bRequestViewportMouseSuppress = true;
 	}
-
-	ImGui::End();
-	ImGui::PopStyleVar();
 }
 
 bool FLevelViewportLayout::ConsumeViewportMouseSuppressRequest()
@@ -1352,92 +1537,8 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 	const FRect& PaneRect = ViewportWindows[SlotIndex]->GetRect();
 	if (PaneRect.Width <= 0 || PaneRect.Height <= 0) return;
 
-	enum class EToolbarIcon : int32
-	{
-		Menu = 0,
-		Select,
-		Translate,
-		Rotate,
-		Scale,
-		WorldSpace,
-		LocalSpace,
-		TranslateSnap,
-		RotateSnap,
-		ScaleSnap,
-		Camera,
-		Setting,
-		Count
-	};
-
-	static ID3D11ShaderResourceView* ToolbarIcons[static_cast<int32>(EToolbarIcon::Count)] = {};
-	static bool bToolbarIconsLoaded = false;
-	if (!bToolbarIconsLoaded && RendererPtr)
-	{
-		auto GetToolbarIconFileName = [](EToolbarIcon Icon) -> const wchar_t*
-		{
-			switch (Icon)
-			{
-			case EToolbarIcon::Menu:          return L"Menu.png";
-			case EToolbarIcon::Select:        return L"Select.png";
-			case EToolbarIcon::Translate:     return L"Translate.png";
-			case EToolbarIcon::Rotate:        return L"Rotate.png";
-			case EToolbarIcon::Scale:         return L"Scale.png";
-			case EToolbarIcon::WorldSpace:    return L"WorldSpace.png";
-			case EToolbarIcon::LocalSpace:    return L"LocalSpace.png";
-			case EToolbarIcon::TranslateSnap: return L"Translate_Snap.png";
-			case EToolbarIcon::RotateSnap:    return L"Rotate_Snap.png";
-			case EToolbarIcon::ScaleSnap:     return L"Scale_Snap.png";
-			case EToolbarIcon::Camera:        return L"Camera.png";
-			case EToolbarIcon::Setting:       return L"Show_Flag.png";
-			default:                          return L"";
-			}
-		};
-
-		ID3D11Device* Device = RendererPtr->GetFD3DDevice().GetDevice();
-		const std::wstring IconDir = FPaths::Combine(FPaths::RootDir(), L"Asset/Editor/ToolIcons/");
-		for (int32 i = 0; i < static_cast<int32>(EToolbarIcon::Count); ++i)
-		{
-			const std::wstring FilePath = IconDir + GetToolbarIconFileName(static_cast<EToolbarIcon>(i));
-			DirectX::CreateWICTextureFromFile(Device, FilePath.c_str(), nullptr, &ToolbarIcons[i]);
-		}
-		bToolbarIconsLoaded = true;
-	}
-
-	auto GetToolbarIconRenderSize = [](EToolbarIcon Icon, float FallbackSize, float MaxIconSize) -> ImVec2
-	{
-		ID3D11ShaderResourceView* IconSRV = ToolbarIcons[static_cast<int32>(Icon)];
-		if (!IconSRV)
-		{
-			return ImVec2(FallbackSize, FallbackSize);
-		}
-
-		ID3D11Resource* Resource = nullptr;
-		IconSRV->GetResource(&Resource);
-		if (!Resource)
-		{
-			return ImVec2(FallbackSize, FallbackSize);
-		}
-
-		ImVec2 IconSize(FallbackSize, FallbackSize);
-		D3D11_RESOURCE_DIMENSION Dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
-		Resource->GetType(&Dimension);
-		if (Dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D)
-		{
-			ID3D11Texture2D* Texture2D = static_cast<ID3D11Texture2D*>(Resource);
-			D3D11_TEXTURE2D_DESC Desc{};
-			Texture2D->GetDesc(&Desc);
-			IconSize = ImVec2(static_cast<float>(Desc.Width), static_cast<float>(Desc.Height));
-		}
-		Resource->Release();
-
-		if (IconSize.x > MaxIconSize || IconSize.y > MaxIconSize)
-		{
-			const float Scale = (IconSize.x > IconSize.y) ? (MaxIconSize / IconSize.x) : (MaxIconSize / IconSize.y);
-			IconSize.x *= Scale;
-			IconSize.y *= Scale;
-		}
-		return IconSize;
-	};
+	EnsureToolbarIconsLoaded(RendererPtr);
+	ID3D11ShaderResourceView** ToolbarIcons = GetToolbarIconTable();
 
 	auto DrawToolbarTextButton = [](const char* Id, const char* Label, bool bPairFirst = false, bool bPairSecond = false) -> bool
 	{
@@ -1460,7 +1561,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		return bPressed;
 	};
 
-	auto DrawToolbarIconButton = [&GetToolbarIconRenderSize, &DrawToolbarTextButton](const char* Id, EToolbarIcon Icon, const char* FallbackLabel, float FallbackIconSize, float MaxIconSize, bool bPairFirst = false, bool bPairSecond = false) -> bool
+	auto DrawToolbarIconButton = [&DrawToolbarTextButton, ToolbarIcons](const char* Id, EToolbarIcon Icon, const char* FallbackLabel, float FallbackIconSize, float MaxIconSize, bool bPairFirst = false, bool bPairSecond = false) -> bool
 	{
 		ID3D11ShaderResourceView* IconSRV = ToolbarIcons[static_cast<int32>(Icon)];
 		if (!IconSRV)
@@ -1516,7 +1617,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 
 	char OverlayID[64];
 	snprintf(OverlayID, sizeof(OverlayID), "##PaneToolbar_%d", SlotIndex);
-	constexpr float PaneToolbarHeight = 34.0f;
+	constexpr float PaneToolbarHeight = EditorViewportInputUtils::PaneToolbarHeightF;
 	ImGui::SetNextWindowPos(ImVec2(PaneRect.X, PaneRect.Y));
 	ImGui::SetNextWindowBgAlpha(1.0f);
 	ImGui::SetNextWindowSize(ImVec2(PaneRect.Width, PaneToolbarHeight), ImGuiCond_Always);
@@ -1546,9 +1647,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		FEditorViewportController* InputController = VC->GetInputController();
 		FEditorNavigationTool* NavTool = InputController ? InputController->GetNavigationTool() : nullptr;
 		const bool bOnePane = (CurrentLayout == EViewportLayout::OnePane);
-		const bool bPIEPossessed = Editor
-			&& Editor->IsPlayingInEditor()
-			&& Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
+		const bool bPIEPossessed = IsPIEPlayingAndPossessed(Editor);
 		UGizmoComponent* Gizmo = Editor ? Editor->GetGizmo() : nullptr;
 		FEditorSettings& Settings = FEditorSettings::Get();
 		if (bPIEPossessed)
@@ -1748,7 +1847,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		char LayoutPopupID[64];
 		snprintf(LayoutPopupID, sizeof(LayoutPopupID), "LayoutPopup_%d", SlotIndex);
 
-		auto CalcButtonWidth = [&GetToolbarIconRenderSize, ToolbarFallbackIconSize, ToolbarMaxIconSize](const char* Label, EToolbarIcon Icon, bool bIconButton) -> float
+		auto CalcButtonWidth = [ToolbarFallbackIconSize, ToolbarMaxIconSize](const char* Label, EToolbarIcon Icon, bool bIconButton) -> float
 		{
 			if (bIconButton)
 			{
@@ -2167,3 +2266,4 @@ void FLevelViewportLayout::LoadFromSettings()
 		}
 	}
 }
+

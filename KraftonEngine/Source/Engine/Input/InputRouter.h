@@ -6,6 +6,7 @@
 #include <functional>
 
 struct FRect;
+struct FInputSystemSnapshot;
 
 class FInputRouter
 {
@@ -38,11 +39,42 @@ private:
 	};
 
 	static bool IsPointInRect(const POINT& Point, const FRect& Rect);
+	void ResetTrackingState();
 	RECT GetTargetRectScreenRect(const FRect& TargetRect) const;
 	FTargetEntry* FindEntryByViewport(FViewport* InViewport, FRect& OutRect);
 	POINT GetTargetRectScreenCenter(const FRect& TargetRect) const;
+	void PopulateDispatchContext(
+		const FInputSystemSnapshot& InputSnapshot,
+		const POINT& MouseClientPos,
+		FTargetEntry* TargetEntry,
+		const FRect& TargetRect,
+		FViewportInputContext& OutContext,
+		FInteractionBinding& OutBinding);
+	void ClearRoutingStateAndMouseControl();
+	bool EnsureRoutingEnvironmentReady();
+	void DeactivateAllMouseControl();
+	void ValidateTrackedViewports();
+	void UpdatePointerTrackingState(FTargetEntry* HoveredEntry, bool& bAnyPointerPressed, bool& bAnyPointerDown, bool bHardBlockMouse);
+	void FinalizeAndDispatchInput(
+		FTargetEntry* TargetEntry,
+		const FRect& TargetRect,
+		const FInputSystemSnapshot& InputSnapshot,
+		const POINT& MouseScreenPos,
+		bool bHardBlockMouse,
+		FViewportInputContext& InOutContext);
+	bool TryFindHoveredTarget(const POINT& MouseClientPos, FTargetEntry*& OutHoveredEntry, FRect& OutHoveredRect);
+	FTargetEntry* ResolveDispatchTarget(FTargetEntry* HoveredEntry, const FRect& HoveredRect, bool bAnyPointerDown, FRect& OutTargetRect);
+	void UpdateRelativeMouseModeState(
+		FTargetEntry* TargetEntry,
+		const FRect& TargetRect,
+		const FInputSystemSnapshot& InputSnapshot,
+		const POINT& MouseScreenPos,
+		FViewportInputContext& InOutContext);
+	void UpdateAbsoluteClipState(FTargetEntry* TargetEntry, const FViewportInputContext& Context);
 	void ActivateRelativeMouseMode(FViewport* InViewport, const POINT& RestoreScreenPos, const RECT& ClipScreenRect);
 	void DeactivateRelativeMouseMode();
+	void ActivateAbsoluteMouseClip(FViewport* InViewport, const RECT& ClipScreenRect);
+	void DeactivateAbsoluteMouseClip();
 
 private:
 	TArray<FTargetEntry> Targets;
@@ -59,5 +91,7 @@ private:
 	bool bRelativeMouseModeActive = false;
 	FViewport* RelativeMouseModeViewport = nullptr;
 	POINT RelativeMouseRestorePos = { 0, 0 };
-	RECT RelativeMouseClipRect = { 0, 0, 0, 0 };
+	bool bAbsoluteMouseClipActive = false;
+	FViewport* AbsoluteMouseClipViewport = nullptr;
+	RECT AbsoluteMouseClipRect = { 0, 0, 0, 0 };
 };
