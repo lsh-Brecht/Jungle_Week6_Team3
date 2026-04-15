@@ -1221,6 +1221,11 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 	{
 		return;
 	}
+	FConstantBuffer* PickingCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Picking, sizeof(FPickingConstants));
+	if (!PickingCB || !PickingCB->GetBuffer())
+	{
+		return;
+	}
 
 	ID3D11SamplerState* Sampler = Resources.DefaultSampler;
 	Context->PSSetSamplers(0, 1, &Sampler);
@@ -1257,12 +1262,18 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 			LastShader = IdShader;
 		}
 
-		FPerObjectConstants PickCB = Proxy->PerObjectConstants;
-		PickCB.Color = FVector4(static_cast<float>(Proxy->ProxyId + 1u), 0.0f, 0.0f, 0.0f);
+		const FPerObjectConstants PickCB = Proxy->PerObjectConstants;
 		IdPickPerObjectCB.Update(Context, &PickCB, sizeof(PickCB));
 		ID3D11Buffer* CB = IdPickPerObjectCB.GetBuffer();
 		Context->VSSetConstantBuffers(ECBSlot::PerObject, 1, &CB);
 		Context->PSSetConstantBuffers(ECBSlot::PerObject, 1, &CB);
+
+		FPickingConstants PickingData = {};
+		PickingData.PickingId = Proxy->ProxyId + 1u;
+		PickingCB->Update(Context, &PickingData, sizeof(PickingData));
+		ID3D11Buffer* b7 = PickingCB->GetBuffer();
+		Context->VSSetConstantBuffers(ECBSlot::Picking, 1, &b7);
+		Context->PSSetConstantBuffers(ECBSlot::Picking, 1, &b7);
 
 		if (Proxy->MeshBuffer != LastMeshBuffer)
 		{

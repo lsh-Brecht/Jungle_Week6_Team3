@@ -58,7 +58,7 @@ bool FEditorGizmoTool::HandleInput(float DeltaTime)
 	}
 
 	Gizmo->ApplyScreenSpaceScaling(Camera->GetWorldLocation(), Camera->IsOrthogonal(), Camera->GetOrthoWidth());
-	Gizmo->UpdateAxisMask(Owner->GetRenderOptions().ViewportType);
+	Gizmo->UpdateAxisMask(Owner->GetRenderOptions().ViewportType, Camera->IsOrthogonal());
 
 	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
 	{

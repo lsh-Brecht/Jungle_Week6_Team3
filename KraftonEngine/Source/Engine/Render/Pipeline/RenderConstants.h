@@ -28,6 +28,7 @@ namespace ECBSlot
 	constexpr uint32 Material = 4;		// b4: Material properties (UVScroll 등)
 	constexpr uint32 SceneEffect = 5;	// b5: scene-wide special effects
 	constexpr uint32 Fog = 6;			// b6: fog post-process params
+	constexpr uint32 Picking = 7;		// b7: ID picking
 
 
 	constexpr uint32 PostProcess_FXAA = 9;    // b9: FXAA effect params
@@ -111,6 +112,12 @@ struct FMaterialConstants
 	uint32 bIsUVScroll;
 	float _pad[3];
 	FVector4 SectionColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+};
+
+struct FPickingConstants
+{
+	uint32 PickingId = 0;
+	float _pad[3] = { 0.0f, 0.0f, 0.0f };
 };
 
 struct FGizmoConstants
