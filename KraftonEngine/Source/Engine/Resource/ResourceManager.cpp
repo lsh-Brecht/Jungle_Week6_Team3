@@ -14,8 +14,18 @@ namespace
 {
 	constexpr const wchar_t* ParticleDir = L"Asset\\Particle\\";
 	constexpr const wchar_t* TextureDir = L"Asset\\Textures\\";
-	constexpr const char* DecalSpriteTextureName = "DecalSprite";
-	constexpr const wchar_t* DecalSpriteIconPath = L"Asset\\Editor\\Icons\\DecalActorIcon.png";
+
+	constexpr const char* DecalIconTextureName = "DecalIcon";
+	constexpr const wchar_t* DecalIconPath = L"Asset\\Editor\\Icons\\DecalActorIcon.png";
+	constexpr const char* PawnIconTextureName = "PawnIcon";
+	constexpr const wchar_t* PawnIconPath = L"Asset\\Editor\\Icons\\Pawn_64x.png";
+	constexpr const char* PointLightIconTextureName = "PointLightIcon";
+	constexpr const wchar_t* PointLightIconPath = L"Asset\\Editor\\Icons\\PointLight_64x.png";
+	constexpr const char* SpotLightIconTextureName = "SpotLightIcon";
+	// 시연용
+	constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight_64x.png";
+	//constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight.png";
+	
 	constexpr const char* DefaultFontName = "Default";
 	constexpr const char* DefaultFontPath = "Asset/Font/FontAtlas.dds";
 
@@ -96,13 +106,19 @@ void FResourceManager::LoadDefaultResources(ID3D11Device* InDevice)
 		RegisterTexture(FName(Name), ToResourcePath(Path));
 	}
 
-	// DecalActor editor billboard uses the logical "DecalSprite" texture name, but the
-	// actual icon asset lives under the editor icon directory rather than Asset/Textures.
-	const std::filesystem::path DecalSpritePath = std::filesystem::path(FPaths::RootDir()) / DecalSpriteIconPath;
-	if (std::filesystem::exists(DecalSpritePath) && TextureResources.find(DecalSpriteTextureName) == TextureResources.end())
+ auto RegisterEditorIconTexture = [&](const char* TextureName, const wchar_t* IconPath)
 	{
-		RegisterTexture(FName(DecalSpriteTextureName), ToResourcePath(DecalSpritePath));
-	}
+		const std::filesystem::path FullPath = std::filesystem::path(FPaths::RootDir()) / IconPath;
+		if (std::filesystem::exists(FullPath) && TextureResources.find(TextureName) == TextureResources.end())
+		{
+			RegisterTexture(FName(TextureName), ToResourcePath(FullPath));
+		}
+	};
+
+	RegisterEditorIconTexture(DecalIconTextureName, DecalIconPath);
+	RegisterEditorIconTexture(PawnIconTextureName, PawnIconPath);
+	RegisterEditorIconTexture(PointLightIconTextureName, PointLightIconPath);
+	RegisterEditorIconTexture(SpotLightIconTextureName, SpotLightIconPath);
 
 	if (LoadGPUResources(InDevice))
 	{

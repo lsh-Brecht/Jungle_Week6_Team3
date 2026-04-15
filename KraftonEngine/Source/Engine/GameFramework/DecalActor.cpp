@@ -13,7 +13,7 @@ ADecalActor::ADecalActor()
 
 	SpriteComponent = AddComponent<UBillboardComponent>();
 	SpriteComponent->AttachToComponent(Decal);
-	SpriteComponent->SetTexture(FName("DecalSprite"));
+	SpriteComponent->SetTexture(FName("DecalIcon"));
 }
 
 void ADecalActor::SetDecalMaterial(UMaterialInterface* NewDecalMaterial)
