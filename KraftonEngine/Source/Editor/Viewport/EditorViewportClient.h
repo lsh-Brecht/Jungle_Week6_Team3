@@ -24,6 +24,7 @@ class FEditorViewportCommandTool;
 class FEditorNavigationTool;
 class FEditorGizmoTool;
 class FEditorSelectionTool;
+class AActor;
 
 class FEditorViewportClient : public FViewportClient
 {
@@ -55,6 +56,7 @@ public:
 	void CreateCamera();
 	void DestroyCamera();
 	void ResetCamera();
+	void SyncNavigationCameraTargetFromCurrent();
 	UCameraComponent* GetCamera() const { return Camera; }
 
 	void Tick(float DeltaTime);
@@ -91,6 +93,7 @@ public:
 	const FEditorSettings* GetSettings() const { return Settings; }
 	UWorld* GetInteractionWorld() const { return ResolveInteractionWorld(); }
 	bool ConvertScreenToViewportLocal(const POINT& InScreenPos, POINT& OutLocal, bool bClampToViewport = true) const;
+	bool PickActorByIdAtLocalPoint(const POINT& InLocalPoint, AActor*& OutActor) const;
 	float GetWindowWidth() const { return WindowWidth; }
 	float GetWindowHeight() const { return WindowHeight; }
 

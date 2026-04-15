@@ -22,7 +22,7 @@ private:
 	void EndSelectionMarquee();
 	void ApplySelectionMarquee(bool bAdditive);
 	bool TryProjectActorToViewportLocal(AActor* Actor, float& OutX, float& OutY) const;
-	void HandleSelectionClick(const FRay& Ray);
+	void HandleSelectionClick(const FRay& Ray, const POINT& ClickLocal);
 
 	FEditorViewportClient* Owner = nullptr;
 	bool bSelectionMarqueeActive = false;

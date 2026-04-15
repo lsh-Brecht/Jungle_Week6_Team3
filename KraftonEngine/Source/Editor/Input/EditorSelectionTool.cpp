@@ -134,7 +134,7 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 	float VPWidth = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetWidth()) : Owner->GetWindowWidth();
 	float VPHeight = Owner->GetViewport() ? static_cast<float>(Owner->GetViewport()->GetHeight()) : Owner->GetWindowHeight();
 	const FRay Ray = Owner->GetCamera()->DeprojectScreenToWorld(LocalMouseX, LocalMouseY, VPWidth, VPHeight);
-	HandleSelectionClick(Ray);
+	HandleSelectionClick(Ray, ClickLocal);
 	bHasPendingSelectionPress = false;
 	return true;
 }
@@ -161,7 +161,7 @@ bool FEditorSelectionTool::IsBoxSelectionChordDown(bool& bOutAdditive) const
 		EditorViewportInputMapping::EEditorViewportAction::BoxSelectReplaceDown);
 }
 
-void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray)
+void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray, const POINT& ClickLocal)
 {
 	if (!Owner || !Owner->GetSelectionManager())
 	{
@@ -187,7 +187,10 @@ void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray)
 	}
 	else
 	{
-		InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+		if (!Owner->PickActorByIdAtLocalPoint(ClickLocal, BestActor))
+		{
+			InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+		}
 	}
 	if (!BestActor)
 	{

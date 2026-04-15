@@ -11,6 +11,7 @@ class FEditorNavigationTool final : public IEditorViewportTool
 public:
 	explicit FEditorNavigationTool(FEditorViewportClient* InOwner);
 	bool HandleInput(float DeltaTime) override;
+	void SyncTargetFromCameraImmediate();
 	void FocusOnTarget(const FVector& Target, float DesiredDistance = -1.0f);
 	float GetRuntimeCameraSpeedMultiplier() const { return RuntimeCameraSpeedMultiplier; }
 	void SetRuntimeCameraSpeedMultiplier(float InMultiplier);

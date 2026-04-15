@@ -188,10 +188,10 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 		// Batcher 경유 렌더링 (Font, SubUV)
 		Proxy->CollectEntries(RenderBus);
 		
-		if (!Proxy->bBatcherRendered)
-		{
-			RenderBus.AddProxy(Proxy->Pass, Proxy);
-		}
+		// ID Picking pass는 RenderBus의 proxy 목록을 사용하므로,
+		// 배처 경로 대상(Billboard 등)도 proxy를 함께 유지한다.
+		// 일반 렌더에서는 해당 pass가 batcher 우선으로 실행되어 중복 드로우되지 않는다.
+		RenderBus.AddProxy(Proxy->Pass, Proxy);
 
 		// 선택된 오브젝트
 		if (Proxy->bSelected)

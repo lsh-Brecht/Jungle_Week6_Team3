@@ -39,11 +39,20 @@ void FBillboardSceneProxy::UpdateMesh()
 		// Primitive 를 캐싱해 둔다 (Quad 메시는 FVertex 레이아웃).
 		Shader = FShaderManager::Get().GetShader(EShaderType::Primitive);
 		Pass = ERenderPass::Billboard;
+
+		// ID picking에서 텍스처 alpha 테스트를 수행할 수 있도록 섹션 텍스처 정보를 함께 유지한다.
+		SectionDraws.clear();
+		FMeshSectionDraw Draw = {};
+		Draw.DiffuseSRV = Comp->GetTexture() ? Comp->GetTexture()->SRV : nullptr;
+		Draw.FirstIndex = 0;
+		Draw.IndexCount = MeshBuffer ? MeshBuffer->GetIndexBuffer().GetIndexCount() : 0;
+		SectionDraws.push_back(Draw);
 	}
 	else
 	{
 		Shader = FShaderManager::Get().GetShader(EShaderType::Primitive);
 		Pass = ERenderPass::Opaque;
+		SectionDraws.clear();
 	}
 	UpdateSortKey();
 }

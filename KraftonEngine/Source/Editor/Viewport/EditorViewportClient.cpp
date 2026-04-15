@@ -19,6 +19,7 @@
 #include "Editor/Selection/SelectionManager.h"
 #include "Editor/EditorEngine.h"
 #include "GameFramework/AActor.h"
+#include "Render/Proxy/FScene.h"
 #include "Viewport/Viewport.h"
 #include "GameFramework/World.h"
 #include "Engine/Runtime/Engine.h"
@@ -64,6 +65,21 @@ void FEditorViewportClient::ResetCamera()
 	if (!Camera || !Settings) return;
 	Camera->SetWorldLocation(Settings->InitViewPos);
 	Camera->LookAt(Settings->InitLookAt);
+	SyncNavigationCameraTargetFromCurrent();
+}
+
+void FEditorViewportClient::SyncNavigationCameraTargetFromCurrent()
+{
+	FEditorViewportController* Controller = GetInputController();
+	if (!Controller)
+	{
+		return;
+	}
+
+	if (FEditorNavigationTool* NavigationTool = Controller->GetNavigationTool())
+	{
+		NavigationTool->SyncTargetFromCameraImmediate();
+	}
 }
 
 void FEditorViewportClient::SetViewportType(ELevelViewportType NewType)
@@ -330,6 +346,52 @@ bool FEditorViewportClient::ConvertScreenToViewportLocal(const POINT& InScreenPo
 
 	OutLocal.x = static_cast<LONG>(Clamp(LocalX, 0.0f, (std::max)(0.0f, ViewRect.Width - 1.0f)));
 	OutLocal.y = static_cast<LONG>(Clamp(LocalY, 0.0f, (std::max)(0.0f, ViewRect.Height - 1.0f)));
+	return true;
+}
+
+bool FEditorViewportClient::PickActorByIdAtLocalPoint(const POINT& InLocalPoint, AActor*& OutActor) const
+{
+	OutActor = nullptr;
+	UWorld* InteractionWorld = ResolveInteractionWorld();
+	if (!InteractionWorld || !Viewport || !GEngine)
+	{
+		return false;
+	}
+
+	ID3D11DeviceContext* Context = GEngine->GetRenderer().GetFD3DDevice().GetDeviceContext();
+	if (!Context)
+	{
+		return false;
+	}
+
+	uint32 PickedId = 0;
+	const uint32 PixelX = (InLocalPoint.x >= 0) ? static_cast<uint32>(InLocalPoint.x) : 0u;
+	const uint32 PixelY = (InLocalPoint.y >= 0) ? static_cast<uint32>(InLocalPoint.y) : 0u;
+	if (!Viewport->ReadIdPickAt(PixelX, PixelY, Context, PickedId) || PickedId == 0u)
+	{
+		return false;
+	}
+
+	const uint32 ProxyId = PickedId - 1u;
+	const TArray<FPrimitiveSceneProxy*>& Proxies = InteractionWorld->GetScene().GetAllProxies();
+	if (ProxyId >= static_cast<uint32>(Proxies.size()))
+	{
+		return false;
+	}
+
+	FPrimitiveSceneProxy* Proxy = Proxies[ProxyId];
+	if (!Proxy || !Proxy->Owner || !Proxy->Owner->GetOwner())
+	{
+		return false;
+	}
+
+	AActor* PickedActor = Proxy->Owner->GetOwner();
+	if (!PickedActor->IsVisible() || PickedActor->GetWorld() != InteractionWorld)
+	{
+		return false;
+	}
+
+	OutActor = PickedActor;
 	return true;
 }
 

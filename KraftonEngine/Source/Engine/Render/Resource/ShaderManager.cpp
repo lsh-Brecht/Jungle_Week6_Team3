@@ -46,6 +46,15 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	Shaders[(uint32)EShaderType::Billboard].Create(InDevice, L"Shaders/ShaderBillboard.hlsl",
 		"VS", "PS", FTextureVertexInputLayout, ARRAYSIZE(FTextureVertexInputLayout));
 
+	Shaders[(uint32)EShaderType::IDPickPrimitive].Create(InDevice, L"Shaders/IDPickPrimitive.hlsl",
+		"VS", "PS", FVertexInputLayout, ARRAYSIZE(FVertexInputLayout));
+
+	Shaders[(uint32)EShaderType::IDPickBillboard].Create(InDevice, L"Shaders/IDPickBillboard.hlsl",
+		"VS", "PS", FVertexInputLayout, ARRAYSIZE(FVertexInputLayout));
+
+	Shaders[(uint32)EShaderType::IDPickStaticMesh].Create(InDevice, L"Shaders/IDPickStaticMesh.hlsl",
+		"VS", "PS", FVertexPNCTInputLayout, ARRAYSIZE(FVertexPNCTInputLayout));
+
 	bIsInitialized = true;
 }
 

@@ -45,7 +45,17 @@ public:
 	void PostDuplicate() override;
 
 	// --- Text ---
-	void SetText(const FString& InText) { Text = InText; }
+	void SetText(const FString& InText)
+	{
+		if (Text == InText)
+		{
+			return;
+		}
+
+		Text = InText;
+		// 텍스트 길이 변경은 바운드/프록시 재평가가 필요하다.
+		MarkWorldBoundsDirty();
+	}
 	const FString& GetText() const { return Text; }
 
 	// Owner의 UUID를 문자열로 반환

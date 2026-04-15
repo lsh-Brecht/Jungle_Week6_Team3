@@ -14,6 +14,8 @@
 #include "GameFramework/StaticMeshActor.h"
 #include "GameFramework/DecalActor.h"
 #include "GameFramework/SpotLightActor.h"
+#include "Components/BillboardComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Viewport/GameViewportClient.h"
 #include "Viewport/Viewport.h"
 #include "Platform/Paths.h"
@@ -111,6 +113,7 @@ constexpr const char* GPlaceableIdCube = "basic_shape_cube";
 constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
 constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
 constexpr const char* GPlaceableIdSpotLight = "basic_actor_spotlight";
+constexpr const char* GPlaceableIdEmptyActor = "basic_actor_empty";
 
 bool SpawnPlacedActors(
 	UWorld* InWorld,
@@ -140,8 +143,24 @@ bool SpawnPlacedActors(
 			continue;
 		}
 
+		// 스폰 직후 UUID 텍스트를 액터 UUID와 강제로 동기화한다.
+		// (새 월드 첫 스폰 시점의 초기화 순서 차이로 TextRender가 stale 문자열을 가질 수 있음)
+		for (UActorComponent* Comp : Actor->GetComponents())
+		{
+			if (UTextRenderComponent* TextComp = Cast<UTextRenderComponent>(Comp))
+			{
+				TextComp->RefreshOwnerUUIDText();
+			}
+		}
+
 		const FVector SpawnLocation = InBaseLocation + FVector(static_cast<float>(i) * 3.0f, 0.0f, 0.0f);
 		Actor->SetActorLocation(SpawnLocation);
+
+		// Grid Spawn 경로와 동일하게 강제 재삽입한다.
+		// SpawnActor 시점에는 컴포넌트가 비어 있어 첫 등록이 불완전할 수 있으므로
+		// initializer 이후 최종 상태(Primitive/TextRender 포함)로 partition을 다시 맞춘다.
+		InWorld->InsertActorToOctree(Actor);
+
 		bSpawnedAny = true;
 	}
 
@@ -896,6 +915,14 @@ bool UEditorEngine::LoadSceneFromPath(const FString& InScenePath)
 		}
 	}
 
+	for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+	{
+		if (VC)
+		{
+			VC->SyncNavigationCameraTargetFromCurrent();
+		}
+	}
+
 	CurrentLevelFilePath = InScenePath;
 	EnqueueFooterEventLog("Level loaded");
 	return true;
@@ -1014,6 +1041,33 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 	PlaceableActorEntries.clear();
 
 	RegisterPlaceableActor({
+	GPlaceableIdEmptyActor,
+	"Empty Actor",
+	[](UWorld* World) -> AActor*
+	{
+		return World ? static_cast<AActor*>(World->SpawnActor<AActor>()) : nullptr;
+	},
+	[](AActor* Actor) -> bool
+	{
+		if (!Actor)
+		{
+			return false;
+		}
+
+		UBillboardComponent* Billboard = Actor->AddComponent<UBillboardComponent>();
+		if (!Billboard)
+		{
+			return false;
+		}
+
+		Actor->SetRootComponent(Billboard);
+		Billboard->SetTexture(FName("EmptyActorIcon"));
+		Billboard->SetSpriteSize(0.9f, 0.9f);
+		return true;
+	}
+	});
+	
+	RegisterPlaceableActor({
 		GPlaceableIdCube,
 		"Cube",
 		[](UWorld* World) -> AActor*
@@ -1090,6 +1144,8 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 		return true;
 	}
 	});
+
+	
 }
 
 bool UEditorEngine::PlaceActor(const FActorSpawnFactory& InSpawnFactory, const FActorPostSpawnInitializer& InInitializer, int32 InCount)

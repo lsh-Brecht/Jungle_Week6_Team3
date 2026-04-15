@@ -261,6 +261,7 @@ void FEditorMainPanel::Render(float DeltaTime)
 		SCOPE_STAT_CAT("StatWidget.Render", "5_UI");
 		StatWidget.Render(DeltaTime);
 	}
+	RenderStatOverlay();
 	RenderEditorDebugPanel();
 
 #if STATS
@@ -306,6 +307,105 @@ void FEditorMainPanel::Render(float DeltaTime)
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+void FEditorMainPanel::RenderStatOverlay()
+{
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	const TArray<FOverlayStatGroup> Groups = EditorEngine->GetOverlayStatSystem().BuildGroups(*EditorEngine);
+	bool bHasAnyLines = false;
+	for (const FOverlayStatGroup& Group : Groups)
+	{
+		if (!Group.Lines.empty())
+		{
+			bHasAnyLines = true;
+			break;
+		}
+	}
+	if (!bHasAnyLines)
+	{
+		return;
+	}
+
+	constexpr float PaneToolbarHeight = 34.0f;
+	constexpr float OverlayMarginX = 12.0f;
+	constexpr float OverlayMarginY = 10.0f;
+	ImVec2 OverlayPos(20.0f, 56.0f);
+	ImGuiID OverlayViewportID = 0;
+
+	if (FLevelEditorViewportClient* ActiveViewport = EditorEngine->GetActiveViewport())
+	{
+		const FRect& ActiveRect = ActiveViewport->GetViewportScreenRect();
+		if (ActiveRect.Width > 1.0f && ActiveRect.Height > 1.0f)
+		{
+			OverlayPos = ImVec2(
+				ActiveRect.X + OverlayMarginX,
+				ActiveRect.Y + PaneToolbarHeight + OverlayMarginY);
+		}
+	}
+
+	if (const ImGuiViewport* MainViewport = ImGui::GetMainViewport())
+	{
+		OverlayViewportID = MainViewport->ID;
+	}
+
+	ImGui::SetNextWindowPos(OverlayPos, ImGuiCond_Always);
+	if (OverlayViewportID != 0)
+	{
+		ImGui::SetNextWindowViewport(OverlayViewportID);
+	}
+	ImGui::SetNextWindowBgAlpha(0.78f);
+
+	const ImGuiWindowFlags Flags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoSavedSettings
+		| ImGuiWindowFlags_AlwaysAutoResize
+		| ImGuiWindowFlags_NoFocusOnAppearing
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoInputs;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.09f, 0.12f, 0.82f));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.38f, 0.58f, 0.84f, 0.55f));
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.94f, 1.00f, 1.00f));
+
+	if (ImGui::Begin("##ViewportStatOverlay", nullptr, Flags))
+	{
+		bool bFirstGroup = true;
+		for (const FOverlayStatGroup& Group : Groups)
+		{
+			if (Group.Lines.empty())
+			{
+				continue;
+			}
+
+			if (!bFirstGroup)
+			{
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+			}
+
+			for (const FString& Line : Group.Lines)
+			{
+				ImGui::TextUnformatted(Line.c_str());
+			}
+
+			bFirstGroup = false;
+		}
+	}
+	ImGui::End();
+
+	ImGui::PopStyleColor(3);
+	ImGui::PopStyleVar(3);
 }
 
 void FEditorMainPanel::RenderDockSpace()
@@ -557,7 +657,7 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 	ImGui::EndDisabled();
 	static const char* PickingModeLabels[] =
 	{
-		"ID Picking (Actor UUID)",
+		"ID Picking (GPU Proxy ID)",
 		"Ray-Triangle"
 	};
 	int32 PickingModeIndex = static_cast<int32>(Settings.PickingMode);
@@ -977,6 +1077,12 @@ void FEditorMainPanel::RenderShortcutOverlay()
 		| ImGuiWindowFlags_NoMove;
 	ImGui::Begin("##ShortcutOverlayBlocker", nullptr, BlockerFlags);
 	ImGui::InvisibleButton("##ShortcutOverlayBlockerBtn", OverlaySize);
+	if (ImGui::IsItemClicked(ImGuiMouseButton_Left)
+		|| ImGui::IsItemClicked(ImGuiMouseButton_Right)
+		|| ImGui::IsItemClicked(ImGuiMouseButton_Middle))
+	{
+		ImGui::SetWindowFocus("Shortcuts");
+	}
 	ImGui::End();
 
 	const ImVec2 PanelSize(980.0f, 700.0f);
@@ -989,6 +1095,7 @@ void FEditorMainPanel::RenderShortcutOverlay()
 	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.16f, 0.17f, 0.20f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.28f, 0.29f, 0.32f, 1.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	ImGui::SetNextWindowFocus();
 	const ImGuiWindowFlags PanelFlags =
 		ImGuiWindowFlags_NoDocking
 		| ImGuiWindowFlags_NoSavedSettings

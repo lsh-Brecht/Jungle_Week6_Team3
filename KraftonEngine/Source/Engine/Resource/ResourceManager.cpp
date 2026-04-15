@@ -25,6 +25,9 @@ namespace
 	// 시연용
 	constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight_64x.png";
 	//constexpr const wchar_t* SpotLightIconPath = L"Asset\\Editor\\Icons\\SpotLight.png";
+	constexpr const char* EmptyActorIconTextureName = "EmptyActorIcon";
+	constexpr const wchar_t* EmptyActorIconPath = L"Asset\\Editor\\Icon\\EmptyActor.png";
+	constexpr const wchar_t* EmptyActorIconFallbackPath = L"Asset\\Editor\\Icons\\EmptyActor.png";
 	
 	constexpr const char* DefaultFontName = "Default";
 	constexpr const char* DefaultFontPath = "Asset/Font/FontAtlas.dds";
@@ -119,6 +122,8 @@ void FResourceManager::LoadDefaultResources(ID3D11Device* InDevice)
 	RegisterEditorIconTexture(PawnIconTextureName, PawnIconPath);
 	RegisterEditorIconTexture(PointLightIconTextureName, PointLightIconPath);
 	RegisterEditorIconTexture(SpotLightIconTextureName, SpotLightIconPath);
+	RegisterEditorIconTexture(EmptyActorIconTextureName, EmptyActorIconPath);
+	RegisterEditorIconTexture(EmptyActorIconTextureName, EmptyActorIconFallbackPath);
 
 	if (LoadGPUResources(InDevice))
 	{

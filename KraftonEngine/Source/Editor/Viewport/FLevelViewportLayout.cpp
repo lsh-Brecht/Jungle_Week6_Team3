@@ -344,6 +344,7 @@ void FLevelViewportLayout::ResetViewport(UWorld* InWorld)
 
 		// 기존 뷰포트 타입(Ortho 방향 등)을 새 카메라에 재적용
 		VC->SetViewportType(VC->GetRenderOptions().ViewportType);
+		VC->SyncNavigationCameraTargetFromCurrent();
 	}
 	if (ActiveViewportClient && InWorld)
 		InWorld->SetActiveCamera(ActiveViewportClient->GetCamera());
@@ -1329,7 +1330,15 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 									}
 									else
 									{
-										InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+										POINT ClickLocal =
+										{
+											static_cast<LONG>(LocalMouseX),
+											static_cast<LONG>(LocalMouseY)
+										};
+										if (!VC->PickActorByIdAtLocalPoint(ClickLocal, BestActor))
+										{
+											InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+										}
 									}
 									if (BestActor)
 									{
@@ -1470,7 +1479,7 @@ void FLevelViewportLayout::RenderPlaceActorPopup(bool bPlaceActorPopupWasOpen)
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(110.0f, 0.0f), ImGuiCond_Appearing);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(110.0f, 0.0f), ImVec2(110.0f, FLT_MAX));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(130.0f, 0.0f), ImVec2(130.0f, FLT_MAX));
 	if (ImGui::BeginPopup("##ViewportPlaceActorPopup"))
 	{
 		if (ContextMenuState.bForceNextPopupPos)

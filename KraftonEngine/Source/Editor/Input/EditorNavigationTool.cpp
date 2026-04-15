@@ -30,6 +30,11 @@ FEditorNavigationTool::FEditorNavigationTool(FEditorViewportClient* InOwner)
 {
 }
 
+void FEditorNavigationTool::SyncTargetFromCameraImmediate()
+{
+	SyncCameraTargetFromCurrent();
+}
+
 bool FEditorNavigationTool::HandleInput(float DeltaTime)
 {
 	if (!Owner || !Owner->GetCamera())
