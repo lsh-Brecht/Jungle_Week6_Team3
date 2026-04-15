@@ -252,6 +252,9 @@ void UGameViewportClient::EnsurePIEPlayer()
 	PIEPlayerMesh = PIEPlayerActor->AddComponent<UStaticMeshComponent>();
 	PIEPlayerMesh->AttachToComponent(Root);
 	PIEPlayerMesh->SetRelativeScale(FVector(0.6f, 0.6f, 1.2f));
+	// Ejected 모드에서 PIE 플레이어는 관찰 대상이므로 GPU occlusion false-positive로 인한
+	// 깜빡임/outline 소실을 막기 위해 오클루전 테스트에서 제외한다.
+	PIEPlayerMesh->SetSkipGPUOcclusion(true);
 
 	if (ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice())
 	{

@@ -20,7 +20,7 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	Shaders[(uint32)EShaderType::Decal].Create(InDevice, L"Shaders/Decal.hlsl",
 		"VS", "PS", FVertexInputLayout, ARRAYSIZE(FVertexInputLayout));
 
-	Shaders[(uint32)EShaderType::MeshDecal].Create(InDevice, L"Shaders/MeshDecal.hlsl",
+	Shaders[(uint32)EShaderType::ProjectionDecal].Create(InDevice, L"Shaders/ProjectionDecal.hlsl",
 		"VS", "PS", FVertexPNCTInputLayout, ARRAYSIZE(FVertexPNCTInputLayout));
 
 	// PostProcess outline: fullscreen quad (InputLayout 없음)
@@ -82,3 +82,4 @@ FShader* FShaderManager::GetShader(EShaderType InType)
 	}
 	return nullptr;
 }
+

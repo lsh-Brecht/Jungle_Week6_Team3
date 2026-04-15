@@ -1,6 +1,6 @@
-#include "Render/Proxy/MeshDecalSceneProxy.h"
+﻿#include "Render/Proxy/ProjectionDecalSceneProxy.h"
 
-#include "Components/MeshDecalComponent.h"
+#include "Components/ProjectionDecalComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Render/Pipeline/RenderBus.h"
 #include "Render/Resource/ConstantBufferPool.h"
@@ -32,9 +32,9 @@ namespace
 		return (Scale < DecalArrowMinScale) ? DecalArrowMinScale : Scale;
 	}
 
-	FMatrix BuildUnitRotationMatrix(const UMeshDecalComponent* MeshDecalComp)
+	FMatrix BuildUnitRotationMatrix(const UProjectionDecalComponent* ProjectionDecalComp)
 	{
-		FMatrix Rotation = MeshDecalComp->GetWorldMatrix();
+		FMatrix Rotation = ProjectionDecalComp->GetWorldMatrix();
 
 		for (int32 Row = 0; Row < 3; ++Row)
 		{
@@ -58,48 +58,51 @@ namespace
 	}
 }
 
-FMeshDecalSceneProxy::FMeshDecalSceneProxy(UMeshDecalComponent* InComponent)
+FProjectionDecalSceneProxy::FProjectionDecalSceneProxy(UProjectionDecalComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
 	bSupportsOutline = false;
 	bShowAABB = false;
+	// Thin projected Projection Decals are unstable in occlusion tests and can toggle
+	// visibility when camera/viewport changes.
+	bSkipGPUOcclusion = true;
 }
 
-UMeshDecalComponent* FMeshDecalSceneProxy::GetMeshDecalComponent() const
+UProjectionDecalComponent* FProjectionDecalSceneProxy::GetProjectionDecalComponent() const
 {
-	return static_cast<UMeshDecalComponent*>(Owner);
+	return static_cast<UProjectionDecalComponent*>(Owner);
 }
 
-void FMeshDecalSceneProxy::UpdateTransform()
+void FProjectionDecalSceneProxy::UpdateTransform()
 {
-	UMeshDecalComponent* MeshDecal = GetMeshDecalComponent();
-	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(MeshDecal->GetMeshDecalLocalToWorldMatrix());
+	UProjectionDecalComponent* ProjectionDecal = GetProjectionDecalComponent();
+	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(ProjectionDecal->GetProjectionDecalLocalToWorldMatrix());
 	CachedWorldPos = PerObjectConstants.Model.GetLocation();
-	CachedBounds = MeshDecal->GetWorldBoundingBox();
+	CachedBounds = ProjectionDecal->GetWorldBoundingBox();
 	MarkPerObjectCBDirty();
 }
 
-void FMeshDecalSceneProxy::UpdateMaterial()
+void FProjectionDecalSceneProxy::UpdateMaterial()
 {
-	UMeshDecalComponent* MeshDecal = GetMeshDecalComponent();
+	UProjectionDecalComponent* ProjectionDecal = GetProjectionDecalComponent();
 	UpdateSortKey();
-	if (MeshDecal)
+	if (ProjectionDecal)
 	{
-		MaterialSortKey = static_cast<uint32>(MeshDecal->GetSortOrder() - INT32_MIN);
+		MaterialSortKey = static_cast<uint32>(ProjectionDecal->GetSortOrder() - INT32_MIN);
 	}
 }
 
-void FMeshDecalSceneProxy::UpdateMesh()
+void FProjectionDecalSceneProxy::UpdateMesh()
 {
-	UMeshDecalComponent* MeshDecal = GetMeshDecalComponent();
-	MeshDecal->EnsureMeshDecalMeshBuilt();
-	const FMeshDecalRenderableMesh& SrcMesh = MeshDecal->GetRenderableMesh();
+	UProjectionDecalComponent* ProjectionDecal = GetProjectionDecalComponent();
+	ProjectionDecal->EnsureProjectionDecalMeshBuilt();
+	const FProjectionDecalRenderableMesh& SrcMesh = ProjectionDecal->GetRenderableMesh();
 
 	MeshBuffer = nullptr;
 	SectionDraws.clear();
 
-	Shader = FShaderManager::Get().GetShader(EShaderType::MeshDecal);
-	Pass = ERenderPass::MeshDecal;
+	Shader = FShaderManager::Get().GetShader(EShaderType::ProjectionDecal);
+	Pass = ERenderPass::ProjectionDecal;
 
 	if (SrcMesh.IsEmpty())
 	{
@@ -111,7 +114,7 @@ void FMeshDecalSceneProxy::UpdateMesh()
 	MeshData.Vertices.reserve(SrcMesh.Vertices.size());
 	MeshData.Indices = SrcMesh.Indices;
 
-	for (const FMeshDecalRenderableVertex& Src : SrcMesh.Vertices)
+	for (const FProjectionDecalRenderableVertex& Src : SrcMesh.Vertices)
 	{
 		FVertexPNCT Dst = {};
 		Dst.Position = Src.Position;
@@ -124,13 +127,13 @@ void FMeshDecalSceneProxy::UpdateMesh()
 	OwnedMeshBuffer.Create(GEngine->GetRenderer().GetFD3DDevice().GetDevice(), MeshData);
 	MeshBuffer = &OwnedMeshBuffer;
 
-	for (const FMeshDecalRenderableSection& SrcSection : SrcMesh.Sections)
+	for (const FProjectionDecalRenderableSection& SrcSection : SrcMesh.Sections)
 	{
 		FMeshSectionDraw Draw = {};
 		Draw.FirstIndex = SrcSection.FirstIndex;
 		Draw.IndexCount = SrcSection.IndexCount;
 
-		if (UMaterialInterface* Material = MeshDecal->GetMeshDecalMaterial())
+		if (UMaterialInterface* Material = ProjectionDecal->GetProjectionDecalMaterial())
 		{
 			if (UTexture2D* Diffuse = Material->GetDiffuseTexture())
 			{
@@ -138,7 +141,7 @@ void FMeshDecalSceneProxy::UpdateMesh()
 			}
 			Draw.DiffuseColor = Material->GetDiffuseColor();
 		}
-		else if (const FTextureResource* Texture = MeshDecal->GetMeshDecalTexture())
+		else if (const FTextureResource* Texture = ProjectionDecal->GetProjectionDecalTexture())
 		{
 			Draw.DiffuseSRV = Texture->SRV;
 			Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -148,10 +151,10 @@ void FMeshDecalSceneProxy::UpdateMesh()
 	}
 
 	UpdateSortKey();
-	MaterialSortKey = static_cast<uint32>(MeshDecal->GetSortOrder() - INT32_MIN);
+	MaterialSortKey = static_cast<uint32>(ProjectionDecal->GetSortOrder() - INT32_MIN);
 }
 
-void FMeshDecalSceneProxy::CollectEntries(FRenderBus& Bus)
+void FProjectionDecalSceneProxy::CollectEntries(FRenderBus& Bus)
 {
 	FPrimitiveSceneProxy::CollectEntries(Bus);
 
@@ -167,7 +170,7 @@ void FMeshDecalSceneProxy::CollectEntries(FRenderBus& Bus)
 	Bus.AddOBBEntry(std::move(Entry));
 }
 
-FMeshDecalArrowSceneProxy::FMeshDecalArrowSceneProxy(UMeshDecalComponent* InComponent, bool bInner)
+FProjectionDecalArrowSceneProxy::FProjectionDecalArrowSceneProxy(UProjectionDecalComponent* InComponent, bool bInner)
 	: FPrimitiveSceneProxy(InComponent)
 	, bIsInner(bInner)
 {
@@ -179,7 +182,7 @@ FMeshDecalArrowSceneProxy::FMeshDecalArrowSceneProxy(UMeshDecalComponent* InComp
 	Pass = bInner ? ERenderPass::GizmoInner : ERenderPass::GizmoOuter;
 }
 
-void FMeshDecalArrowSceneProxy::UpdateMesh()
+void FProjectionDecalArrowSceneProxy::UpdateMesh()
 {
 	MeshBuffer = &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::TransGizmo);
 	Shader = FShaderManager::Get().GetShader(EShaderType::Gizmo);
@@ -193,16 +196,16 @@ void FMeshDecalArrowSceneProxy::UpdateMesh()
 	UpdateSortKey();
 }
 
-void FMeshDecalArrowSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
+void FProjectionDecalArrowSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 {
-	UMeshDecalComponent* MeshDecalComp = GetMeshDecalComponent();
-	FPrimitiveSceneProxy* MeshDecalProxy = MeshDecalComp ? MeshDecalComp->GetSceneProxy() : nullptr;
-	if (!MeshDecalComp
-		|| !MeshDecalProxy
-		|| !MeshDecalComp->IsVisible()
-		|| !MeshDecalProxy->bVisible
-		|| !MeshDecalProxy->bSelected
-		|| !MeshDecalProxy->bInVisibleSet
+	UProjectionDecalComponent* ProjectionDecalComp = GetProjectionDecalComponent();
+	FPrimitiveSceneProxy* ProjectionDecalProxy = ProjectionDecalComp ? ProjectionDecalComp->GetSceneProxy() : nullptr;
+	if (!ProjectionDecalComp
+		|| !ProjectionDecalProxy
+		|| !ProjectionDecalComp->IsVisible()
+		|| !ProjectionDecalProxy->bVisible
+		|| !ProjectionDecalProxy->bSelected
+		|| !ProjectionDecalProxy->bInVisibleSet
 		|| !Bus.GetShowFlags().bGizmo
 		|| !Bus.GetShowFlags().bDecal)
 	{
@@ -212,9 +215,9 @@ void FMeshDecalArrowSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 
 	bVisible = true;
 
-	const FVector WorldLocation = MeshDecalComp->GetWorldLocation();
+	const FVector WorldLocation = ProjectionDecalComp->GetWorldLocation();
 	const float PerViewScale = ComputeDecalArrowScale(Bus, WorldLocation);
-	const FMatrix RotationMatrix = BuildUnitRotationMatrix(MeshDecalComp);
+	const FMatrix RotationMatrix = BuildUnitRotationMatrix(ProjectionDecalComp);
 
 	PerObjectConstants = FPerObjectConstants{
 		FMatrix::MakeScaleMatrix(FVector(PerViewScale, PerViewScale, PerViewScale))
@@ -237,7 +240,8 @@ void FMeshDecalArrowSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	G.bOverrideAxisColor = 1u;
 }
 
-UMeshDecalComponent* FMeshDecalArrowSceneProxy::GetMeshDecalComponent() const
+UProjectionDecalComponent* FProjectionDecalArrowSceneProxy::GetProjectionDecalComponent() const
 {
-	return static_cast<UMeshDecalComponent*>(Owner);
+	return static_cast<UProjectionDecalComponent*>(Owner);
 }
+

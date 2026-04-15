@@ -11,7 +11,7 @@ enum class EShaderType : uint32
 	Editor,
 	StaticMesh,
 	Decal,
-	MeshDecal,
+	ProjectionDecal,
 	//	SelectionMask 전용(OutlineMask RT 기록용)
 	SelectionMask,
 	//	PostProcess 체인 셰이더
@@ -47,3 +47,4 @@ private:
 	FShader Shaders[(uint32)EShaderType::MAX];
 	bool bIsInitialized = false;
 };
+

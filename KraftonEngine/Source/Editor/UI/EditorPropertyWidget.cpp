@@ -5,7 +5,7 @@
 #include "ImGui/imgui.h"
 #include "Components/GizmoComponent.h"
 #include "Components/DecalComponent.h"
-#include "Components/MeshDecalComponent.h"
+#include "Components/ProjectionDecalComponent.h"
 #include "Components/MovementComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -777,7 +777,7 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::SetNextItemWidth(-1);
 
 			const bool bDecalMaterialSlot = !bElementSlot
-				&& (Prop.Name == "Decal Material" || Prop.Name == "Mesh Decal Material");
+				&& (Prop.Name == "Decal Material" || Prop.Name == "Projection Decal Material");
 			FString Preview = GetMaterialSlotPreviewName(Slot->Path);
 			if (ImGui::BeginCombo("##Mat", Preview.c_str()))
 			{
@@ -871,9 +871,9 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 							{
 								bChanged = static_cast<UDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
 							}
-							else if (SelectedComponent->IsA<UMeshDecalComponent>())
+							else if (SelectedComponent->IsA<UProjectionDecalComponent>())
 							{
-								bChanged = static_cast<UMeshDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
+								bChanged = static_cast<UProjectionDecalComponent*>(SelectedComponent)->FitSizeToTextureAspect() || bChanged;
 							}
 						}
 					}
@@ -964,3 +964,4 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 	ImGui::PopID();
 	return bChanged;
 }
+

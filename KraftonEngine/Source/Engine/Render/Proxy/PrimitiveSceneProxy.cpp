@@ -61,6 +61,7 @@ FPrimitiveSceneProxy::FPrimitiveSceneProxy(UPrimitiveComponent* InComponent)
 	: Owner(InComponent)
 {
 	bSupportsOutline = Owner->SupportsOutline();
+	bSkipGPUOcclusion = Owner->ShouldSkipGPUOcclusion();
 }
 
 void FPrimitiveSceneProxy::UpdateTransform()
