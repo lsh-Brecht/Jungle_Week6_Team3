@@ -61,17 +61,17 @@ TArray<FOverlayStatGroup> FOverlayStatSystem::BuildGroups(const UEditorEngine& E
 	{
 		FOverlayStatGroup Group;
 
-		/*{
+		{
 			char Buffer[128] = {};
-			snprintf(Buffer, sizeof(Buffer), "Memory Allocated : %u", MemoryStats::GetTotalAllocationBytes());
+			snprintf(Buffer, sizeof(Buffer), "Object Memory : %.2f KB", MemoryStats::GetTotalAllocationBytes() / 1024.0);
 			Group.Lines.push_back(FString(Buffer));
 		}
 
 		{
 			char Buffer[128] = {};
-			snprintf(Buffer, sizeof(Buffer), "Times Allocated : %u", MemoryStats::GetTotalAllocationCount());
+			snprintf(Buffer, sizeof(Buffer), "Object Count  : %u", MemoryStats::GetTotalAllocationCount());
 			Group.Lines.push_back(FString(Buffer));
-		}*/
+		}
 
 		{
 			char Buffer[128] = {};
@@ -130,7 +130,7 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	}
 	if (bShowMemory)
 	{
-		EstimatedLineCount += 6;
+		EstimatedLineCount += 8;
 	}
 	OutLines.reserve(EstimatedLineCount);
 
@@ -162,8 +162,19 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 
 	if (bShowMemory)
 	{
-		constexpr int32 MemoryLineCount = 6;
 		char Buffer[128] = {};
+
+		// 액터/오브젝트 단위 추적 (생성·삭제 시 변동)
+		snprintf(Buffer, sizeof(Buffer), "Object Memory : %.2f KB", MemoryStats::GetTotalAllocationBytes() / 1024.0);
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		snprintf(Buffer, sizeof(Buffer), "Object Count  : %u", MemoryStats::GetTotalAllocationCount());
+		AppendLine(OutLines, CurrentY, FString(Buffer));
+		CurrentY += Layout.LineHeight;
+
+		// GPU/CPU 리소스 단위 추적 (에셋 로드 시 변동)
+		constexpr int32 MemoryLineCount = 6;
 		const double ValuesKB[MemoryLineCount] = {
 			static_cast<double>(MemoryStats::GetPixelShaderMemory() / 1024.0f),
 			static_cast<double>(MemoryStats::GetVertexShaderMemory() / 1024.0f),

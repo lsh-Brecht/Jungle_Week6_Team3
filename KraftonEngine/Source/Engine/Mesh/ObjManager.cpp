@@ -208,7 +208,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, const F
 	FString BinPath = CacheKey;
 
 	// 항상 리빌드 (옵션이 달라질 수 있음)
-	FStaticMesh* NewMeshAsset = new FStaticMesh();
+	auto NewMeshAsset = std::make_unique<FStaticMesh>();
 	TArray<FStaticMaterial> ParsedMaterials;
 
 	if (FObjImporter::Import(PathFileName, Options, *NewMeshAsset, ParsedMaterials))
@@ -238,7 +238,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, const F
 		NewMeshAsset->PathFileName = PathFileName;
 		// MaterialIndex 캐싱을 위해 Materials를 먼저 설정
 		StaticMesh->SetStaticMaterials(std::move(ParsedMaterials));
-		StaticMesh->SetStaticMeshAsset(NewMeshAsset);
+		StaticMesh->SetStaticMeshAsset(std::move(NewMeshAsset));
 
 		// .bin 저장
 		FWindowsBinWriter Writer(BinPath);
@@ -348,7 +348,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 			ObjPath = StaticMesh->GetStaticMeshAsset()->PathFileName;
 
 		// 무거운 OBJ 파싱 진행
-		FStaticMesh* NewMeshAsset = new FStaticMesh();
+		auto NewMeshAsset = std::make_unique<FStaticMesh>();
 		TArray<FStaticMaterial> ParsedMaterials;
 
 		if (FObjImporter::Import(ObjPath, *NewMeshAsset, ParsedMaterials))
@@ -376,7 +376,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 
 			// MaterialIndex 캐싱을 위해 Materials를 먼저 설정
 			StaticMesh->SetStaticMaterials(std::move(ParsedMaterials));
-			StaticMesh->SetStaticMeshAsset(NewMeshAsset);
+			StaticMesh->SetStaticMeshAsset(std::move(NewMeshAsset));
 
 			// 파싱 결과를 하드디스크에 굽기 (다음 로딩 속도 최적화)
 			FWindowsBinWriter Writer(BinPath);
