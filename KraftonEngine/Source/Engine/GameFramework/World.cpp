@@ -3,6 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/CameraComponent.h"	
+#include "Components/TextRenderComponent.h"
 #include "Engine/Render/Culling/ConvexVolume.h"
 #include "Render/Pipeline/LODContext.h"
 #include "Collision/RayUtils.h"
@@ -197,6 +198,10 @@ bool UWorld::RaycastPrimitivesById(const FRay& Ray, FHitResult& OutHitResult, AA
 	for (UPrimitiveComponent* Primitive : CandidatePrimitives)
 	{
 		if (!Primitive || !Primitive->IsVisible())
+		{
+			continue;
+		}
+		if (!Primitive->SupportsPicking() || Primitive->IsA<UTextRenderComponent>())
 		{
 			continue;
 		}

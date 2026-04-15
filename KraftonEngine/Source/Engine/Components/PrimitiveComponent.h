@@ -37,6 +37,7 @@ public:
 	//Collision
 	virtual void UpdateWorldAABB() const;
 	virtual bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult);
+	virtual bool SupportsPicking() const { return true; }
 	void UpdateWorldMatrix() const override;
 
 	virtual bool SupportsOutline() const { return true; }
