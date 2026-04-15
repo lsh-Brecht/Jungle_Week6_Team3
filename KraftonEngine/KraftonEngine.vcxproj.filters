@@ -187,7 +187,7 @@
       <Filter>Shaders\Common</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\Decal.hlsl" />
-    <FxCompile Include="Shaders\MeshDecal.hlsl" />
+    <FxCompile Include="Shaders\ProjectionDecal.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Editor\EditorEngine.cpp">
@@ -313,7 +313,7 @@
     <ClCompile Include="Source\Engine\GameFramework\DecalActor.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\GameFramework\MeshDecalActor.cpp">
+    <ClCompile Include="Source\Engine\GameFramework\ProjectionDecalActor.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\Level.cpp">
@@ -561,7 +561,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Source\Engine\Components\DecalComponent.cpp" />
-    <ClCompile Include="Source\Engine\Components\MeshDecalComponent.cpp">
+    <ClCompile Include="Source\Engine\Components\ProjectionDecalComponent.cpp">
       <Filter>Source\Engine\Components</Filter>
     </ClCompile>
     <ClCompile Include="Source\Editor\Input\EditorGizmoTool.cpp" />
@@ -573,11 +573,11 @@
     <ClCompile Include="Source\Editor\Input\EditorViewportModes.cpp" />
     <ClCompile Include="Source\Editor\Input\EditorViewportTools.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
-    <ClCompile Include="Source\Engine\Render\Proxy\MeshDecalSceneProxy.cpp">
+    <ClCompile Include="Source\Engine\Render\Proxy\ProjectionDecalSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\DecalGeometryChecker.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\MeshDecalMeshBuilder.cpp">
+    <ClCompile Include="Source\Engine\Mesh\ProjectionDecalMeshBuilder.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\SpotLightActor.cpp" />
@@ -667,7 +667,7 @@
     <ClInclude Include="Source\Engine\Components\DecalComponent.h">
       <Filter>Source\Engine\Components</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Components\MeshDecalComponent.h">
+    <ClInclude Include="Source\Engine\Components\ProjectionDecalComponent.h">
       <Filter>Source\Engine\Components</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Components\ExponentialHeightFogComponent.h">
@@ -745,7 +745,7 @@
     <ClInclude Include="Source\Engine\GameFramework\DecalActor.h">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\GameFramework\MeshDecalActor.h">
+    <ClInclude Include="Source\Engine\GameFramework\ProjectionDecalActor.h">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\GameFramework\Level.h">
@@ -1080,14 +1080,14 @@
     <ClInclude Include="Source\Editor\Input\EditorViewportModes.h" />
     <ClInclude Include="Source\Editor\Input\EditorViewportTools.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\DecalSceneProxy.h" />
-    <ClInclude Include="Source\Engine\Render\Proxy\MeshDecalSceneProxy.h">
+    <ClInclude Include="Source\Engine\Render\Proxy\ProjectionDecalSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\DecalGeometryChecker.h" />
-    <ClInclude Include="Source\Engine\Mesh\MeshDecalMeshBuilder.h">
+    <ClInclude Include="Source\Engine\Mesh\ProjectionDecalMeshBuilder.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Core\MeshDecalTypes.h">
+    <ClInclude Include="Source\Engine\Core\ProjectionDecalTypes.h">
       <Filter>Source\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\GameFramework\SpotLightActor.h" />
@@ -1099,3 +1099,4 @@
     <None Include="packages.config" />
   </ItemGroup>
 </Project>
+

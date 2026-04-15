@@ -84,8 +84,10 @@ ID3D11Buffer* FVertexBuffer::GetBuffer() const
 
 FConstantBuffer::FConstantBuffer(FConstantBuffer&& Other) noexcept
 	: Buffer(Other.Buffer)
+	, ByteWidth(Other.ByteWidth)
 {
 	Other.Buffer = nullptr;
+	Other.ByteWidth = 0;
 }
 
 FConstantBuffer& FConstantBuffer::operator=(FConstantBuffer&& Other) noexcept
@@ -94,7 +96,9 @@ FConstantBuffer& FConstantBuffer::operator=(FConstantBuffer&& Other) noexcept
 	{
 		Release();
 		Buffer = Other.Buffer;
+		ByteWidth = Other.ByteWidth;
 		Other.Buffer = nullptr;
+		Other.ByteWidth = 0;
 	}
 	return *this;
 }
@@ -111,6 +115,10 @@ void FConstantBuffer::Create(ID3D11Device* InDevice, uint32 InByteWidth)
 	constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 	InDevice->CreateBuffer(&constantBufferDesc, nullptr, &Buffer);
+	if (Buffer)
+	{
+		ByteWidth = constantBufferDesc.ByteWidth;
+	}
 }
 
 void FConstantBuffer::Release()
@@ -120,11 +128,12 @@ void FConstantBuffer::Release()
 		Buffer->Release();
 		Buffer = nullptr;
 	}
+	ByteWidth = 0;
 }
 
 void FConstantBuffer::Update(ID3D11DeviceContext* InDeviceContext, const void* InData, uint32 InByteWidth)
 {
-	if (Buffer)
+	if (Buffer && InData && InByteWidth > 0)
 	{
 		D3D11_MAPPED_SUBRESOURCE constantbufferMSR;
 		HRESULT hr = InDeviceContext->Map(Buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &constantbufferMSR);
@@ -133,7 +142,8 @@ void FConstantBuffer::Update(ID3D11DeviceContext* InDeviceContext, const void* I
 			return;
 		}
 
-		std::memcpy(constantbufferMSR.pData, InData, InByteWidth);
+		const uint32 CopyByteWidth = (InByteWidth < ByteWidth) ? InByteWidth : ByteWidth;
+		std::memcpy(constantbufferMSR.pData, InData, CopyByteWidth);
 
 		InDeviceContext->Unmap(Buffer, 0);
 	}

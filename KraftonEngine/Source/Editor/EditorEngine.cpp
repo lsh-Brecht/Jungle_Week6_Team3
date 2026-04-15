@@ -13,7 +13,7 @@
 #include "GameFramework/AActor.h"
 #include "GameFramework/StaticMeshActor.h"
 #include "GameFramework/DecalActor.h"
-#include "GameFramework/MeshDecalActor.h"
+#include "GameFramework/ProjectionDecalActor.h"
 #include "GameFramework/SpotLightActor.h"
 #include "Components/BillboardComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -114,7 +114,7 @@ constexpr const char* GPlaceableIdCube = "basic_shape_cube";
 constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
 constexpr const char* GPlaceableIdCylinder = "basic_shape_cylinder";
 constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
-constexpr const char* GPlaceableIdMeshDecal = "basic_actor_mesh_decal";
+constexpr const char* GPlaceableIdProjectionDecal = "basic_actor_projection_decal";
 constexpr const char* GPlaceableIdSpotLight = "basic_actor_spotlight";
 constexpr const char* GPlaceableIdEmptyActor = "basic_actor_empty";
 
@@ -1200,16 +1200,16 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 		});
 
 	RegisterPlaceableActor({
-		GPlaceableIdMeshDecal,
-		"Mesh Decal",
+		GPlaceableIdProjectionDecal,
+		"Projection Decal",
 		[](UWorld* World) -> AActor*
 		{
-			return World ? static_cast<AActor*>(World->SpawnActor<AMeshDecalActor>()) : nullptr;
+			return World ? static_cast<AActor*>(World->SpawnActor<AProjectionDecalActor>()) : nullptr;
 		},
 		[](AActor* Actor) -> bool
 		{
-			AMeshDecalActor* MeshDecalActor = Cast<AMeshDecalActor>(Actor);
-			return MeshDecalActor != nullptr;
+			AProjectionDecalActor* ProjectionDecalActor = Cast<AProjectionDecalActor>(Actor);
+			return ProjectionDecalActor != nullptr;
 		}
 		});
 
@@ -1318,3 +1318,4 @@ void UEditorEngine::ClearScene()
 
 	ViewportLayout.DestroyAllCameras();
 }
+

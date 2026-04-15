@@ -36,23 +36,41 @@ float3 ReconstructWorldPosition(float2 uv, float depth)
 
 float4 PS(PS_Input_Decal input) : SV_TARGET
 {
-    // 2) Deferred decal projection using scene depth
+    // Small reconstruction bias to keep deferred decal slightly off the surface
+    // and reduce edge flicker from depth precision/quantization.
+    static const float DecalDepthBias = 1e-4f;
+    static const float DecalBoundsEpsilon = 0.002f;
+
     uint width, height;
     DepthTex.GetDimensions(width, height);
 
-    const float2 invSize = 1.0f / float2(width, height);
-    const float2 uv = (input.position.xy) * invSize;
+    const int2 pixel = int2(input.position.xy);
+    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= int(width) || pixel.y >= int(height))
+    {
+        discard;
+    }
 
-    const float depth = DepthTex.Load(int3(input.position.xy, 0));
+    const float2 invSize = 1.0f / float2(width, height);
+    const float2 uv = (float2(pixel) + 0.5f) * invSize;
+
+    const float depth = DepthTex.Load(int3(pixel, 0));
     if (depth <= 0.0f || depth >= 1.0f)
     {
         discard;
     }
 
-    const float3 worldPos = ReconstructWorldPosition(uv, depth);
+    const float depthBiased = saturate(depth - DecalDepthBias);
+    if (depthBiased <= 0.0f || depthBiased >= 1.0f)
+    {
+        discard;
+    }
+
+    const float3 worldPos = ReconstructWorldPosition(uv, depthBiased);
     const float4 localDecalPos = mul(float4(worldPos, 1.0f), InverseDecalModel);
 
-    if (abs(localDecalPos.x) > 0.5f || abs(localDecalPos.y) > 0.5f || abs(localDecalPos.z) > 0.5f)
+    if (abs(localDecalPos.x) > (0.5f + DecalBoundsEpsilon)
+        || abs(localDecalPos.y) > (0.5f + DecalBoundsEpsilon)
+        || abs(localDecalPos.z) > (0.5f + DecalBoundsEpsilon))
     {
         discard;
     }

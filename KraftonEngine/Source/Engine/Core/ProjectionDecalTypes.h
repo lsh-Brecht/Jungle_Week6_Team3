@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "EngineTypes.h"
 #include "Core/CoreTypes.h"
@@ -8,7 +8,7 @@ class AActor;
 class UStaticMeshComponent;
 class UStaticMesh;
 
-struct FMeshDecalCandidate
+struct FProjectionDecalCandidate
 {
 	AActor* OwnerActor = nullptr;
 	UStaticMeshComponent* StaticMeshComponent = nullptr;
@@ -18,7 +18,7 @@ struct FMeshDecalCandidate
 	FMatrix WorldToMesh;
 };
 
-struct FMeshDecalRenderableVertex
+struct FProjectionDecalRenderableVertex
 {
 	FVector Position; // decal local
 	FVector Normal;   // decal local
@@ -26,17 +26,17 @@ struct FMeshDecalRenderableVertex
 	FVector2 UV;
 };
 
-struct FMeshDecalRenderableSection
+struct FProjectionDecalRenderableSection
 {
 	uint32 FirstIndex = 0;
 	uint32 IndexCount = 0;
 };
 
-struct FMeshDecalRenderableMesh
+struct FProjectionDecalRenderableMesh
 {
-	TArray<FMeshDecalRenderableVertex> Vertices;
+	TArray<FProjectionDecalRenderableVertex> Vertices;
 	TArray<uint32> Indices;
-	TArray<FMeshDecalRenderableSection> Sections;
+	TArray<FProjectionDecalRenderableSection> Sections;
 
 	void Clear()
 	{
@@ -50,4 +50,5 @@ struct FMeshDecalRenderableMesh
 		return Vertices.empty() || Indices.empty();
 	}
 };
+
 

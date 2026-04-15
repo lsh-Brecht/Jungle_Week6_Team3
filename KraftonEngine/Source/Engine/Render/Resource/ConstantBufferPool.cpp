@@ -20,6 +20,11 @@ FConstantBuffer* FConstantBufferPool::GetBuffer(uint32 Slot, uint32 ByteWidth)
 	auto It = Pool.find(Slot);
 	if (It != Pool.end())
 	{
+		FConstantBuffer& Existing = It->second;
+		if (Device && ByteWidth > Existing.GetByteWidth())
+		{
+			Existing.Create(Device, ByteWidth);
+		}
 		return &It->second;
 	}
 

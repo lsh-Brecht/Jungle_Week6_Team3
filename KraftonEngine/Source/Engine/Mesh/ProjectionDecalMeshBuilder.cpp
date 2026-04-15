@@ -1,6 +1,6 @@
-#include "Mesh/MeshDecalMeshBuilder.h"
+﻿#include "Mesh/ProjectionDecalMeshBuilder.h"
 
-#include "Components/MeshDecalComponent.h"
+#include "Components/ProjectionDecalComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
@@ -8,6 +8,7 @@
 #include "Mesh/StaticMesh.h"
 #include "Mesh/StaticMeshAsset.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -19,8 +20,8 @@ namespace
 		FVector Extent;
 	};
 
-	bool PassMeshDecalTargetFilter(
-		const UMeshDecalComponent& MeshDecalComponent,
+	bool PassProjectionDecalTargetFilter(
+		const UProjectionDecalComponent& ProjectionDecalComponent,
 		const UStaticMeshComponent* StaticMeshComponent)
 	{
 		if (!StaticMeshComponent)
@@ -28,8 +29,8 @@ namespace
 			return false;
 		}
 
-		if (MeshDecalComponent.IsExcludeSameOwnerEnabled()
-			&& StaticMeshComponent->GetOwner() == MeshDecalComponent.GetOwner())
+		if (ProjectionDecalComponent.IsExcludeSameOwnerEnabled()
+			&& StaticMeshComponent->GetOwner() == ProjectionDecalComponent.GetOwner())
 		{
 			return false;
 		}
@@ -40,18 +41,18 @@ namespace
 		return true;
 	}
 
-	FOrientedBox MakeMeshDecalWorldOBB(const UMeshDecalComponent& MeshDecalComponent)
+	FOrientedBox MakeProjectionDecalWorldOBB(const UProjectionDecalComponent& ProjectionDecalComponent)
 	{
-		const FMatrix MeshDecalLocalToWorld = MeshDecalComponent.GetMeshDecalLocalToWorldMatrix();
+		const FMatrix ProjectionDecalLocalToWorld = ProjectionDecalComponent.GetProjectionDecalLocalToWorldMatrix();
 
 		FOrientedBox Box;
-		Box.Center = MeshDecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
+		Box.Center = ProjectionDecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
 
 		FVector AxisVectors[3] =
 		{
-			MeshDecalLocalToWorld.TransformVector(FVector(1.0f, 0.0f, 0.0f)),
-			MeshDecalLocalToWorld.TransformVector(FVector(0.0f, 1.0f, 0.0f)),
-			MeshDecalLocalToWorld.TransformVector(FVector(0.0f, 0.0f, 1.0f))
+			ProjectionDecalLocalToWorld.TransformVector(FVector(1.0f, 0.0f, 0.0f)),
+			ProjectionDecalLocalToWorld.TransformVector(FVector(0.0f, 1.0f, 0.0f)),
+			ProjectionDecalLocalToWorld.TransformVector(FVector(0.0f, 0.0f, 1.0f))
 		};
 
 		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
@@ -157,23 +158,25 @@ namespace
 	}
 }
 
-void FMeshDecalMeshBuilder::BuildRenderableMesh(
-	const UMeshDecalComponent& MeshDecalComponent,
+void FProjectionDecalMeshBuilder::BuildRenderableMesh(
+	const UProjectionDecalComponent& ProjectionDecalComponent,
 	const UWorld& World,
-	FMeshDecalRenderableMesh& OutMesh)
+	FProjectionDecalRenderableMesh& OutMesh)
 {
 	OutMesh.Clear();
 
-	const FBoundingBox MeshDecalWorldAABB = MeshDecalComponent.GetMeshDecalWorldAABB();
-	if (!MeshDecalWorldAABB.IsValid())
+	const FBoundingBox ProjectionDecalWorldAABB = ProjectionDecalComponent.GetProjectionDecalWorldAABB();
+	if (!ProjectionDecalWorldAABB.IsValid())
 	{
 		return;
 	}
 
-	const FOrientedBox MeshDecalOBB = MakeMeshDecalWorldOBB(MeshDecalComponent);
-	const FMatrix WorldToMeshDecal = MeshDecalComponent.GetWorldToMeshDecalMatrix();
+	const FOrientedBox ProjectionDecalOBB = MakeProjectionDecalWorldOBB(ProjectionDecalComponent);
+	const FMatrix WorldToProjectionDecal = ProjectionDecalComponent.GetWorldToProjectionDecalMatrix();
+	const float MaxProjectionDecalExtent = (std::max)(ProjectionDecalOBB.Extent.X, (std::max)(ProjectionDecalOBB.Extent.Y, ProjectionDecalOBB.Extent.Z));
+	const float ProjectionDecalWorldPushBias = (std::max)(MaxProjectionDecalExtent * 0.002f, 0.0015f);
 
-	FMeshDecalRenderableSection Section;
+	FProjectionDecalRenderableSection Section;
 	Section.FirstIndex = 0;
 
 	for (AActor* Actor : World.GetActors())
@@ -191,19 +194,19 @@ void FMeshDecalMeshBuilder::BuildRenderableMesh(
 				continue;
 			}
 
-			if (!PassMeshDecalTargetFilter(MeshDecalComponent, StaticMeshComponent))
+			if (!PassProjectionDecalTargetFilter(ProjectionDecalComponent, StaticMeshComponent))
 			{
 				continue;
 			}
 
 			const FBoundingBox PrimitiveWorldAABB = StaticMeshComponent->GetWorldBoundingBox();
-			if (!PrimitiveWorldAABB.IsValid() || !MeshDecalWorldAABB.IsIntersected(PrimitiveWorldAABB))
+			if (!PrimitiveWorldAABB.IsValid() || !ProjectionDecalWorldAABB.IsIntersected(PrimitiveWorldAABB))
 			{
 				continue;
 			}
 
 			const FOrientedBox PrimitiveBounds = MakeWorldAABBAsOBB(PrimitiveWorldAABB);
-			if (!IntersectsOBBvsOBB(MeshDecalOBB, PrimitiveBounds))
+			if (!IntersectsOBBvsOBB(ProjectionDecalOBB, PrimitiveBounds))
 			{
 				continue;
 			}
@@ -223,18 +226,18 @@ void FMeshDecalMeshBuilder::BuildRenderableMesh(
 
 			for (const FNormalVertex& SourceVertex : MeshAsset->Vertices)
 			{
-				const FVector WorldPosition = MeshToWorld.TransformPositionWithW(SourceVertex.pos);
-				const FVector MeshDecalLocalPosition = WorldToMeshDecal.TransformPositionWithW(WorldPosition);
-
 				FVector WorldNormal = MeshToWorld.TransformVector(SourceVertex.normal);
 				WorldNormal.Normalize();
+				const FVector BaseWorldPosition = MeshToWorld.TransformPositionWithW(SourceVertex.pos);
+				const FVector WorldPosition = BaseWorldPosition + (WorldNormal * ProjectionDecalWorldPushBias);
+				const FVector ProjectionDecalLocalPosition = WorldToProjectionDecal.TransformPositionWithW(WorldPosition);
 
-				FVector MeshDecalLocalNormal = WorldToMeshDecal.TransformVector(WorldNormal);
-				MeshDecalLocalNormal.Normalize();
+				FVector ProjectionDecalLocalNormal = WorldToProjectionDecal.TransformVector(WorldNormal);
+				ProjectionDecalLocalNormal.Normalize();
 
-				FMeshDecalRenderableVertex Vertex = {};
-				Vertex.Position = MeshDecalLocalPosition;
-				Vertex.Normal = MeshDecalLocalNormal;
+				FProjectionDecalRenderableVertex Vertex = {};
+				Vertex.Position = ProjectionDecalLocalPosition;
+				Vertex.Normal = ProjectionDecalLocalNormal;
 				Vertex.Color = SourceVertex.color;
 				Vertex.UV = SourceVertex.tex;
 				OutMesh.Vertices.push_back(Vertex);
@@ -253,3 +256,4 @@ void FMeshDecalMeshBuilder::BuildRenderableMesh(
 		OutMesh.Sections.push_back(Section);
 	}
 }
+

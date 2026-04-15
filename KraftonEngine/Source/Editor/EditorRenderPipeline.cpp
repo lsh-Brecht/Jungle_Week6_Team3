@@ -7,7 +7,7 @@
 #include "Components/CameraComponent.h"
 #include "Components/GizmoComponent.h"
 #include "GameFramework/DecalActor.h"
-#include "GameFramework/MeshDecalActor.h"
+#include "GameFramework/ProjectionDecalActor.h"
 #include "GameFramework/World.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
@@ -102,6 +102,8 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		EffectiveShowFlags.bBoundingVolume = false;
 		EffectiveShowFlags.bDebugDraw = false;
 		EffectiveShowFlags.bOctree = false;
+		// Possessed PIE에서는 에디터용 Billboard/UUID(TextRender) 오버레이를 숨긴다.
+		EffectiveShowFlags.bBillboardText = false;
 	}
 	EViewMode ViewMode = Opts.ViewMode;
 
@@ -166,21 +168,21 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	{
 		uint32 DecalActorCount = 0;
-		uint32 MeshDecalActorCount = 0;
+		uint32 ProjectionDecalActorCount = 0;
 		for (AActor* Actor : World->GetActors())
 		{
 			if (Cast<ADecalActor>(Actor))
 			{
 				++DecalActorCount;
 			}
-			else if (Cast<AMeshDecalActor>(Actor))
+			else if (Cast<AProjectionDecalActor>(Actor))
 			{
-				++MeshDecalActorCount;
+				++ProjectionDecalActorCount;
 			}
 		}
 
      const TArray<const FPrimitiveSceneProxy*>& RenderedDecalProxies = Bus.GetProxies(ERenderPass::Decal);
-     const TArray<const FPrimitiveSceneProxy*>& RenderedMeshDecalProxies = Bus.GetProxies(ERenderPass::MeshDecal);
+     const TArray<const FPrimitiveSceneProxy*>& RenderedProjectionDecalProxies = Bus.GetProxies(ERenderPass::ProjectionDecal);
 		uint32 AffectedObjectCountSum = 0;
 		uint32 AffectedObjectCountMax = 0;
         for (const FPrimitiveSceneProxy* Proxy : RenderedDecalProxies)
@@ -199,31 +201,31 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 			}
 		}
 
-		uint32 MeshDecalVertexCount = 0;
-		uint32 MeshDecalTriangleCount = 0;
-		uint32 MeshDecalSectionCount = 0;
-		for (const FPrimitiveSceneProxy* Proxy : RenderedMeshDecalProxies)
+		uint32 ProjectionDecalVertexCount = 0;
+		uint32 ProjectionDecalTriangleCount = 0;
+		uint32 ProjectionDecalSectionCount = 0;
+		for (const FPrimitiveSceneProxy* Proxy : RenderedProjectionDecalProxies)
 		{
 			if (!Proxy || !Proxy->MeshBuffer)
 			{
 				continue;
 			}
 
-			MeshDecalVertexCount += Proxy->MeshBuffer->GetVertexBuffer().GetVertexCount();
+			ProjectionDecalVertexCount += Proxy->MeshBuffer->GetVertexBuffer().GetVertexCount();
 			const uint32 IndexCount = Proxy->MeshBuffer->GetIndexBuffer().GetIndexCount();
-			MeshDecalTriangleCount += IndexCount / 3u;
-			MeshDecalSectionCount += static_cast<uint32>(Proxy->SectionDraws.size());
+			ProjectionDecalTriangleCount += IndexCount / 3u;
+			ProjectionDecalSectionCount += static_cast<uint32>(Proxy->SectionDraws.size());
 		}
 
 		FDecalStats::SetDecalActorCount(DecalActorCount);
-		FDecalStats::SetMeshDecalActorCount(MeshDecalActorCount);
+		FDecalStats::SetProjectionDecalActorCount(ProjectionDecalActorCount);
 		FDecalStats::SetRenderedDecalCount(static_cast<uint32>(RenderedDecalProxies.size()));
-		FDecalStats::SetRenderedMeshDecalCount(static_cast<uint32>(RenderedMeshDecalProxies.size()));
+		FDecalStats::SetRenderedProjectionDecalCount(static_cast<uint32>(RenderedProjectionDecalProxies.size()));
 		FDecalStats::SetAffectedObjectCountSum(AffectedObjectCountSum);
 		FDecalStats::SetAffectedObjectCountMax(AffectedObjectCountMax);
-		FDecalStats::SetMeshDecalVertexCount(MeshDecalVertexCount);
-		FDecalStats::SetMeshDecalTriangleCount(MeshDecalTriangleCount);
-		FDecalStats::SetMeshDecalSectionCount(MeshDecalSectionCount);
+		FDecalStats::SetProjectionDecalVertexCount(ProjectionDecalVertexCount);
+		FDecalStats::SetProjectionDecalTriangleCount(ProjectionDecalTriangleCount);
+		FDecalStats::SetProjectionDecalSectionCount(ProjectionDecalSectionCount);
 	}
 
 	// 3. Batcher 준비
@@ -262,3 +264,4 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 			VP->GetWidth(), VP->GetHeight());
 	}
 }
+
