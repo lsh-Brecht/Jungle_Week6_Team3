@@ -4,9 +4,16 @@
 
 namespace EditorViewportInputUtils
 {
+	inline constexpr LONG PaneToolbarHeight = 34;
+	inline constexpr float PaneToolbarHeightF = static_cast<float>(PaneToolbarHeight);
+
+	inline bool IsMouseBlockedByImGuiForViewport(const FViewportInputContext& Context)
+	{
+		return Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered;
+	}
+
 	inline bool IsInViewportToolbarDeadZone(const FViewportInputContext& Context)
 	{
-		constexpr LONG PaneToolbarHeight = 34;
 		return Context.MouseLocalPos.y >= 0 && Context.MouseLocalPos.y < PaneToolbarHeight;
 	}
 
@@ -18,7 +25,7 @@ namespace EditorViewportInputUtils
 		}
 
 		// ImGui가 마우스를 캡처 중이면 (relative 모드 유지 중이 아닌 한) 에디터 내비게이션은 개입하지 않는다.
-		if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
+		if (IsMouseBlockedByImGuiForViewport(Context))
 		{
 			return false;
 		}

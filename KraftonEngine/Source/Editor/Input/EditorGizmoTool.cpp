@@ -44,7 +44,7 @@ bool FEditorGizmoTool::HandleInput(float DeltaTime)
 {
 	(void)DeltaTime;
 
-	if (!Owner || !Owner->GetCamera() || !Owner->GetGizmo() || !Owner->ResolveInteractionWorld())
+	if (!Owner || !Owner->GetCamera() || !Owner->GetGizmo() || !Owner->GetInteractionWorld())
 	{
 		return false;
 	}
@@ -56,15 +56,16 @@ bool FEditorGizmoTool::HandleInput(float DeltaTime)
 	{
 		return false;
 	}
+
+	Gizmo->ApplyScreenSpaceScaling(Camera->GetWorldLocation(), Camera->IsOrthogonal(), Camera->GetOrthoWidth());
+	Gizmo->UpdateAxisMask(Owner->GetRenderOptions().ViewportType);
+
 	if (EditorViewportInputUtils::IsInViewportToolbarDeadZone(Context))
 	{
 		return false;
 	}
 
-	Gizmo->ApplyScreenSpaceScaling(Camera->GetWorldLocation(), Camera->IsOrthogonal(), Camera->GetOrthoWidth());
-	Gizmo->UpdateAxisMask(Owner->GetRenderOptions().ViewportType);
-
-	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered && !Gizmo->IsHolding())
+	if (EditorViewportInputUtils::IsMouseBlockedByImGuiForViewport(Context) && !Gizmo->IsHolding())
 	{
 		return false;
 	}

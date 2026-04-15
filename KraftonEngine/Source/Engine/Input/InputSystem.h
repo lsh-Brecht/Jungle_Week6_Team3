@@ -1,5 +1,7 @@
 #pragma once
 #include <windows.h>
+
+#include "Core/CoreTypes.h"
 #include "Core/Singleton.h"
 
 struct FGuiInputState
@@ -9,12 +11,47 @@ struct FGuiInputState
     bool bUsingTextInput = false;
 };
 
+struct FInputSystemSnapshot
+{
+    bool KeyDown[256] = {};
+    bool KeyPressed[256] = {};
+    bool KeyReleased[256] = {};
+
+    POINT MousePos = { 0, 0 };
+    int MouseDeltaX = 0;
+    int MouseDeltaY = 0;
+    int ScrollDelta = 0;
+
+    bool bLeftDragStarted = false;
+    bool bLeftDragging = false;
+    bool bLeftDragEnded = false;
+    POINT LeftDragVector = { 0, 0 };
+
+    bool bRightDragStarted = false;
+    bool bRightDragging = false;
+    bool bRightDragEnded = false;
+    POINT RightDragVector = { 0, 0 };
+
+    bool bUsingRawMouse = false;
+
+    bool IsDown(int VK) const { return KeyDown[VK]; }
+    bool WasPressed(int VK) const { return KeyPressed[VK]; }
+    bool WasReleased(int VK) const { return KeyReleased[VK]; }
+};
+
+enum class EInputFocusLossPolicy : uint8
+{
+    ResetAllInputs
+};
+
 class InputSystem : public TSingleton<InputSystem>
 {
 	friend class TSingleton<InputSystem>;
 
 public:
     void Tick();
+    FInputSystemSnapshot TickAndMakeSnapshot();
+    FInputSystemSnapshot MakeSnapshot() const;
     void SetUseRawMouse(bool bEnable) { bUseRawMouse = bEnable; }
     bool IsUsingRawMouse() const { return bUseRawMouse; }
     void AddRawMouseDelta(int DeltaX, int DeltaY);
@@ -23,6 +60,20 @@ public:
     bool GetKeyDown(int VK) const { return CurrentStates[VK] && !PrevStates[VK]; }
     bool GetKey(int VK) const { return CurrentStates[VK]; }
     bool GetKeyUp(int VK) const { return !CurrentStates[VK] && PrevStates[VK]; }
+    bool IsAnyMouseButtonDown() const
+    {
+        return GetKey(VK_LBUTTON)
+            || GetKey(VK_RBUTTON)
+            || GetKey(VK_MBUTTON)
+            || GetKey(VK_XBUTTON1)
+            || GetKey(VK_XBUTTON2);
+    }
+    bool IsAnyMouseButtonDownOrDragging() const
+    {
+        return IsAnyMouseButtonDown()
+            || GetLeftDragging()
+            || GetRightDragging();
+    }
 
     // Mouse position
     POINT GetMousePos() const { return MousePos; }
@@ -32,17 +83,17 @@ public:
 
     // Left drag
     bool IsDraggingLeft() const { return GetKey(VK_LBUTTON) && MouseMoved(); }
-    bool GetLeftDragStart() const { return bLeftDragJustStarted; }
-    bool GetLeftDragging() const { return bLeftDragging; }
-    bool GetLeftDragEnd() const { return bLeftDragJustEnded; }
+    bool GetLeftDragStart() const { return LeftDragState.bJustStarted; }
+    bool GetLeftDragging() const { return LeftDragState.bDragging; }
+    bool GetLeftDragEnd() const { return LeftDragState.bJustEnded; }
     POINT GetLeftDragVector() const;
     float GetLeftDragDistance() const;
 
     // Right drag
     bool IsDraggingRight() const { return GetKey(VK_RBUTTON) && MouseMoved(); }
-    bool GetRightDragStart() const { return bRightDragJustStarted; }
-    bool GetRightDragging() const { return bRightDragging; }
-    bool GetRightDragEnd() const { return bRightDragJustEnded; }
+    bool GetRightDragStart() const { return RightDragState.bJustStarted; }
+    bool GetRightDragging() const { return RightDragState.bDragging; }
+    bool GetRightDragEnd() const { return RightDragState.bJustEnded; }
     POINT GetRightDragVector() const;
     float GetRightDragDistance() const;
 
@@ -55,12 +106,25 @@ public:
 
     // Window focus
     void SetOwnerWindow(HWND InHWnd) { OwnerHWnd = InHWnd; }
+    void SetFocusLossPolicy(EInputFocusLossPolicy InPolicy) { FocusLossPolicy = InPolicy; }
 
     // GUI state
-    FGuiInputState& GetGuiInputState() { return GuiState; }
     const FGuiInputState& GetGuiInputState() const { return GuiState; }
+    void SetGuiMouseCapture(bool bCapture) { GuiState.bUsingMouse = bCapture; }
+    void SetGuiKeyboardCapture(bool bCapture) { GuiState.bUsingKeyboard = bCapture; }
+    void SetGuiTextInputCapture(bool bCapture) { GuiState.bUsingTextInput = bCapture; }
 
 private:
+    struct FDragState
+    {
+        bool bCandidate = false;
+        bool bDragging = false;
+        bool bJustStarted = false;
+        bool bJustEnded = false;
+        POINT DragStartPos = { 0, 0 };
+        POINT MouseDownPos = { 0, 0 };
+    };
+
     bool CurrentStates[256] = { false };
     bool PrevStates[256] = { false };
 
@@ -73,21 +137,8 @@ private:
     int RawMouseDeltaAccumY = 0;
     bool bUseRawMouse = false;
 
-    bool bLeftDragCandidate = false;
-    bool bRightDragCandidate = false;
-    bool bLeftDragging = false;
-    bool bRightDragging = false;
-
-    bool bLeftDragJustStarted = false;
-    bool bRightDragJustStarted = false;
-    bool bLeftDragJustEnded = false;
-    bool bRightDragJustEnded = false;
-
-    // Drag origin
-    POINT LeftDragStartPos = { 0, 0 };
-    POINT LeftMouseDownPos = { 0, 0 };
-    POINT RightDragStartPos = { 0, 0 };
-    POINT RightMouseDownPos = { 0, 0 };
+    FDragState LeftDragState{};
+    FDragState RightDragState{};
 
     // Scrolling
     int ScrollDelta = 0;
@@ -95,6 +146,7 @@ private:
 
     // Window handle for focus check
     HWND OwnerHWnd = nullptr;
+    EInputFocusLossPolicy FocusLossPolicy = EInputFocusLossPolicy::ResetAllInputs;
 
     // GUI InputState
     FGuiInputState GuiState{};
@@ -102,7 +154,12 @@ private:
     static constexpr int DRAG_THRESHOLD = 5;
 
     // Internal drag threshold helper — unified Left/Right logic
-    void FilterDragThreshold(
-        bool& bCandidate, bool& bDragging, bool& bJustStarted,
-        const POINT& MouseDownPos, POINT& DragStartPos);
+    void FilterDragThreshold(FDragState& State);
+    void ResetDragEdgeFlags();
+    void HandleOutOfFocusTick();
+    void SampleKeyStates();
+    void SampleMouseDelta();
+    void BeginDragCandidates();
+    void UpdateDragState(int Key, FDragState& State);
+    void ResetAllInputStateOnFocusLoss();
 };

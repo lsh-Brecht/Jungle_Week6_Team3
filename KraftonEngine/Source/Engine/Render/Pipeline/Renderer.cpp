@@ -881,6 +881,14 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	ID3D11RenderTargetView* ViewportRTV = Bus.GetViewportRTV();
 	const float ClearMask[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	Context->ClearRenderTargetView(OutlineMaskRTV, ClearMask);
+	if (!Bus.GetShowFlags().bSelectionOutline)
+	{
+		if (ViewportRTV)
+		{
+			Context->OMSetRenderTargets(1, &ViewportRTV, DSV);
+		}
+		return;
+	}
 
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
 	if (MaskProxies.empty())
@@ -938,7 +946,7 @@ void FRenderer::ExecutePostProcessChain(const FRenderBus& Bus, ID3D11DeviceConte
 	Context->OMSetRenderTargets(0, nullptr, nullptr);
 	bool bExecutedAnyPost = false;
 
-	//	기본 체인 순서: Decal -> Fog -> Outline -> FXAA
+	//	기본 체인 순서: Fog -> Outline -> FXAA
 	const EPostEffectType Order[] = {
 		//EPostEffectType::Decal,
 		EPostEffectType::Fog,
