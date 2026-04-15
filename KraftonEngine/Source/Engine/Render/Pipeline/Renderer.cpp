@@ -903,7 +903,14 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	}
 
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
-	if (MaskProxies.empty())
+	const bool bHasMaskProxies = !MaskProxies.empty();
+	const bool bHasSelectedFont = FontBatcher.GetSelectedQuadCount() > 0;
+	const bool bHasSelectedSubUV = SubUVBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasSelectedBillboard = BillboardBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasAnySelectionMask =
+		bHasMaskProxies || bHasSelectedFont || bHasSelectedSubUV || bHasSelectedBillboard;
+
+	if (!bHasAnySelectionMask)
 	{
 		if (ViewportRTV)
 		{
@@ -914,20 +921,23 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 
 	Context->OMSetRenderTargets(1, &OutlineMaskRTV, nullptr);
 
-    ExecutePass(MaskProxies, Bus, Context);
+	if (bHasMaskProxies)
+	{
+		ExecutePass(MaskProxies, Bus, Context);
+	}
 
-	if (FontBatcher.GetSelectedQuadCount() > 0)
+	if (bHasSelectedFont)
 	{
 		const FFontResource* FontRes = FResourceManager::Get().FindFont(FName("Default"));
 		FontBatcher.DrawSelectionMaskBatch(Context, FontRes);
 	}
 
-	if (SubUVBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedSubUV)
 	{
 		SubUVBatcher.DrawSelectionMaskBatch(Context);
 	}
 
-	if (BillboardBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedBillboard)
 	{
 		BillboardBatcher.DrawSelectionMaskBatch(Context);
 	}
