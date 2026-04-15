@@ -47,6 +47,7 @@ public:
 
 	void UpdateWorldAABB() const override;
 	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
+	bool SupportsPicking() const override { return false; }
 	FMeshBuffer* GetMeshBuffer() const override;
 	const FMeshData* GetMeshData() const override;
 	FPrimitiveSceneProxy* CreateSceneProxy() override;

@@ -1336,10 +1336,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 											static_cast<LONG>(LocalMouseX),
 											static_cast<LONG>(LocalMouseY)
 										};
-										if (!VC->PickActorByIdAtLocalPoint(ClickLocal, BestActor))
-										{
-											InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
-										}
+										VC->PickActorByIdAtLocalPoint(ClickLocal, BestActor);
 									}
 									if (BestActor)
 									{
