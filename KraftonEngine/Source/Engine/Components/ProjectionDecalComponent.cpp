@@ -4,6 +4,7 @@
 #include "Mesh/ProjectionDecalMeshBuilder.h"
 #include "Mesh/ObjManager.h"
 #include "Object/ObjectFactory.h"
+#include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Render/Proxy/FScene.h"
 #include "Render/Proxy/ProjectionDecalSceneProxy.h"
@@ -44,6 +45,29 @@ namespace
 	{
 		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
 	}
+
+	void EnsureFadeCanTick(UProjectionDecalComponent* Component)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		if (AActor* OwnerActor = Component->GetOwner())
+		{
+			OwnerActor->bNeedsTick = true;
+		}
+
+		Component->SetComponentTickEnabled(true);
+	}
+}
+
+UProjectionDecalComponent::UProjectionDecalComponent()
+{
+	bTickEnable = true;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
+	OriginalAlpha = ProjectionDecalColor.A;
 }
 
 void UProjectionDecalComponent::Serialize(FArchive& Ar)
@@ -64,7 +88,14 @@ void UProjectionDecalComponent::Serialize(FArchive& Ar)
 	}
 
 	Ar << ProjectionDecalSize;
+	Ar << ProjectionDecalColor;
+	Ar << FadeStartDelay;
+	Ar << FadeDuration;
+	Ar << FadeInDuration;
+	Ar << FadeInStartDelay;
+	Ar << bDestroyOwnerAfterFade;
 	Ar << ProjectionDecalMaterialPath;
+	Ar << ProjectionDecalMaterialSlot.bUVScroll;
 	Ar << SortOrder;
 	Ar << bReceivesDecalOnly;
 	Ar << bExcludeSameOwner;
@@ -73,6 +104,7 @@ void UProjectionDecalComponent::Serialize(FArchive& Ar)
 	if (Ar.IsLoading())
 	{
 		ProjectionDecalSize = SanitizeSize(ProjectionDecalSize);
+		OriginalAlpha = ProjectionDecalColor.A;
 		ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
 		ReloadMaterialFromPath();
 		MarkProjectionDecalDirty();
@@ -83,9 +115,31 @@ void UProjectionDecalComponent::Serialize(FArchive& Ar)
 void UProjectionDecalComponent::PostDuplicate()
 {
 	UPrimitiveComponent::PostDuplicate();
+	OriginalAlpha = ProjectionDecalColor.A;
 	ReloadMaterialFromPath();
 	MarkProjectionDecalDirty();
 	MarkWorldBoundsDirty();
+}
+
+void UProjectionDecalComponent::BeginPlay()
+{
+	UPrimitiveComponent::BeginPlay();
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig && bHasFadeOutConfig)
+	{
+		RestartFadePreviewSequence();
+	}
+	else if (bHasFadeInConfig)
+	{
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
 }
 
 void UProjectionDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
@@ -93,6 +147,12 @@ void UProjectionDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor
 	UPrimitiveComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Projection Decal Size", EPropertyType::Vec3, &ProjectionDecalSize });
 	OutProps.push_back({ "Projection Decal Material", EPropertyType::MaterialSlot, &ProjectionDecalMaterialSlot });
+	OutProps.push_back({ "Fade Start Delay", EPropertyType::Float, &FadeStartDelay });
+	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
+	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
+	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
+	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
+	OutProps.push_back({ "Projection Decal Color", EPropertyType::Vec4, &ProjectionDecalColor });
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
 	OutProps.push_back({ "Receives Decal Only", EPropertyType::Bool, &bReceivesDecalOnly });
 	OutProps.push_back({ "Exclude Same Owner", EPropertyType::Bool, &bExcludeSameOwner });
@@ -112,6 +172,37 @@ void UProjectionDecalComponent::PostEditProperty(const char* PropertyName)
 		ProjectionDecalMaterialPath = ProjectionDecalMaterialSlot.Path;
 		ReloadMaterialFromPath();
 		MarkProjectionDecalDirty();
+		MarkProxyDirty(EDirtyFlag::Material);
+	}
+	else if (std::strcmp(PropertyName, "Projection Decal Color") == 0)
+	{
+		SetProjectionDecalColor(ProjectionDecalColor);
+	}
+	else if (std::strcmp(PropertyName, "Fade Start Delay") == 0
+		|| std::strcmp(PropertyName, "Fade Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Start Delay") == 0)
+	{
+		if (Owner && Owner->HasActorBegunPlay())
+		{
+			RestartFadePreviewSequence();
+		}
+		else
+		{
+			FadeStartDelay = std::max(0.0f, FadeStartDelay);
+			FadeDuration = std::max(0.0f, FadeDuration);
+			FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+			FadeInDuration = std::max(0.0f, FadeInDuration);
+
+			bIsFadeInActive = false;
+			bIsFadeOutActive = false;
+			bPendingFadeOutAfterFadeIn = false;
+			if (OriginalAlpha > 0.0f)
+			{
+				ProjectionDecalColor.A = OriginalAlpha;
+			}
+			MarkProxyDirty(EDirtyFlag::Transform);
+		}
 	}
 	else if (std::strcmp(PropertyName, "Sort Order") == 0)
 	{
@@ -158,6 +249,80 @@ void UProjectionDecalComponent::SetProjectionDecalTexture(const FName& TextureNa
 	ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
 	MarkProjectionDecalDirty();
 	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+void UProjectionDecalComponent::SetProjectionDecalColor(const FLinearColor& Color)
+{
+	ProjectionDecalColor = Color;
+	if (!bIsFadeInActive && !bIsFadeOutActive)
+	{
+		OriginalAlpha = Color.A;
+	}
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
+void UProjectionDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
+{
+	FadeStartDelay = std::max(0.0f, StartDelay);
+	FadeDuration = std::max(0.0f, Duration);
+	bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
+
+	bIsFadeInActive = false;
+	FadeOutTimeElapsed = 0.0f;
+	bIsFadeOutActive = true;
+	bPendingFadeOutAfterFadeIn = false;
+	OriginalAlpha = ProjectionDecalColor.A;
+	SetVisibility(true);
+	EnsureFadeCanTick(this);
+}
+
+void UProjectionDecalComponent::SetFadeIn(float StartDelay, float Duration)
+{
+	FadeInStartDelay = std::max(0.0f, StartDelay);
+	FadeInDuration = std::max(0.0f, Duration);
+
+	bIsFadeOutActive = false;
+	FadeInTimeElapsed = 0.0f;
+	bIsFadeInActive = true;
+
+	if (OriginalAlpha <= 0.0f)
+	{
+		OriginalAlpha = (ProjectionDecalColor.A > 0.0f) ? ProjectionDecalColor.A : 1.0f;
+	}
+	ProjectionDecalColor.A = 0.0f;
+	SetVisibility(true);
+	EnsureFadeCanTick(this);
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
+void UProjectionDecalComponent::RestartFadePreviewSequence()
+{
+	FadeStartDelay = std::max(0.0f, FadeStartDelay);
+	FadeDuration = std::max(0.0f, FadeDuration);
+	FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+	FadeInDuration = std::max(0.0f, FadeInDuration);
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig)
+	{
+		bPendingFadeOutAfterFadeIn = bHasFadeOutConfig;
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
+	else
+	{
+		bIsFadeInActive = false;
+		bIsFadeOutActive = false;
+		bPendingFadeOutAfterFadeIn = false;
+		ProjectionDecalColor.A = OriginalAlpha;
+		SetVisibility(true);
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 bool UProjectionDecalComponent::FitSizeToTextureAspect()
@@ -326,6 +491,78 @@ void UProjectionDecalComponent::DestroyRenderState()
 	}
 
 	UPrimitiveComponent::DestroyRenderState();
+}
+
+void UProjectionDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+{
+	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	bool bColorChanged = false;
+
+	if (bIsFadeInActive)
+	{
+		FadeInTimeElapsed += DeltaTime;
+
+		if (FadeInTimeElapsed >= FadeInStartDelay)
+		{
+			if (FadeInDuration > 0.0f)
+			{
+				const float Progress = (FadeInTimeElapsed - FadeInStartDelay) / FadeInDuration;
+				ProjectionDecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
+			}
+			else
+			{
+				ProjectionDecalColor.A = OriginalAlpha;
+			}
+
+			bColorChanged = true;
+
+			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
+			{
+				bIsFadeInActive = false;
+				if (bPendingFadeOutAfterFadeIn && ((FadeStartDelay > 0.0f) || (FadeDuration > 0.0f)))
+				{
+					SetFadeOut(FadeStartDelay, FadeDuration, false);
+				}
+				else
+				{
+					bPendingFadeOutAfterFadeIn = false;
+				}
+			}
+		}
+	}
+
+	if (bIsFadeOutActive)
+	{
+		FadeOutTimeElapsed += DeltaTime;
+
+		if (FadeOutTimeElapsed >= FadeStartDelay)
+		{
+			if (FadeDuration > 0.0f)
+			{
+				const float Progress = (FadeOutTimeElapsed - FadeStartDelay) / FadeDuration;
+				ProjectionDecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
+			}
+			else
+			{
+				ProjectionDecalColor.A = 0.0f;
+			}
+
+			bColorChanged = true;
+
+			if (FadeOutTimeElapsed >= FadeStartDelay + FadeDuration)
+			{
+				bIsFadeOutActive = false;
+				SetVisibility(false);
+				SetComponentTickEnabled(false);
+			}
+		}
+	}
+
+	if (bColorChanged)
+	{
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 void UProjectionDecalComponent::BuildProjectionDecalMesh()

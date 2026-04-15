@@ -77,6 +77,7 @@ void FProjectionDecalSceneProxy::UpdateTransform()
 {
 	UProjectionDecalComponent* ProjectionDecal = GetProjectionDecalComponent();
 	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(ProjectionDecal->GetProjectionDecalLocalToWorldMatrix());
+	PerObjectConstants.Color = ProjectionDecal->GetProjectionDecalColor().ToVector4();
 	CachedWorldPos = PerObjectConstants.Model.GetLocation();
 	CachedBounds = ProjectionDecal->GetWorldBoundingBox();
 	MarkPerObjectCBDirty();
