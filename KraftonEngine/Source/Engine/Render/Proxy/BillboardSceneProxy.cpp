@@ -12,6 +12,9 @@ FBillboardSceneProxy::FBillboardSceneProxy(UBillboardComponent* InComponent)
 {
 	bPerViewportUpdate = true;
 	bShowAABB = false;
+	// Billboard는 per-viewport 회전 특성상 GPU occlusion에서 false negative가 발생할 수 있다.
+	// Frustum culling은 유지하고, occlusion만 제외한다.
+	bSkipGPUOcclusion = true;
 	// 텍스처가 세팅돼 있으면 SubUV batcher 경로를 사용한다 (1x1 atlas로 단일 텍스처 렌더링).
 	// 텍스처가 없으면 기존 Primitive 셰이더 경로 유지.
 	bBatcherRendered = (InComponent && InComponent->GetTexture() != nullptr);
@@ -39,11 +42,20 @@ void FBillboardSceneProxy::UpdateMesh()
 		// Primitive 를 캐싱해 둔다 (Quad 메시는 FVertex 레이아웃).
 		Shader = FShaderManager::Get().GetShader(EShaderType::Primitive);
 		Pass = ERenderPass::Billboard;
+
+		// ID picking에서 텍스처 alpha 테스트를 수행할 수 있도록 섹션 텍스처 정보를 함께 유지한다.
+		SectionDraws.clear();
+		FMeshSectionDraw Draw = {};
+		Draw.DiffuseSRV = Comp->GetTexture() ? Comp->GetTexture()->SRV : nullptr;
+		Draw.FirstIndex = 0;
+		Draw.IndexCount = MeshBuffer ? MeshBuffer->GetIndexBuffer().GetIndexCount() : 0;
+		SectionDraws.push_back(Draw);
 	}
 	else
 	{
 		Shader = FShaderManager::Get().GetShader(EShaderType::Primitive);
 		Pass = ERenderPass::Opaque;
+		SectionDraws.clear();
 	}
 	UpdateSortKey();
 }

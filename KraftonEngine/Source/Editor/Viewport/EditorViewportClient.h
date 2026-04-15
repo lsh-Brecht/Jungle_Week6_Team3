@@ -24,6 +24,7 @@ class FEditorViewportCommandTool;
 class FEditorNavigationTool;
 class FEditorGizmoTool;
 class FEditorSelectionTool;
+class AActor;
 
 class FEditorViewportClient : public FViewportClient
 {
@@ -32,10 +33,6 @@ public:
 	friend class FEditorViewportGizmoContext;
 	friend class FEditorViewportSelectionContext;
 	friend class FEditorViewportNavigationContext;
-	friend class FEditorViewportCommandTool;
-	friend class FEditorNavigationTool;
-	friend class FEditorGizmoTool;
-	friend class FEditorSelectionTool;
 
 	void Initialize(FWindowsWindow* InWindow);
 	void SetOverlayStatSystem(FOverlayStatSystem* InOverlayStatSystem) { OverlayStatSystem = InOverlayStatSystem; }
@@ -59,6 +56,7 @@ public:
 	void CreateCamera();
 	void DestroyCamera();
 	void ResetCamera();
+	void SyncNavigationCameraTargetFromCurrent();
 	UCameraComponent* GetCamera() const { return Camera; }
 
 	void Tick(float DeltaTime);
@@ -85,6 +83,7 @@ public:
 	void ClearPIEStartOutlineFlash();
 	bool ProcessInput(FViewportInputContext& Context) override;
 	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
+	bool WantsAbsoluteMouseClip(const FViewportInputContext& Context, RECT& OutClipScreenRect) const override;
 	FEditorViewportController* GetInputController();
 	bool SetInteractionMode(EEditorViewportModeType InModeType);
 	EEditorViewportModeType GetInteractionMode() const;
@@ -92,6 +91,9 @@ public:
 	const FViewportInputContext& GetRoutedInputContext() const { return RoutedInputContext; }
 	FSelectionManager* GetSelectionManager() const { return SelectionManager; }
 	const FEditorSettings* GetSettings() const { return Settings; }
+	UWorld* GetInteractionWorld() const { return ResolveInteractionWorld(); }
+	bool ConvertScreenToViewportLocal(const POINT& InScreenPos, POINT& OutLocal, bool bClampToViewport = true) const;
+	bool PickActorByIdAtLocalPoint(const POINT& InLocalPoint, AActor*& OutActor) const;
 	float GetWindowWidth() const { return WindowWidth; }
 	float GetWindowHeight() const { return WindowHeight; }
 

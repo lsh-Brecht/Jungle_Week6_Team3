@@ -48,6 +48,7 @@ public:
 		WorldPrimitivePickingBVH.EnsureBuilt(GetActors());
 		return WorldPrimitivePickingBVH;
 	}
+	bool RaycastPrimitivesById(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
 	void InvalidateVisibleSet();
 
 	const TArray<AActor*>& GetActors() const { return PersistentLevel->GetActors(); }

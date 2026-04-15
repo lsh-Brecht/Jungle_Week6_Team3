@@ -68,9 +68,9 @@ namespace EditorViewportInputMapping
 			{ static_cast<int32>(EEditorViewportAction::LoadScene), EInputBindingTrigger::Pressed, { 'O', true, false, false }, EInputEventType::KeyPressed, 105 },
 			{ static_cast<int32>(EEditorViewportAction::SaveScene), EInputBindingTrigger::Pressed, { 'S', true, false, false }, EInputEventType::KeyPressed, 105 },
 			{ static_cast<int32>(EEditorViewportAction::SaveSceneAs), EInputBindingTrigger::Pressed, { 'S', true, true, false }, EInputEventType::KeyPressed, 106 },
-			{ static_cast<int32>(EEditorViewportAction::TogglePIEPossessEject), EInputBindingTrigger::Released, { VK_F8, false, false, false }, EInputEventType::KeyReleased, 190 },
+			{ static_cast<int32>(EEditorViewportAction::TogglePIEPossessEject), EInputBindingTrigger::Pressed, { VK_F8, false, false, false }, EInputEventType::KeyPressed, 190 },
 			{ static_cast<int32>(EEditorViewportAction::DuplicateSelection), EInputBindingTrigger::Pressed, { 'D', true, false, false }, EInputEventType::KeyPressed, 130 },
-			{ static_cast<int32>(EEditorViewportAction::EndPIE), EInputBindingTrigger::Released, { VK_ESCAPE, false, false, false }, EInputEventType::KeyReleased, 200 },
+			{ static_cast<int32>(EEditorViewportAction::EndPIE), EInputBindingTrigger::Pressed, { VK_ESCAPE, false, false, false }, EInputEventType::KeyPressed, 200 },
 			{ static_cast<int32>(EEditorViewportAction::SelectPrimaryReleased), EInputBindingTrigger::Released, { VK_LBUTTON, false, false, false }, EInputEventType::KeyReleased, 10 },
 			{ static_cast<int32>(EEditorViewportAction::SelectToggleReleased), EInputBindingTrigger::Released, { VK_LBUTTON, true, false, false }, EInputEventType::KeyReleased, 20 },
 			{ static_cast<int32>(EEditorViewportAction::SelectAddReleased), EInputBindingTrigger::Released, { VK_LBUTTON, false, false, true }, EInputEventType::KeyReleased, 20 },
@@ -97,9 +97,76 @@ namespace EditorViewportInputMapping
 		return Bindings;
 	}
 
+	inline int32 GetActionCount()
+	{
+		return static_cast<int32>(EEditorViewportAction::NavWheelScroll) + 1;
+	}
+
+	inline const TArray<const FInputBinding*>& GetBindingsForAction(EEditorViewportAction Action)
+	{
+		static const TArray<TArray<const FInputBinding*>> BindingsByAction = []()
+		{
+			TArray<TArray<const FInputBinding*>> Out;
+			Out.resize(GetActionCount());
+			const TArray<FInputBinding>& All = GetBindings();
+			for (const FInputBinding& Binding : All)
+			{
+				if (Binding.ActionId < 0 || Binding.ActionId >= static_cast<int32>(Out.size()))
+				{
+					continue;
+				}
+				Out[Binding.ActionId].push_back(&Binding);
+			}
+			return Out;
+		}();
+
+		const int32 ActionId = static_cast<int32>(Action);
+		if (ActionId < 0 || ActionId >= static_cast<int32>(BindingsByAction.size()))
+		{
+			static const TArray<const FInputBinding*> Empty;
+			return Empty;
+		}
+		return BindingsByAction[ActionId];
+	}
+
 	inline bool IsTriggered(const FViewportInputContext& Context, EEditorViewportAction Action)
 	{
-		return InputBindingUtils::IsActionTriggered(Context, GetBindings(), static_cast<int32>(Action));
+		return InputBindingUtils::IsActionTriggered(Context, GetBindingsForAction(Action));
+	}
+
+	inline bool TryGetHighestPriorityTriggeredAction(
+		const FViewportInputContext& Context,
+		const TArray<EEditorViewportAction>& CandidateActions,
+		EEditorViewportAction& OutAction)
+	{
+		bool bFound = false;
+		int32 BestPriority = (std::numeric_limits<int32>::min)();
+		EEditorViewportAction BestAction = EEditorViewportAction::CycleMode;
+
+		for (const EEditorViewportAction CandidateAction : CandidateActions)
+		{
+			const TArray<const FInputBinding*>& Bindings = GetBindingsForAction(CandidateAction);
+			for (const FInputBinding* Binding : Bindings)
+			{
+				if (!Binding || !InputBindingUtils::IsBindingTriggered(Context, *Binding))
+				{
+					continue;
+				}
+
+				if (!bFound || Binding->Priority > BestPriority)
+				{
+					bFound = true;
+					BestPriority = Binding->Priority;
+					BestAction = CandidateAction;
+				}
+			}
+		}
+
+		if (bFound)
+		{
+			OutAction = BestAction;
+		}
+		return bFound;
 	}
 }
 

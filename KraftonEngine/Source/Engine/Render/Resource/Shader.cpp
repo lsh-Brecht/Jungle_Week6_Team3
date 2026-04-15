@@ -7,10 +7,14 @@ FShader::FShader(FShader&& Other) noexcept
 	: VertexShader(Other.VertexShader)
 	, PixelShader(Other.PixelShader)
 	, InputLayout(Other.InputLayout)
+	, CachedVertexShaderSize(Other.CachedVertexShaderSize)
+	, CachedPixelShaderSize(Other.CachedPixelShaderSize)
 {
 	Other.VertexShader = nullptr;
 	Other.PixelShader = nullptr;
 	Other.InputLayout = nullptr;
+	Other.CachedVertexShaderSize = 0;
+	Other.CachedPixelShaderSize = 0;
 }
 
 FShader& FShader::operator=(FShader&& Other) noexcept
@@ -21,9 +25,13 @@ FShader& FShader::operator=(FShader&& Other) noexcept
 		VertexShader = Other.VertexShader;
 		PixelShader = Other.PixelShader;
 		InputLayout = Other.InputLayout;
+		CachedVertexShaderSize = Other.CachedVertexShaderSize;
+		CachedPixelShaderSize = Other.CachedPixelShaderSize;
 		Other.VertexShader = nullptr;
 		Other.PixelShader = nullptr;
 		Other.InputLayout = nullptr;
+		Other.CachedVertexShaderSize = 0;
+		Other.CachedPixelShaderSize = 0;
 	}
 	return *this;
 }

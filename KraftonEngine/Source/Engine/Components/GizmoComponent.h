@@ -42,7 +42,7 @@ public:
 	void SetAxisMask(uint32 InMask) { AxisMask = InMask; }
 	uint32 GetAxisMask() const { return AxisMask; }
 	EGizmoMode GetMode() const { return CurMode; }
-	void UpdateAxisMask(ELevelViewportType ViewportType);
+	void UpdateAxisMask(ELevelViewportType ViewportType, bool bIsOrthographicView);
 	void UpdateHoveredAxis(int Index);
 	void UpdateDrag(const FRay& Ray);
 	void DragEnd();

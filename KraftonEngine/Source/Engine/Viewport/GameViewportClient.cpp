@@ -3,9 +3,6 @@
 #include "Components/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Editor/EditorEngine.h"
-#include "Editor/Viewport/LevelEditorViewportClient.h"
-#include "Engine/Input/InputSystem.h"
 #include "Engine/Runtime/Engine.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
@@ -41,16 +38,56 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 		return false;
 	}
 
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
-	const bool bPossessedMode =
-		EditorEngine
-		&& EditorEngine->IsPlayingInEditor()
-		&& EditorEngine->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
-	if (!bPossessedMode)
+	if (!bPIEPossessedInputEnabled)
 	{
 		return false;
 	}
 
+	bool bConsumedByArmToggle = false;
+	UpdatePIEInputArmedState(Context, bConsumedByArmToggle);
+	if (bConsumedByArmToggle)
+	{
+		return true;
+	}
+
+	const bool bInputOwnership = Context.bFocused && (Context.bCaptured || Context.bRelativeMouseMode);
+	if (!bInputOwnership)
+	{
+		return false;
+	}
+
+	const bool bKeyboardBlocked = Context.bImGuiCapturedKeyboard;
+	const bool bMouseBlocked = Context.bImGuiCapturedMouse && !Context.bCaptured;
+
+	const float DeltaTime = 1.0f / 60.0f;
+	const FVector MoveInput = BuildMoveInput(Context, bKeyboardBlocked);
+	const bool bMoved = ApplyMoveInput(MoveInput, DeltaTime);
+	const bool bCanLook = ApplyLookInput(Context, bMouseBlocked);
+	UpdatePlayerCameraFromOrbitState();
+	SyncPlayerViewToEditorViewport();
+
+	return bMoved || bCanLook;
+}
+
+bool UGameViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
+{
+	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
+	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
+	{
+		return false;
+	}
+
+	if (!Context.bFocused || (!Context.bCaptured && !Context.bRelativeMouseMode))
+	{
+		return false;
+	}
+
+	return bPIEInputArmed && bPIEPossessedInputEnabled;
+}
+
+void UGameViewportClient::UpdatePIEInputArmedState(const FViewportInputContext& Context, bool& bOutConsumedByArmToggle)
+{
+	bOutConsumedByArmToggle = false;
 	if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_LBUTTON) && Context.bHovered)
 	{
 		bPIEInputArmed = true;
@@ -65,67 +102,78 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 	if (HasKeyEvent(Context, EInputEventType::KeyPressed, VK_F1) && Context.Frame.IsDown(VK_SHIFT))
 	{
 		bPIEInputArmed = false;
-		return true;
+		bOutConsumedByArmToggle = true;
+	}
+}
+
+FVector UGameViewportClient::BuildMoveInput(const FViewportInputContext& Context, bool bKeyboardBlocked) const
+{
+	FVector MoveInput = FVector(0.0f, 0.0f, 0.0f);
+	if (bKeyboardBlocked)
+	{
+		return MoveInput;
 	}
 
-	const bool bInputOwnership = Context.bFocused && (Context.bCaptured || Context.bRelativeMouseMode);
-	if (!bInputOwnership)
+	if (Context.Frame.IsDown('W')) MoveInput.X += 1.0f;
+	if (Context.Frame.IsDown('S')) MoveInput.X -= 1.0f;
+	if (Context.Frame.IsDown('A')) MoveInput.Y -= 1.0f;
+	if (Context.Frame.IsDown('D')) MoveInput.Y += 1.0f;
+	return MoveInput;
+}
+
+bool UGameViewportClient::ApplyMoveInput(const FVector& MoveInput, float DeltaTime)
+{
+	if (MoveInput.Length() <= 0.0f)
 	{
 		return false;
 	}
 
-	const bool bKeyboardBlocked = Context.bImGuiCapturedKeyboard;
-	const bool bMouseBlocked = Context.bImGuiCapturedMouse && !Context.bCaptured;
-
-	const float DeltaTime = 1.0f / 60.0f;
-	FVector MoveInput = FVector(0.0f, 0.0f, 0.0f);
-	if (!bKeyboardBlocked)
+	const FVector NormalizedMoveInput = MoveInput.Normalized();
+	const float MoveSpeed = 0.3f;
+	FVector FlatForward = PIEPlayerActor->GetActorForward();
+	FVector FlatRight = PIEPlayerActor->GetRootComponent()
+		? PIEPlayerActor->GetRootComponent()->GetRightVector()
+		: PIEPlayerCamera->GetRightVector();
+	FlatForward.Z = 0.0f;
+	FlatRight.Z = 0.0f;
+	if (FlatForward.Length() > 0.0f)
 	{
-		if (Context.Frame.IsDown('W')) MoveInput.X += 1.0f;
-		if (Context.Frame.IsDown('S')) MoveInput.X -= 1.0f;
-		if (Context.Frame.IsDown('A')) MoveInput.Y -= 1.0f;
-		if (Context.Frame.IsDown('D')) MoveInput.Y += 1.0f;
+		FlatForward = FlatForward.Normalized();
+	}
+	if (FlatRight.Length() > 0.0f)
+	{
+		FlatRight = FlatRight.Normalized();
 	}
 
-	if (MoveInput.Length() > 0.0f)
-	{
-		MoveInput = MoveInput.Normalized();
-		const float MoveSpeed = 0.3f;
-		FVector FlatForward = PIEPlayerActor->GetActorForward();
-		FVector FlatRight = PIEPlayerActor->GetRootComponent()
-			? PIEPlayerActor->GetRootComponent()->GetRightVector()
-			: PIEPlayerCamera->GetRightVector();
-		FlatForward.Z = 0.0f;
-		FlatRight.Z = 0.0f;
-		if (FlatForward.Length() > 0.0f)
-		{
-			FlatForward = FlatForward.Normalized();
-		}
-		if (FlatRight.Length() > 0.0f)
-		{
-			FlatRight = FlatRight.Normalized();
-		}
+	const FVector WorldDelta = FlatForward * NormalizedMoveInput.X + FlatRight * NormalizedMoveInput.Y;
+	PIEPlayerActor->AddActorWorldOffset(WorldDelta * (MoveSpeed * DeltaTime));
+	return true;
+}
 
-		const FVector WorldDelta = FlatForward * MoveInput.X + FlatRight * MoveInput.Y;
-		PIEPlayerActor->AddActorWorldOffset(WorldDelta * (MoveSpeed * DeltaTime));
-	}
-
+bool UGameViewportClient::ApplyLookInput(const FViewportInputContext& Context, bool bMouseBlocked)
+{
 	const bool bCanLook = Context.bRelativeMouseMode && !bMouseBlocked;
-	if (bCanLook)
+	if (!bCanLook)
 	{
-		const float LookSensitivity = 0.055f;
-		const float DeltaYaw = static_cast<float>(Context.Frame.MouseDelta.x) * LookSensitivity;
-		const float DeltaPitch = static_cast<float>(Context.Frame.MouseDelta.y) * LookSensitivity * -1.0f;
-		PIECameraYaw += DeltaYaw;
-		PIECameraPitch = Clamp(PIECameraPitch + DeltaPitch, -89.0f, 89.0f);
-
-		FRotator ActorYawRotation = PIEPlayerActor->GetActorRotation();
-		ActorYawRotation.Pitch = 0.0f;
-		ActorYawRotation.Roll = 0.0f;
-		ActorYawRotation.Yaw = PIECameraYaw;
-		PIEPlayerActor->SetActorRotation(ActorYawRotation);
+		return false;
 	}
 
+	const float LookSensitivity = 0.055f;
+	const float DeltaYaw = static_cast<float>(Context.Frame.MouseDelta.x) * LookSensitivity;
+	const float DeltaPitch = static_cast<float>(Context.Frame.MouseDelta.y) * LookSensitivity * -1.0f;
+	PIECameraYaw += DeltaYaw;
+	PIECameraPitch = Clamp(PIECameraPitch + DeltaPitch, -89.0f, 89.0f);
+
+	FRotator ActorYawRotation = PIEPlayerActor->GetActorRotation();
+	ActorYawRotation.Pitch = 0.0f;
+	ActorYawRotation.Roll = 0.0f;
+	ActorYawRotation.Yaw = PIECameraYaw;
+	PIEPlayerActor->SetActorRotation(ActorYawRotation);
+	return true;
+}
+
+void UGameViewportClient::UpdatePlayerCameraFromOrbitState()
+{
 	const float YawRad = PIECameraYaw * DEG_TO_RAD;
 	const float PitchRad = PIECameraPitch * DEG_TO_RAD;
 	const float CosPitch = cosf(PitchRad);
@@ -139,58 +187,33 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 	const FVector Focus = PIEPlayerActor->GetActorLocation() + FVector(0.0f, 0.0f, 1.2f);
 	PIEPlayerCamera->SetWorldLocation(Focus - CameraOffset);
 	PIEPlayerCamera->LookAt(Focus);
-	SyncPlayerViewToEditorViewport();
-
-	return MoveInput.Length() > 0.0f || bCanLook;
-}
-
-bool UGameViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
-{
-	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
-	if (Context.bImGuiCapturedMouse && !Context.bRelativeMouseMode)
-	{
-		return false;
-	}
-
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
-	if (!EditorEngine
-		|| !EditorEngine->IsPlayingInEditor()
-		|| EditorEngine->GetPIEControlMode() != UEditorEngine::EPIEControlMode::Possessed)
-	{
-		return false;
-	}
-
-	if (!Context.bFocused || (!Context.bCaptured && !Context.bRelativeMouseMode))
-	{
-		return false;
-	}
-
-	return bPIEInputArmed;
 }
 
 void UGameViewportClient::OnBeginPIE()
 {
+	bPIEPossessedInputEnabled = false;
 	EnsurePIEPlayer();
 }
 
 void UGameViewportClient::OnEndPIE()
 {
+	bPIEPossessedInputEnabled = false;
 	ReleasePIEPlayer();
 	bPIEInputArmed = false;
 }
 
 void UGameViewportClient::EnsurePIEPlayer()
 {
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
-	if (!EditorEngine || !EditorEngine->IsPlayingInEditor())
+	if (!GEngine)
 	{
 		ReleasePIEPlayer();
 		return;
 	}
 
-	UWorld* World = EditorEngine->GetWorld();
+	UWorld* World = GEngine->GetWorld();
 	if (!World)
 	{
+		ReleasePIEPlayer();
 		return;
 	}
 

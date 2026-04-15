@@ -1,6 +1,5 @@
-﻿#include "ObjViewer/ObjViewerViewportClient.h"
+#include "ObjViewer/ObjViewerViewportClient.h"
 
-#include "Engine/Input/InputSystem.h"
 #include "Engine/Runtime/WindowsWindow.h"
 #include "Components/CameraComponent.h"
 #include "Viewport/Viewport.h"
@@ -50,10 +49,10 @@ void FObjViewerViewportClient::ResetCamera()
 
 static void UpdateOrbitCamera(UCameraComponent* Camera, const FVector& Target, float Distance, float Yaw, float Pitch)
 {
-	float YawRad = Yaw * DEG_TO_RAD;
-	float PitchRad = Pitch * DEG_TO_RAD;
+	const float YawRad = Yaw * DEG_TO_RAD;
+	const float PitchRad = Pitch * DEG_TO_RAD;
 
-	float CosPitch = cosf(PitchRad);
+	const float CosPitch = cosf(PitchRad);
 	FVector Offset;
 	Offset.X = Distance * CosPitch * cosf(YawRad);
 	Offset.Y = Distance * CosPitch * sinf(YawRad);
@@ -71,58 +70,94 @@ void FObjViewerViewportClient::Tick(float DeltaTime)
 	{
 		UpdateOrbitCamera(Camera, OrbitTarget, OrbitDistance, OrbitYaw, OrbitPitch);
 	}
+
+	bHasRoutedInputContext = false;
 }
 
 void FObjViewerViewportClient::TickInput(float DeltaTime)
 {
-	if (!Camera) return;
-	const FGuiInputState& GuiInput = InputSystem::Get().GetGuiInputState();
-	if (GuiInput.bUsingKeyboard || GuiInput.bUsingTextInput) return;
-
-	// 마우스가 뷰포트 영역 안에 있는지 확인
-	POINT MousePos = InputSystem::Get().GetMousePos();
-	if (Window)
+	(void)DeltaTime;
+	if (!Camera || !bHasRoutedInputContext)
 	{
-		MousePos = Window->ScreenToClientPoint(MousePos);
+		return;
 	}
-	float MX = static_cast<float>(MousePos.x);
-	float MY = static_cast<float>(MousePos.y);
 
-	bool bMouseInViewport = (MX >= ViewportX && MX <= ViewportX + ViewportWidth &&
-		MY >= ViewportY && MY <= ViewportY + ViewportHeight);
-
-	if (!bMouseInViewport) return;
-
-	// 우클릭 드래그 → 오빗 회전
-	if (InputSystem::Get().GetKey(VK_RBUTTON))
+	const FViewportInputContext& Context = RoutedInputContext;
+	if (!Context.bHovered && !Context.bCaptured && !Context.bRelativeMouseMode)
 	{
-		float DeltaX = static_cast<float>(InputSystem::Get().MouseDeltaX());
-		float DeltaY = static_cast<float>(InputSystem::Get().MouseDeltaY());
+		return;
+	}
+
+	if (Context.Frame.IsDown(VK_RBUTTON))
+	{
+		const float DeltaX = static_cast<float>(Context.Frame.MouseDelta.x);
+		const float DeltaY = static_cast<float>(Context.Frame.MouseDelta.y);
 
 		OrbitYaw += DeltaX * 0.3f;
 		OrbitPitch += DeltaY * 0.3f;
 		OrbitPitch = Clamp(OrbitPitch, -89.0f, 89.0f);
 	}
 
-	// 중클릭 드래그 → 팬
-	if (InputSystem::Get().GetKey(VK_MBUTTON))
+	if (Context.Frame.IsDown(VK_MBUTTON))
 	{
-		float DeltaX = static_cast<float>(InputSystem::Get().MouseDeltaX());
-		float DeltaY = static_cast<float>(InputSystem::Get().MouseDeltaY());
+		const float DeltaX = static_cast<float>(Context.Frame.MouseDelta.x);
+		const float DeltaY = static_cast<float>(Context.Frame.MouseDelta.y);
 
-		float PanScale = OrbitDistance * 0.002f;
-		FVector Right = Camera->GetRightVector();
-		FVector Up = Camera->GetUpVector();
+		const float PanScale = OrbitDistance * 0.002f;
+		const FVector Right = Camera->GetRightVector();
+		const FVector Up = Camera->GetUpVector();
 		OrbitTarget = OrbitTarget - Right * (DeltaX * PanScale) + Up * (DeltaY * PanScale);
 	}
 
-	// 스크롤 → 줌
-	float ScrollNotches = InputSystem::Get().GetScrollNotches();
+	const float ScrollNotches = Context.Frame.WheelNotches;
 	if (ScrollNotches != 0.0f)
 	{
 		OrbitDistance -= ScrollNotches * OrbitDistance * 0.1f;
 		OrbitDistance = Clamp(OrbitDistance, 0.1f, 500.0f);
 	}
+}
+
+bool FObjViewerViewportClient::ProcessInput(FViewportInputContext& Context)
+{
+	RoutedInputContext = Context;
+	bHasRoutedInputContext = true;
+	return false;
+}
+
+bool FObjViewerViewportClient::WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const
+{
+	OutRestoreScreenPos = Context.Frame.MouseScreenPos;
+	if (Context.bImGuiCapturedMouse)
+	{
+		return false;
+	}
+
+	return Context.bFocused
+		&& Context.bHovered
+		&& (Context.Frame.IsDown(VK_RBUTTON) || Context.Frame.IsDown(VK_MBUTTON));
+}
+
+bool FObjViewerViewportClient::WantsAbsoluteMouseClip(const FViewportInputContext& Context, RECT& OutClipScreenRect) const
+{
+	OutClipScreenRect = { 0, 0, 0, 0 };
+	const bool bDragControlActive = Context.bFocused
+		&& (Context.Frame.IsDown(VK_RBUTTON) || Context.Frame.IsDown(VK_MBUTTON));
+	if (!bDragControlActive)
+	{
+		return false;
+	}
+
+	const FRect Rect = GetViewportScreenRect();
+	if (Rect.Width <= 0.0f || Rect.Height <= 0.0f)
+	{
+		return false;
+	}
+
+	OutClipScreenRect.left = static_cast<LONG>(Rect.X);
+	OutClipScreenRect.top = static_cast<LONG>(Rect.Y);
+	OutClipScreenRect.right = static_cast<LONG>(Rect.X + Rect.Width);
+	OutClipScreenRect.bottom = static_cast<LONG>(Rect.Y + Rect.Height);
+	return true;
 }
 
 void FObjViewerViewportClient::SetViewportRect(float X, float Y, float Width, float Height)
@@ -132,16 +167,25 @@ void FObjViewerViewportClient::SetViewportRect(float X, float Y, float Width, fl
 	ViewportWidth = Width;
 	ViewportHeight = Height;
 
-	// FViewport 리사이즈 요청
 	if (Viewport)
 	{
-		uint32 W = static_cast<uint32>(Width);
-		uint32 H = static_cast<uint32>(Height);
+		const uint32 W = static_cast<uint32>(Width);
+		const uint32 H = static_cast<uint32>(Height);
 		if (W > 0 && H > 0 && (W != Viewport->GetWidth() || H != Viewport->GetHeight()))
 		{
 			Viewport->RequestResize(W, H);
 		}
 	}
+}
+
+FRect FObjViewerViewportClient::GetViewportScreenRect() const
+{
+	FRect Rect{};
+	Rect.X = ViewportX;
+	Rect.Y = ViewportY;
+	Rect.Width = ViewportWidth;
+	Rect.Height = ViewportHeight;
+	return Rect;
 }
 
 void FObjViewerViewportClient::RenderViewportImage()

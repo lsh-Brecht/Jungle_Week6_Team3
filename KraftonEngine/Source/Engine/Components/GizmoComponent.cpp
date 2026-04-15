@@ -298,50 +298,48 @@ void UGizmoComponent::RotateTarget(float DragAmount)
 
 	FVector RotationAxis = GetVectorForAxis(SelectedAxis);
 	FQuat DeltaQuat = FQuat::FromAxisAngle(RotationAxis, DragAmount);
+	DeltaQuat.Normalize();
+	const FVector PivotLocation = TargetActor->GetActorLocation();
 
-	const float DeltaDeg = DragAmount * RAD_TO_DEG;
-
-	auto ApplyRotation = [&](AActor* Actor)
+	auto ApplyRotation = [&](AActor* Actor, bool bApplyPivotOrbit)
 		{
 			if (!Actor || !Actor->GetRootComponent()) return;
 			USceneComponent* Root = Actor->GetRootComponent();
-			const FQuat& CurQuat = Root->GetRelativeQuat();
-			// 월드 스페이스: Delta * Cur, 로컬 스페이스: Cur * Delta
-			FQuat NewQuat = bIsWorldSpace ? (DeltaQuat * CurQuat) : (CurQuat * DeltaQuat);
+			USceneComponent* Parent = Root->GetParent();
+			const FQuat ParentWorldQuat = Parent ? Parent->GetWorldMatrix().ToQuat() : FQuat::Identity;
+			const FQuat CurRelativeQuat = Root->GetRelativeQuat();
+			const FQuat CurWorldQuat = (CurRelativeQuat * ParentWorldQuat).GetNormalized();
 
-			// Euler 캐시를 기즈모 축 기준으로 직접 업데이트 (짐벌락 방지)
-			FRotator EulerHint = Root->GetCachedEditRotator();
-			if (bIsWorldSpace)
+			// DeltaQuat은 이미 기즈모에서 계산된 "월드 축" 회전이다.
+			// 따라서 world/local 모드 모두 월드 회전 합성(Delta * Current)으로 적용하고,
+			// 부모가 있으면 relative로 역변환한다.
+			FQuat NewWorldQuat = (DeltaQuat * CurWorldQuat).GetNormalized();
+			FQuat NewRelativeQuat = Parent ? (NewWorldQuat * ParentWorldQuat.Inverse()).GetNormalized() : NewWorldQuat;
+			FRotator EulerHint = NewRelativeQuat.ToRotator().GetClamped();
+			Root->SetRelativeRotationWithEulerHint(NewRelativeQuat, EulerHint);
+
+			// Multi-select rotate는 마지막 선택(Primary) 액터를 피벗으로
+			// 나머지 선택 액터의 월드 위치를 함께 공전시킨다. (UE 동작과 동일)
+			if (bApplyPivotOrbit)
 			{
-				switch (SelectedAxis)
-				{
-				case 0: EulerHint.Roll  += DeltaDeg; break;  // World X = Roll
-				case 1: EulerHint.Pitch += DeltaDeg; break;  // World Y = Pitch
-				case 2: EulerHint.Yaw   += DeltaDeg; break;  // World Z = Yaw
-				}
+				const FVector CurrentLocation = Actor->GetActorLocation();
+				const FVector OffsetFromPivot = CurrentLocation - PivotLocation;
+				const FVector RotatedOffset = DeltaQuat.RotateVector(OffsetFromPivot);
+				Actor->SetActorLocation(PivotLocation + RotatedOffset);
 			}
-			else
-			{
-				switch (SelectedAxis)
-				{
-				case 0: EulerHint.Roll  += DeltaDeg; break;  // Local X = Roll
-				case 1: EulerHint.Pitch += DeltaDeg; break;  // Local Y = Pitch
-				case 2: EulerHint.Yaw   += DeltaDeg; break;  // Local Z = Yaw
-				}
-			}
-			Root->SetRelativeRotationWithEulerHint(NewQuat, EulerHint);
 		};
 
 	if (AllSelectedActors)
 	{
 		for (AActor* Actor : *AllSelectedActors)
 		{
-			ApplyRotation(Actor);
+			const bool bApplyPivotOrbit = (Actor && Actor != TargetActor);
+			ApplyRotation(Actor, bApplyPivotOrbit);
 		}
 	}
 	else
 	{
-		ApplyRotation(TargetActor);
+		ApplyRotation(TargetActor, false);
 	}
 }
 
@@ -699,9 +697,19 @@ void UGizmoComponent::SetWorldSpace(bool bWorldSpace)
 }
 
 
-void UGizmoComponent::UpdateAxisMask(ELevelViewportType ViewportType)
+void UGizmoComponent::UpdateAxisMask(ELevelViewportType ViewportType, bool bIsOrthographicView)
 {
 	constexpr uint32 AllAxes = 0x7;
+
+	// 뷰포트 타입 라벨(Top/Front/Right)과 실제 카메라 투영 상태가
+	// PIE Eject 전환 중 일시적으로 불일치할 수 있다.
+	// 실제 투영이 Perspective라면 축을 숨기지 않고 모두 표시한다.
+	if (!bIsOrthographicView)
+	{
+		AxisMask = AllAxes;
+		return;
+	}
+
 	uint32 ViewAxis = AllAxes;
 
 	switch (ViewportType)

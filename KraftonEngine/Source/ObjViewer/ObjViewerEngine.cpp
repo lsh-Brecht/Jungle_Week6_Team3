@@ -1,6 +1,7 @@
 ﻿#include "ObjViewer/ObjViewerEngine.h"
 
 #include "ObjViewer/ObjViewerRenderPipeline.h"
+#include "Engine/Input/InputSystem.h"
 #include "Engine/Runtime/WindowsWindow.h"
 #include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
@@ -14,6 +15,7 @@ IMPLEMENT_CLASS(UObjViewerEngine, UEngine)
 void UObjViewerEngine::Init(FWindowsWindow* InWindow)
 {
 	UEngine::Init(InWindow);
+	InputRouter.SetOwnerWindow(InWindow->GetHWND());
 
 	FObjManager::ScanMeshAssets();
 	FObjManager::ScanObjSourceFiles();
@@ -63,14 +65,56 @@ void UObjViewerEngine::Shutdown()
 
 void UObjViewerEngine::Tick(float DeltaTime)
 {
-	ViewportClient.Tick(DeltaTime);
 	Panel.Update();
-	UEngine::Tick(DeltaTime);
+	ConfigureInputRouter();
+
+	FViewportInputContext RoutedInputContext;
+	FInteractionBinding InteractionBinding;
+	InputRouter.Tick(RoutedInputContext, InteractionBinding);
+
+	ViewportClient.Tick(DeltaTime);
+	WorldTick(DeltaTime);
+	Render(DeltaTime);
 }
 
 void UObjViewerEngine::RenderUI(float DeltaTime)
 {
 	Panel.Render(DeltaTime);
+}
+
+void UObjViewerEngine::ConfigureInputRouter()
+{
+	const FGuiInputState& GuiInputState = InputSystem::Get().GetGuiInputState();
+	InputRouter.SetForceViewportMouseBlock(false);
+	InputRouter.SetImGuiCaptureState(
+		GuiInputState.bUsingMouse,
+		GuiInputState.bUsingKeyboard || GuiInputState.bUsingTextInput);
+	InputRouter.ClearTargets();
+
+	FViewport* Viewport = ViewportClient.GetViewport();
+	if (!Viewport)
+	{
+		return;
+	}
+
+	InputRouter.RegisterTarget(
+		Viewport,
+		&ViewportClient,
+		EInteractionDomain::Editor,
+		[this](FRect& OutRect)
+		{
+			const FRect Rect = ViewportClient.GetViewportScreenRect();
+			if (Rect.Width <= 0.0f || Rect.Height <= 0.0f)
+			{
+				return false;
+			}
+			OutRect = Rect;
+			return true;
+		},
+		[this]()
+		{
+			return GetWorld();
+		});
 }
 
 void UObjViewerEngine::LoadPreviewMesh(const FString& MeshPath)

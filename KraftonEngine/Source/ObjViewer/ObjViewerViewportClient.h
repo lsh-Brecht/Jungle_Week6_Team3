@@ -2,6 +2,7 @@
 
 #include "Viewport/ViewportClient.h"
 #include "Math/Vector.h"
+#include "UI/SWindow.h"
 
 class UCameraComponent;
 class FWindowsWindow;
@@ -25,9 +26,13 @@ public:
 	FViewport* GetViewport() const { return Viewport; }
 
 	void Tick(float DeltaTime);
+	bool ProcessInput(FViewportInputContext& Context) override;
+	bool WantsRelativeMouseMode(const FViewportInputContext& Context, POINT& OutRestoreScreenPos) const override;
+	bool WantsAbsoluteMouseClip(const FViewportInputContext& Context, RECT& OutClipScreenRect) const override;
 
 	// 뷰포트 영역 설정 (ImGui 패널에서 호출)
 	void SetViewportRect(float X, float Y, float Width, float Height);
+	FRect GetViewportScreenRect() const;
 
 	// ImDrawList에 SRV를 그려주는 헬퍼
 	void RenderViewportImage();
@@ -51,4 +56,6 @@ private:
 	float ViewportY = 0.0f;
 	float ViewportWidth = 800.0f;
 	float ViewportHeight = 600.0f;
+	FViewportInputContext RoutedInputContext{};
+	bool bHasRoutedInputContext = false;
 };

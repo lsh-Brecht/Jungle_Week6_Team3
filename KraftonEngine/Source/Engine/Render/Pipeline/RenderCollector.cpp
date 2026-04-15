@@ -139,7 +139,8 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 	if (!RenderBus.GetShowFlags().bPrimitives) return;
 
 	const bool bShowBoundingVolume = RenderBus.GetShowFlags().bBoundingVolume;
- const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
+	const bool bShowSelectionOutline = RenderBus.GetShowFlags().bSelectionOutline;
+	const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
 	SCOPE_STAT_CAT("CollectVisibleProxy", "3_Collect");
 
 	const FGPUOcclusionCulling* Occlusion = RenderBus.GetOcclusionCulling();
@@ -187,15 +188,15 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 		// Batcher 경유 렌더링 (Font, SubUV)
 		Proxy->CollectEntries(RenderBus);
 		
-		if (!Proxy->bBatcherRendered)
-		{
-			RenderBus.AddProxy(Proxy->Pass, Proxy);
-		}
+		// ID Picking pass는 RenderBus의 proxy 목록을 사용하므로,
+		// 배처 경로 대상(Billboard 등)도 proxy를 함께 유지한다.
+		// 일반 렌더에서는 해당 pass가 batcher 우선으로 실행되어 중복 드로우되지 않는다.
+		RenderBus.AddProxy(Proxy->Pass, Proxy);
 
 		// 선택된 오브젝트
 		if (Proxy->bSelected)
 		{
-			if (Proxy->bSupportsOutline)
+			if (bShowSelectionOutline && Proxy->bSupportsOutline)
 				RenderBus.AddProxy(ERenderPass::SelectionMask, Proxy);
 
 			if (bShowBoundingVolume && Proxy->bShowAABB)

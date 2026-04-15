@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Math/Vector.h"
 #include "Object/Object.h"
 #include "Viewport/ViewportClient.h"
 
@@ -26,11 +27,17 @@ public:
 
 	void SetDrivingCamera(UCameraComponent* InCamera) { DrivingCamera = InCamera; }
 	UCameraComponent* GetDrivingCamera() const { return DrivingCamera; }
+	void SetPIEPossessedInputEnabled(bool bEnabled) { bPIEPossessedInputEnabled = bEnabled; }
 
 	void OnBeginPIE();
 	void OnEndPIE();
 
 private:
+	void UpdatePIEInputArmedState(const FViewportInputContext& Context, bool& bOutConsumedByArmToggle);
+	FVector BuildMoveInput(const FViewportInputContext& Context, bool bKeyboardBlocked) const;
+	bool ApplyMoveInput(const FVector& MoveInput, float DeltaTime);
+	bool ApplyLookInput(const FViewportInputContext& Context, bool bMouseBlocked);
+	void UpdatePlayerCameraFromOrbitState();
 	void EnsurePIEPlayer();
 	void ReleasePIEPlayer();
 	void SyncPlayerViewToEditorViewport();
@@ -47,5 +54,6 @@ private:
 	float PIECameraPitch = -20.0f;
 	float PIECameraYaw = 0.0f;
 	bool bPIEInputArmed = false;
+	bool bPIEPossessedInputEnabled = false;
 };
 

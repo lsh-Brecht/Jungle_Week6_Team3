@@ -86,6 +86,23 @@ namespace InputBindingUtils
 		return false;
 	}
 
+	inline bool IsActionTriggered(const FViewportInputContext& Context, const TArray<const FInputBinding*>& Bindings)
+	{
+		for (const FInputBinding* Binding : Bindings)
+		{
+			if (!Binding)
+			{
+				continue;
+			}
+
+			if (IsBindingTriggered(Context, *Binding))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	inline bool TryGetHighestPriorityTriggeredAction(
 		const FViewportInputContext& Context,
 		const TArray<FInputBinding>& Bindings,
