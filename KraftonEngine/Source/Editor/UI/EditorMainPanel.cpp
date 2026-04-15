@@ -5,6 +5,8 @@
 #include "Editor/Settings/EditorSettings.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Engine/Components/CameraComponent.h"
+#include "GameFramework/AActor.h"
+#include "Object/Object.h"
 #include "Engine/Platform/Paths.h"
 #include "Engine/Runtime/WindowsWindow.h"
 
@@ -19,6 +21,8 @@
 
 #include <utility>
 #include <cstring>
+#include <algorithm>
+#include <random>
 
 #if STATS
 #include "Render/Culling/GPUOcclusionCulling.h"
@@ -92,6 +96,46 @@ void PushFXAAConstantsToRenderer(UEditorEngine* EditorEngine, const FEditorSetti
 	FXAA.EdgeThresholdMin = Settings.FXAAEdgeThresholdMin;
  FXAA.SearchSteps = GetFXAASearchStepsForStage(Settings);
 	EditorEngine->GetRenderer().SetFXAAConstants(FXAA);
+}
+
+FString GetPIEControlModeLogLabel(int32 ModeValue)
+{
+	if (ModeValue == static_cast<int32>(UEditorEngine::EPIEControlMode::Possessed))
+	{
+		return "PIE possessed";
+	}
+	if (ModeValue == static_cast<int32>(UEditorEngine::EPIEControlMode::Ejected))
+	{
+		return "PIE ejected";
+	}
+	return "";
+}
+
+FString MakeRootRelativePath(const FString& InPath)
+{
+	if (InPath.empty())
+	{
+		return InPath;
+	}
+
+	FString NormalizedPath = InPath;
+	std::replace(NormalizedPath.begin(), NormalizedPath.end(), '\\', '/');
+
+	FString RootPath = FPaths::ToUtf8(FPaths::RootDir());
+	std::replace(RootPath.begin(), RootPath.end(), '\\', '/');
+	if (!RootPath.empty() && RootPath.back() != '/')
+	{
+		RootPath.push_back('/');
+	}
+
+	if (!RootPath.empty()
+		&& NormalizedPath.size() >= RootPath.size()
+		&& _strnicmp(NormalizedPath.c_str(), RootPath.c_str(), RootPath.size()) == 0)
+	{
+		return NormalizedPath.substr(RootPath.size());
+	}
+
+	return NormalizedPath;
 }
 }
 
@@ -394,10 +438,7 @@ void FEditorMainPanel::RenderEditorToolbar()
 			{
 				if (ImGui::MenuItem(Entry.DisplayName.c_str()))
 				{
-					if (EditorEngine->PlaceActorById(Entry.Id))
-					{
-						FooterLogSystem.Push("Actor placed: " + Entry.DisplayName);
-					}
+					EditorEngine->PlaceActorById(Entry.Id);
 				}
 			}
 			ImGui::EndPopup();
@@ -514,6 +555,24 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 	ImGui::DragFloat("Move Smooth Speed", &Settings.CameraMoveSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
 	ImGui::DragFloat("Rotate Smooth Speed", &Settings.CameraRotateSmoothSpeed, 0.05f, 0.1f, 20.0f, "%.2f");
 	ImGui::EndDisabled();
+	static const char* PickingModeLabels[] =
+	{
+		"ID Picking (Actor UUID)",
+		"Ray-Triangle"
+	};
+	int32 PickingModeIndex = static_cast<int32>(Settings.PickingMode);
+	if (ImGui::Combo("Picking Mode", &PickingModeIndex, PickingModeLabels, IM_ARRAYSIZE(PickingModeLabels)))
+	{
+		if (PickingModeIndex < static_cast<int32>(EEditorPickingMode::Id))
+		{
+			PickingModeIndex = static_cast<int32>(EEditorPickingMode::Id);
+		}
+		if (PickingModeIndex > static_cast<int32>(EEditorPickingMode::RayTriangle))
+		{
+			PickingModeIndex = static_cast<int32>(EEditorPickingMode::RayTriangle);
+		}
+		Settings.PickingMode = static_cast<EEditorPickingMode>(PickingModeIndex);
+	}
 
 	ImGui::Separator();
 	if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
@@ -612,6 +671,199 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 		ImGui::Checkbox("Debug Draw", &ShowFlags.bDebugDraw);
 	}
 
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Place Actors (Grid)", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		const TArray<UEditorEngine::FPlaceableActorEntry>& Entries = EditorEngine->GetPlaceableActorEntries();
+		if (Entries.empty())
+		{
+			ImGui::TextUnformatted("No placeable actor entries registered.");
+		}
+		else
+		{
+			if (DebugPlaceActorTypeIndex < 0)
+			{
+				DebugPlaceActorTypeIndex = 0;
+			}
+			if (DebugPlaceActorTypeIndex >= static_cast<int32>(Entries.size()))
+			{
+				DebugPlaceActorTypeIndex = static_cast<int32>(Entries.size()) - 1;
+			}
+
+			const char* CurrentActorLabel = Entries[DebugPlaceActorTypeIndex].DisplayName.c_str();
+			if (ImGui::BeginCombo("Actor Type", CurrentActorLabel))
+			{
+				for (int32 Index = 0; Index < static_cast<int32>(Entries.size()); ++Index)
+				{
+					const bool bSelected = (DebugPlaceActorTypeIndex == Index);
+					if (ImGui::Selectable(Entries[Index].DisplayName.c_str(), bSelected))
+					{
+						DebugPlaceActorTypeIndex = Index;
+					}
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::DragInt("Rows", &DebugGridRows, 1.0f, 1, 1024, "%d");
+			ImGui::DragInt("Cols", &DebugGridCols, 1.0f, 1, 1024, "%d");
+			ImGui::DragInt("Layers", &DebugGridLayers, 1.0f, 1, 256, "%d");
+			ImGui::DragFloat("Grid Spacing", &DebugGridSpacing, 0.1f, 0.1f, 1000.0f, "%.2f");
+			ImGui::Checkbox("Center Grid Around Origin", &bDebugGridCenter);
+
+			ImGui::Separator();
+			ImGui::Checkbox("Use Camera Forward Origin", &bDebugUseCameraOrigin);
+			if (bDebugUseCameraOrigin)
+			{
+				ImGui::DragFloat("Camera Forward Distance", &DebugCameraForwardDistance, 0.5f, 0.0f, 100000.0f, "%.1f");
+			}
+			else
+			{
+				ImGui::DragFloat3("Manual Origin", &DebugManualGridOrigin.X, 0.1f, -100000.0f, 100000.0f, "%.2f");
+			}
+
+			ImGui::Separator();
+			ImGui::Checkbox("Random Yaw", &bDebugRandomYaw);
+			ImGui::BeginDisabled(!bDebugRandomYaw);
+			ImGui::DragFloat("Yaw Range (+/-)", &DebugRandomYawRange, 1.0f, 0.0f, 180.0f, "%.1f");
+			ImGui::EndDisabled();
+
+			ImGui::Checkbox("Apply Position Jitter", &bDebugApplyJitter);
+			ImGui::BeginDisabled(!bDebugApplyJitter);
+			ImGui::DragFloat("Jitter XY", &DebugJitterXY, 0.05f, 0.0f, 1000.0f, "%.2f");
+			ImGui::DragFloat("Jitter Z", &DebugJitterZ, 0.05f, 0.0f, 1000.0f, "%.2f");
+			ImGui::EndDisabled();
+
+			const int64 TotalSpawnCount =
+				static_cast<int64>(DebugGridRows) *
+				static_cast<int64>(DebugGridCols) *
+				static_cast<int64>(DebugGridLayers);
+			ImGui::Text("Total Actors: %lld", static_cast<long long>(TotalSpawnCount));
+			ImGui::Text("Last Batch: %u", static_cast<uint32>(DebugLastSpawnedActors.size()));
+
+			if (ImGui::Button("Spawn Grid Actors"))
+			{
+				UWorld* World = EditorEngine->GetWorld();
+				if (!World)
+				{
+					EditorEngine->EnqueueFooterEventLog("Grid spawn failed: invalid world");
+				}
+				else if (DebugPlaceActorTypeIndex < 0 || DebugPlaceActorTypeIndex >= static_cast<int32>(Entries.size()))
+				{
+					EditorEngine->EnqueueFooterEventLog("Grid spawn failed: invalid actor type");
+				}
+				else
+				{
+					const UEditorEngine::FPlaceableActorEntry& Entry = Entries[DebugPlaceActorTypeIndex];
+
+					FVector GridOrigin = DebugManualGridOrigin;
+					FVector GridRight(1.0f, 0.0f, 0.0f);
+					FVector GridForward(0.0f, 1.0f, 0.0f);
+					if (bDebugUseCameraOrigin)
+					{
+						if (FLevelEditorViewportClient* ActiveViewport = EditorEngine->GetActiveViewport())
+						{
+							if (UCameraComponent* ActiveCamera = ActiveViewport->GetCamera())
+							{
+								FVector CameraForward = ActiveCamera->GetForwardVector();
+								CameraForward.Z = 0.0f;
+								if (CameraForward.Length() > 0.0001f)
+								{
+									CameraForward.Normalize();
+									GridForward = CameraForward;
+									GridRight = FVector(-CameraForward.Y, CameraForward.X, 0.0f);
+								}
+								GridOrigin = ActiveCamera->GetWorldLocation() + ActiveCamera->GetForwardVector() * DebugCameraForwardDistance;
+							}
+						}
+					}
+
+					if (DebugGridRows < 1) DebugGridRows = 1;
+					if (DebugGridCols < 1) DebugGridCols = 1;
+					if (DebugGridLayers < 1) DebugGridLayers = 1;
+					if (DebugGridSpacing < 0.1f) DebugGridSpacing = 0.1f;
+					if (DebugRandomYawRange < 0.0f) DebugRandomYawRange = 0.0f;
+					if (DebugRandomYawRange > 180.0f) DebugRandomYawRange = 180.0f;
+					if (DebugJitterXY < 0.0f) DebugJitterXY = 0.0f;
+					if (DebugJitterZ < 0.0f) DebugJitterZ = 0.0f;
+
+					const float RowOffset = bDebugGridCenter ? (static_cast<float>(DebugGridRows - 1) * 0.5f) : 0.0f;
+					const float ColOffset = bDebugGridCenter ? (static_cast<float>(DebugGridCols - 1) * 0.5f) : 0.0f;
+					const float LayerOffset = bDebugGridCenter ? (static_cast<float>(DebugGridLayers - 1) * 0.5f) : 0.0f;
+
+					std::mt19937 RNG{ std::random_device{}() };
+					std::uniform_real_distribution<float> YawDist(-DebugRandomYawRange, DebugRandomYawRange);
+					std::uniform_real_distribution<float> JitterXYDist(-DebugJitterXY, DebugJitterXY);
+					std::uniform_real_distribution<float> JitterZDist(-DebugJitterZ, DebugJitterZ);
+
+					TArray<AActor*> SpawnedActors;
+					SpawnedActors.reserve(static_cast<size_t>(TotalSpawnCount));
+					int32 SpawnedCount = 0;
+
+					for (int32 Layer = 0; Layer < DebugGridLayers; ++Layer)
+					{
+						for (int32 Row = 0; Row < DebugGridRows; ++Row)
+						{
+							for (int32 Col = 0; Col < DebugGridCols; ++Col)
+							{
+								AActor* SpawnedActor = Entry.SpawnFactory ? Entry.SpawnFactory(World) : nullptr;
+								if (!SpawnedActor)
+								{
+									continue;
+								}
+
+								if (Entry.Initializer && !Entry.Initializer(SpawnedActor))
+								{
+									World->DestroyActor(SpawnedActor);
+									continue;
+								}
+
+								FVector SpawnLocation = GridOrigin
+									+ GridRight * ((static_cast<float>(Col) - ColOffset) * DebugGridSpacing)
+									+ GridForward * ((static_cast<float>(Row) - RowOffset) * DebugGridSpacing)
+									+ FVector(0.0f, 0.0f, (static_cast<float>(Layer) - LayerOffset) * DebugGridSpacing);
+
+								if (bDebugApplyJitter)
+								{
+									SpawnLocation
+										+= GridRight * JitterXYDist(RNG)
+										+ GridForward * JitterXYDist(RNG)
+										+ FVector(0.0f, 0.0f, JitterZDist(RNG));
+								}
+
+								SpawnedActor->SetActorLocation(SpawnLocation);
+								if (bDebugRandomYaw)
+								{
+									SpawnedActor->SetActorRotation(FVector(0.0f, YawDist(RNG), 0.0f));
+								}
+								// Render 단계에서 스폰되는 경로라 이번 프레임 WorldTick(FlushPrimitive)을 이미 지났을 수 있다.
+								// 바로 보이도록 최종 변환 이후 파티션에 즉시 반영한다.
+								World->InsertActorToOctree(SpawnedActor);
+
+								SpawnedActors.push_back(SpawnedActor);
+								++SpawnedCount;
+							}
+						}
+					}
+					DebugLastSpawnedActors = std::move(SpawnedActors);
+					EditorEngine->EnqueueFooterEventLog(
+						"Grid placed: " + std::to_string(SpawnedCount) + " actors");
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Clear Last Batch"))
+			{
+				// Render 단계에서 즉시 월드를 변경하지 않고 다음 Update 단계에서 처리해
+				// 프레임 중간 데이터 접근과 충돌하는 위험을 줄인다.
+				bPendingClearLastBatch = true;
+			}
+		}
+	}
+
 	ImGui::End();
 }
 
@@ -633,41 +885,24 @@ void FEditorMainPanel::RenderMainMenuBar()
 		if (ImGui::MenuItem("New Scene", "Ctrl+N"))
 		{
 			EditorEngine->NewScene();
-			FooterLogSystem.Push("New Scene created");
 		}
 		if (ImGui::MenuItem("Load Level", "Ctrl+O"))
 		{
-			if (EditorEngine->LoadSceneWithDialog())
-			{
-				FooterLogSystem.Push("Level loaded");
-			}
+			EditorEngine->LoadSceneWithDialog();
 		}
 		if (ImGui::MenuItem("Save Level", "Ctrl+S"))
 		{
-			if (EditorEngine->SaveScene())
-			{
-				FooterLogSystem.Push("Level saved");
-			}
+			EditorEngine->SaveScene();
 		}
 		if (ImGui::MenuItem("Save Level As...", "Ctrl+Shift+S"))
 		{
-			if (EditorEngine->SaveSceneAsWithDialog())
-			{
-				FooterLogSystem.Push("Level saved as");
-			}
+			EditorEngine->SaveSceneAsWithDialog();
 		}
 
 		ImGui::Separator();
 		if (ImGui::MenuItem("Open Asset Folder"))
 		{
-			if (EditorEngine->OpenAssetFolder())
-			{
-				FooterLogSystem.Push("Asset folder opened");
-			}
-			else
-			{
-				FooterLogSystem.Push("Failed to open Asset folder");
-			}
+			EditorEngine->OpenAssetFolder();
 		}
 
 		ImGui::Separator();
@@ -961,21 +1196,18 @@ void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
 				ConsoleBacktickCycleState = 1;
 				bConsoleDrawerVisible = false;
 				bFocusConsoleInputNextFrame = true;
-				FooterLogSystem.Push("Console input focus");
 				break;
 			case 1:
 				ConsoleBacktickCycleState = 2;
 				bConsoleDrawerVisible = true;
 				bBringConsoleDrawerToFrontNextFrame = true;
 				bFocusConsoleInputNextFrame = true;
-				FooterLogSystem.Push("Console drawer opened");
 				break;
 			default:
 				ConsoleBacktickCycleState = 0;
 				bConsoleDrawerVisible = false;
 				bFocusConsoleInputNextFrame = false;
 				bFocusConsoleButtonNextFrame = true;
-				FooterLogSystem.Push("Console drawer closed");
 				break;
 			}
 		}
@@ -1015,7 +1247,7 @@ void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
 		ImGui::Text("Domain: %s", EditorEngine->IsPlayingInEditor() ? "PIE" : "Editor");
 
 		const FString LevelLabel = EditorEngine->HasCurrentLevelFilePath()
-			? FString("Level: ") + EditorEngine->GetCurrentLevelFilePath()
+			? FString("Level: ") + MakeRootRelativePath(EditorEngine->GetCurrentLevelFilePath())
 			: FString("Level: Unsaved");
 		const float LevelWidth = ImGui::CalcTextSize(LevelLabel.c_str()).x;
 		const float LevelX = OverlaySize.x - ImGui::GetStyle().WindowPadding.x - LevelWidth;
@@ -1092,6 +1324,9 @@ void FEditorMainPanel::RenderHiZDebug(const FEditorSettings& Settings)
 
 void FEditorMainPanel::Update()
 {
+	ProcessPendingDebugActions();
+	UpdateFooterEventLogs();
+
 	ImGuiIO& IO = ImGui::GetIO();
 
 	bool bWantMouse = IO.WantCaptureMouse;
@@ -1158,9 +1393,9 @@ void FEditorMainPanel::Update()
 		// 텍스트 입력이 필요한 경우는 상단의 non-viewport ImGui interaction에서 이미 차단된다.
 		bWantKeyboard = false;
 	}
-	InputSystem::Get().GetGuiInputState().bUsingMouse = bWantMouse;
-	InputSystem::Get().GetGuiInputState().bUsingKeyboard = bWantKeyboard;
-	InputSystem::Get().GetGuiInputState().bUsingTextInput = bWantTextInput;
+	InputSystem::Get().SetGuiMouseCapture(bWantMouse);
+	InputSystem::Get().SetGuiKeyboardCapture(bWantKeyboard);
+	InputSystem::Get().SetGuiTextInputCapture(bWantTextInput);
 
 	// IME는 ImGui가 텍스트 입력을 원할 때만 활성화.
 	if (Window)
@@ -1175,6 +1410,96 @@ void FEditorMainPanel::Update()
 			ImmAssociateContext(hWnd, NULL);
 		}
 	}
+}
+
+void FEditorMainPanel::ProcessPendingDebugActions()
+{
+	if (!bPendingClearLastBatch || !EditorEngine)
+	{
+		return;
+	}
+	bPendingClearLastBatch = false;
+
+	UWorld* World = EditorEngine->GetWorld();
+	int32 DestroyedCount = 0;
+
+	if (!World)
+	{
+		DebugLastSpawnedActors.clear();
+		EditorEngine->EnqueueFooterEventLog("Grid cleared: 0 actors");
+		return;
+	}
+
+	// 배치 삭제 직전에 선택/기즈모 참조를 정리하지 않으면
+	// 다음 프레임에 dangling actor 포인터를 따라가며 크래시가 날 수 있다.
+	EditorEngine->GetSelectionManager().ClearSelection();
+
+	for (AActor* Actor : DebugLastSpawnedActors)
+	{
+		if (!Actor || !UObjectManager::Get().IsAlivePointer(Actor) || Actor->GetWorld() != World)
+		{
+			continue;
+		}
+
+		World->DestroyActor(Actor);
+		++DestroyedCount;
+	}
+
+	DebugLastSpawnedActors.clear();
+	EditorEngine->EnqueueFooterEventLog(
+		"Grid cleared: " + std::to_string(DestroyedCount) + " actors");
+}
+
+void FEditorMainPanel::UpdateFooterEventLogs()
+{
+	if (!EditorEngine)
+	{
+		return;
+	}
+
+	FString EventLog;
+	while (EditorEngine->DequeueFooterEventLog(EventLog))
+	{
+		FooterLogSystem.Push(EventLog);
+	}
+
+	const bool bPIEPlaying = EditorEngine->IsPlayingInEditor();
+	const int32 PIEControlMode = bPIEPlaying ? static_cast<int32>(EditorEngine->GetPIEControlMode()) : -1;
+	const bool bHasLevelPath = EditorEngine->HasCurrentLevelFilePath();
+	const FString LevelPath = bHasLevelPath ? EditorEngine->GetCurrentLevelFilePath() : FString();
+
+	if (!bFooterEventStateInitialized)
+	{
+		bPrevPIEPlaying = bPIEPlaying;
+		PrevPIEControlMode = PIEControlMode;
+		bPrevHadLevelPath = bHasLevelPath;
+		PrevLevelPath = LevelPath;
+		bFooterEventStateInitialized = true;
+		return;
+	}
+
+	if (!bPrevPIEPlaying && bPIEPlaying)
+	{
+		FooterLogSystem.Push("PIE started");
+	}
+	else if (bPrevPIEPlaying && !bPIEPlaying)
+	{
+		FooterLogSystem.Push("PIE ended");
+	}
+
+	if (bPIEPlaying && bPrevPIEPlaying && PIEControlMode != PrevPIEControlMode)
+	{
+		const FString ModeLog = GetPIEControlModeLogLabel(PIEControlMode);
+		if (!ModeLog.empty())
+		{
+			FooterLogSystem.Push(ModeLog);
+		}
+	}
+
+	bPrevPIEPlaying = bPIEPlaying;
+	PrevPIEControlMode = PIEControlMode;
+	bPrevHadLevelPath = bHasLevelPath;
+	PrevLevelPath = LevelPath;
 }
 
 void FEditorMainPanel::HideEditorWindowsForPIE()

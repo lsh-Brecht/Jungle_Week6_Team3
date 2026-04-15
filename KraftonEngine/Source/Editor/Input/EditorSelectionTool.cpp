@@ -7,13 +7,13 @@
 #include "Editor/Input/EditorViewportInputUtils.h"
 #include "Editor/Viewport/EditorViewportClient.h"
 #include "Editor/Selection/SelectionManager.h"
+#include "Editor/Settings/EditorSettings.h"
 #include "Components/CameraComponent.h"
 #include "Components/GizmoComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Math/Matrix.h"
 #include "Math/MathUtils.h"
-#include "Engine/Runtime/WindowsWindow.h"
 #include "Viewport/Viewport.h"
 #include "UI/EditorConsoleWidget.h"
 
@@ -25,7 +25,7 @@ FEditorSelectionTool::FEditorSelectionTool(FEditorViewportClient* InOwner)
 bool FEditorSelectionTool::HandleInput(float DeltaTime)
 {
 	(void)DeltaTime;
-	UWorld* InteractionWorld = Owner ? Owner->ResolveInteractionWorld() : nullptr;
+	UWorld* InteractionWorld = Owner ? Owner->GetInteractionWorld() : nullptr;
 	if (!Owner || !Owner->GetCamera() || !Owner->GetGizmo() || !InteractionWorld || !Owner->GetSelectionManager())
 	{
 		return false;
@@ -36,7 +36,7 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 	{
 		return false;
 	}
-	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
+	if (EditorViewportInputUtils::IsMouseBlockedByImGuiForViewport(Context))
 	{
 		return false;
 	}
@@ -48,27 +48,7 @@ bool FEditorSelectionTool::HandleInput(float DeltaTime)
 			return false;
 		}
 
-		POINT ClientPos = InScreenPos;
-		if (Owner->Window)
-		{
-			ScreenToClient(Owner->Window->GetHWND(), &ClientPos);
-		}
-
-		const FRect& ViewRect = Owner->GetViewportScreenRect();
-		if (ViewRect.Width <= 0.0f || ViewRect.Height <= 0.0f)
-		{
-			return false;
-		}
-
-		OutLocal.x = static_cast<LONG>(Clamp(
-			static_cast<float>(ClientPos.x) - ViewRect.X,
-			0.0f,
-			(std::max)(0.0f, ViewRect.Width - 1.0f)));
-		OutLocal.y = static_cast<LONG>(Clamp(
-			static_cast<float>(ClientPos.y) - ViewRect.Y,
-			0.0f,
-			(std::max)(0.0f, ViewRect.Height - 1.0f)));
-		return true;
+		return Owner->ConvertScreenToViewportLocal(InScreenPos, OutLocal, true);
 	};
 
 	for (const FInputEvent& Event : Context.Events)
@@ -188,7 +168,7 @@ void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray)
 		return;
 	}
 
-	UWorld* InteractionWorld = Owner->ResolveInteractionWorld();
+	UWorld* InteractionWorld = Owner->GetInteractionWorld();
 	if (!InteractionWorld)
 	{
 		return;
@@ -200,7 +180,15 @@ void FEditorSelectionTool::HandleSelectionClick(const FRay& Ray)
 
 	FHitResult HitResult{};
 	AActor* BestActor = nullptr;
-	InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
+	const FEditorSettings& Settings = FEditorSettings::Get();
+	if (Settings.PickingMode == EEditorPickingMode::RayTriangle)
+	{
+		InteractionWorld->RaycastPrimitives(Ray, HitResult, BestActor);
+	}
+	else
+	{
+		InteractionWorld->RaycastPrimitivesById(Ray, HitResult, BestActor);
+	}
 	if (!BestActor)
 	{
 		if (!bCtrlHeld && !bShiftHeld)
@@ -266,7 +254,7 @@ bool FEditorSelectionTool::TryProjectActorToViewportLocal(AActor* Actor, float& 
 
 void FEditorSelectionTool::ApplySelectionMarquee(bool bAdditive)
 {
-	if (!Owner || !Owner->GetSelectionManager() || !Owner->ResolveInteractionWorld() || !bSelectionMarqueeActive)
+	if (!Owner || !Owner->GetSelectionManager() || !Owner->GetInteractionWorld() || !bSelectionMarqueeActive)
 	{
 		return;
 	}
@@ -283,7 +271,7 @@ void FEditorSelectionTool::ApplySelectionMarquee(bool bAdditive)
 	}
 
 	TArray<AActor*> Hits;
-	const TArray<AActor*>& Actors = Owner->ResolveInteractionWorld()->GetActors();
+	const TArray<AActor*>& Actors = Owner->GetInteractionWorld()->GetActors();
 	for (AActor* Actor : Actors)
 	{
 		if (!Actor || !Actor->IsVisible())

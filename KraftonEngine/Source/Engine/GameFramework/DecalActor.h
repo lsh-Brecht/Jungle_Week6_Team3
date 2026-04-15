@@ -29,7 +29,7 @@ public:
 	void BeginPlay() override;
 	virtual void Serialize(FArchive& Ar) override;
 	
-private:
+protected:
 	
 	UDecalComponent* Decal = nullptr;
 	UBillboardComponent* SpriteComponent = nullptr; // Editor에서 데칼 위치/회전 편집용 시각적 가이드. 게임에서는 숨김.

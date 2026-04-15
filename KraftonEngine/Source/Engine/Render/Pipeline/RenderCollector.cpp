@@ -139,7 +139,8 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 	if (!RenderBus.GetShowFlags().bPrimitives) return;
 
 	const bool bShowBoundingVolume = RenderBus.GetShowFlags().bBoundingVolume;
- const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
+	const bool bShowSelectionOutline = RenderBus.GetShowFlags().bSelectionOutline;
+	const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
 	SCOPE_STAT_CAT("CollectVisibleProxy", "3_Collect");
 
 	const FGPUOcclusionCulling* Occlusion = RenderBus.GetOcclusionCulling();
@@ -195,7 +196,7 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 		// 선택된 오브젝트
 		if (Proxy->bSelected)
 		{
-			if (Proxy->bSupportsOutline)
+			if (bShowSelectionOutline && Proxy->bSupportsOutline)
 				RenderBus.AddProxy(ERenderPass::SelectionMask, Proxy);
 
 			if (bShowBoundingVolume && Proxy->bShowAABB)

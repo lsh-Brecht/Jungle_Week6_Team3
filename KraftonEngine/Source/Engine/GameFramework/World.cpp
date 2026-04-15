@@ -5,8 +5,10 @@
 #include "Components/CameraComponent.h"	
 #include "Engine/Render/Culling/ConvexVolume.h"
 #include "Render/Pipeline/LODContext.h"
+#include "Collision/RayUtils.h"
 #include <cmath>
 #include <algorithm>
+#include <cfloat>
 #include "Profiling/Stats.h"
 
 IMPLEMENT_CLASS(UWorld, UObject)
@@ -173,6 +175,72 @@ bool UWorld::RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor
 	//혹시라도 BVH 트리가 업데이트 되지 않았다면 업데이트
 	WorldPrimitivePickingBVH.EnsureBuilt(GetActors());
 	return WorldPrimitivePickingBVH.Raycast(Ray, OutHitResult, OutActor);
+}
+
+bool UWorld::RaycastPrimitivesById(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const
+{
+	OutHitResult = {};
+	OutHitResult.Distance = FLT_MAX;
+	OutActor = nullptr;
+
+	TArray<UPrimitiveComponent*> CandidatePrimitives;
+	Partition.QueryRayAllPrimitive(Ray, CandidatePrimitives);
+	if (CandidatePrimitives.empty())
+	{
+		return false;
+	}
+
+	float BestDistance = FLT_MAX;
+	UPrimitiveComponent* BestComponent = nullptr;
+	uint32 BestActorUUID = UINT32_MAX;
+
+	for (UPrimitiveComponent* Primitive : CandidatePrimitives)
+	{
+		if (!Primitive || !Primitive->IsVisible())
+		{
+			continue;
+		}
+
+		AActor* OwnerActor = Primitive->GetOwner();
+		if (!OwnerActor || !OwnerActor->IsVisible())
+		{
+			continue;
+		}
+
+		float TMin = 0.0f;
+		float TMax = 0.0f;
+		const FBoundingBox Bounds = Primitive->GetWorldBoundingBox();
+		if (!FRayUtils::IntersectRayAABB(Ray, Bounds.Min, Bounds.Max, TMin, TMax))
+		{
+			continue;
+		}
+
+		const float HitDistance = (TMin >= 0.0f) ? TMin : 0.0f;
+		if (HitDistance < BestDistance)
+		{
+			BestDistance = HitDistance;
+			BestComponent = Primitive;
+			BestActorUUID = OwnerActor->GetUUID();
+		}
+	}
+
+	if (!BestComponent || BestActorUUID == UINT32_MAX)
+	{
+		return false;
+	}
+
+	AActor* ResolvedActor = Cast<AActor>(UObjectManager::Get().FindByUUID(BestActorUUID));
+	if (!ResolvedActor)
+	{
+		return false;
+	}
+
+	OutHitResult.bHit = true;
+	OutHitResult.Distance = BestDistance;
+	OutHitResult.HitComponent = BestComponent;
+	OutHitResult.WorldHitLocation = Ray.Origin + (Ray.Direction * BestDistance);
+	OutActor = ResolvedActor;
+	return true;
 }
 
 
