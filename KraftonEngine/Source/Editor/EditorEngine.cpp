@@ -112,6 +112,7 @@ bool TryComputeSpawnLocationFromViewportPoint(FLevelEditorViewportClient* InView
 
 constexpr const char* GPlaceableIdCube = "basic_shape_cube";
 constexpr const char* GPlaceableIdSphere = "basic_shape_sphere";
+constexpr const char* GPlaceableIdCylinder = "basic_shape_cylinder";
 constexpr const char* GPlaceableIdDecal = "basic_actor_decal";
 constexpr const char* GPlaceableIdMeshDecal = "basic_actor_mesh_decal";
 constexpr const char* GPlaceableIdSpotLight = "basic_actor_spotlight";
@@ -1155,6 +1156,25 @@ void UEditorEngine::RegisterDefaultPlaceableActors()
 				return false;
 			}
 			StaticMeshActor->InitDefaultComponents("Data/BasicShape/Sphere.OBJ");
+			return true;
+		}
+	});
+
+	RegisterPlaceableActor({
+		GPlaceableIdCylinder,
+		"Cylinder",
+		[](UWorld* World) -> AActor*
+		{
+			return World ? static_cast<AActor*>(World->SpawnActor<AStaticMeshActor>()) : nullptr;
+		},
+		[](AActor* Actor) -> bool
+		{
+			AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Actor);
+			if (!StaticMeshActor)
+			{
+				return false;
+			}
+			StaticMeshActor->InitDefaultComponents("Data/BasicShape/Cylinder.obj");
 			return true;
 		}
 	});
