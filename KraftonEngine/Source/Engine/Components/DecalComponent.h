@@ -19,7 +19,7 @@ public:
 	~UDecalComponent() override = default;
 
 	// 페이드 아웃 관련 데이터
-   float FadeStartDelay = 0.0f;
+	float FadeStartDelay = 0.0f;
 	float FadeDuration = 0.0f;
 	float FadeInDuration = 0.0f;
 	float FadeInStartDelay = 0.0f;
@@ -55,8 +55,10 @@ public:
 
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;
+ void BeginPlay() override;
 	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
 	void PostEditProperty(const char* PropertyName) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
 protected:
 	UMaterialInterface* DecalMaterial = nullptr;
@@ -65,4 +67,14 @@ protected:
 	FTextureResource* DecalTexture = nullptr;
 	FPrimitiveSceneProxy* ArrowOuterProxy = nullptr;
 	FPrimitiveSceneProxy* ArrowInnerProxy = nullptr;
+
+private:
+	float FadeOutTimeElapsed = 0.0f;
+	float FadeInTimeElapsed = 0.0f;
+	bool bIsFadeOutActive = false;
+	bool bIsFadeInActive = false;
+ bool bPendingFadeOutAfterFadeIn = false;
+	float OriginalAlpha = 1.0f;
+
+	void RestartFadePreviewSequence();
 };
