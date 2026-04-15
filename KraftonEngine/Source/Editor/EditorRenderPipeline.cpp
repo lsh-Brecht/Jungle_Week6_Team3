@@ -89,7 +89,17 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 
 	// 뷰포트별 렌더 옵션 사용
 	const FViewportRenderOptions& Opts = VC->GetRenderOptions();
-	const FShowFlags& ShowFlags = Opts.ShowFlags;
+	FShowFlags EffectiveShowFlags = Opts.ShowFlags;
+	const bool bPIEPossessedMode =
+		Editor->IsPlayingInEditor()
+		&& Editor->GetPIEControlMode() == UEditorEngine::EPIEControlMode::Possessed;
+	if (bPIEPossessedMode)
+	{
+		EffectiveShowFlags.bSelectionOutline = false;
+		EffectiveShowFlags.bBoundingVolume = false;
+		EffectiveShowFlags.bDebugDraw = false;
+		EffectiveShowFlags.bOctree = false;
+	}
 	EViewMode ViewMode = Opts.ViewMode;
 
 	// 지연 리사이즈 적용 + 오프스크린 RT 바인딩
@@ -105,7 +115,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 	Bus.Clear();
 
 	Bus.SetCameraInfo(Camera);
-	Bus.SetRenderSettings(ViewMode, ShowFlags);
+	Bus.SetRenderSettings(ViewMode, EffectiveShowFlags);
 	PopulateScenePostProcessConstants(World, Bus);
 	Bus.SetViewportInfo(VP);
 	Bus.SetViewportType(Opts.ViewportType);
@@ -115,33 +125,38 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 	// 2. 프록시 + Batcher Entry를 ERenderPass별로 수집
 	{
 		SCOPE_STAT_CAT("Collector", "3_Collect");
-		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
-
+		// Gizmo axis mask must be updated before per-viewport proxy collection.
+		// Otherwise gizmo proxy can read stale mask from a previous viewport/frame.
 		if (UGizmoComponent* Gizmo = Editor->GetGizmo())
 			Gizmo->UpdateAxisMask(Opts.ViewportType);
+
+		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
 
 		Collector.CollectGrid(Opts.GridSpacing, Opts.GridHalfLineCount, Bus);
 		Collector.CollectDebugDraw(World->GetDebugDrawQueue(), Bus);
 
-		for (AActor* SelectedActor : Editor->GetSelectionManager().GetSelectedActors())
+		if (EffectiveShowFlags.bDebugDraw)
 		{
-			if (!SelectedActor || SelectedActor->GetWorld() != World)
+			for (AActor* SelectedActor : Editor->GetSelectionManager().GetSelectedActors())
 			{
-				continue;
-			}
-
-			for (UActorComponent* ActorComponent : SelectedActor->GetComponents())
-			{
-				if (!ActorComponent)
+				if (!SelectedActor || SelectedActor->GetWorld() != World)
 				{
 					continue;
 				}
 
-				ActorComponent->CollectEditorVisualizations(Bus);
+				for (UActorComponent* ActorComponent : SelectedActor->GetComponents())
+				{
+					if (!ActorComponent)
+					{
+						continue;
+					}
+
+					ActorComponent->CollectEditorVisualizations(Bus);
+				}
 			}
 		}
 
-		if (ShowFlags.bOctree)
+		if (EffectiveShowFlags.bOctree)
 			Collector.CollectOctreeDebug(World->GetOctree(), Bus);
 
 		if (VC == Editor->GetActiveViewport())

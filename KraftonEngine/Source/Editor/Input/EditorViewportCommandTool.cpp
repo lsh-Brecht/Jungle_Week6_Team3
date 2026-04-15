@@ -21,6 +21,11 @@ namespace
 {
 using EAction = EditorViewportInputMapping::EEditorViewportAction;
 
+UEditorEngine* GetEditorEngine()
+{
+	return Cast<UEditorEngine>(GEngine);
+}
+
 EEditorViewportModeType ToModeType(EGizmoMode InMode)
 {
 	switch (InMode)
@@ -32,24 +37,24 @@ EEditorViewportModeType ToModeType(EGizmoMode InMode)
 	}
 }
 
-TArray<int32> GetCommandActionCandidates()
+TArray<EAction> GetCommandActionCandidates()
 {
 	return {
-		static_cast<int32>(EAction::CycleMode),
-		static_cast<int32>(EAction::SetModeSelect),
-		static_cast<int32>(EAction::SetModeTranslate),
-		static_cast<int32>(EAction::SetModeRotate),
-		static_cast<int32>(EAction::SetModeScale),
-		static_cast<int32>(EAction::CycleGizmoMode),
-		static_cast<int32>(EAction::ToggleCoordinateSpace),
-		static_cast<int32>(EAction::FocusSelection),
-		static_cast<int32>(EAction::DeleteSelection),
-		static_cast<int32>(EAction::SelectAll),
-		static_cast<int32>(EAction::NewScene),
-		static_cast<int32>(EAction::LoadScene),
-		static_cast<int32>(EAction::SaveScene),
-		static_cast<int32>(EAction::SaveSceneAs),
-		static_cast<int32>(EAction::DuplicateSelection)
+		EAction::CycleMode,
+		EAction::SetModeSelect,
+		EAction::SetModeTranslate,
+		EAction::SetModeRotate,
+		EAction::SetModeScale,
+		EAction::CycleGizmoMode,
+		EAction::ToggleCoordinateSpace,
+		EAction::FocusSelection,
+		EAction::DeleteSelection,
+		EAction::SelectAll,
+		EAction::NewScene,
+		EAction::LoadScene,
+		EAction::SaveScene,
+		EAction::SaveSceneAs,
+		EAction::DuplicateSelection
 	};
 }
 }
@@ -66,17 +71,14 @@ bool FEditorViewportCommandTool::HandleInput(float DeltaTime)
 		return false;
 	}
 
-	int32 TriggeredActionId = 0;
-	if (!InputBindingUtils::TryGetHighestPriorityTriggeredAction(
+	EAction Action = EAction::CycleMode;
+	if (!EditorViewportInputMapping::TryGetHighestPriorityTriggeredAction(
 		Owner->GetRoutedInputContext(),
-		EditorViewportInputMapping::GetBindings(),
 		GetCommandActionCandidates(),
-		TriggeredActionId))
+		Action))
 	{
 		return false;
 	}
-
-	const EAction Action = static_cast<EAction>(TriggeredActionId);
 	const FViewportInputContext& Context = Owner->GetRoutedInputContext();
 	const bool bLeftHeldFlyMove =
 		Context.Frame.IsDown(VK_LBUTTON)
@@ -234,7 +236,7 @@ bool FEditorViewportCommandTool::SelectAllActors()
 		return false;
 	}
 
-	UWorld* World = Owner->ResolveInteractionWorld();
+	UWorld* World = Owner->GetInteractionWorld();
 	if (!World)
 	{
 		return false;
@@ -262,7 +264,7 @@ bool FEditorViewportCommandTool::SelectAllActors()
 
 bool FEditorViewportCommandTool::NewScene()
 {
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
+	UEditorEngine* EditorEngine = GetEditorEngine();
 	if (!EditorEngine)
 	{
 		return false;
@@ -274,19 +276,19 @@ bool FEditorViewportCommandTool::NewScene()
 
 bool FEditorViewportCommandTool::LoadScene()
 {
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
+	UEditorEngine* EditorEngine = GetEditorEngine();
 	return EditorEngine ? EditorEngine->LoadSceneWithDialog() : false;
 }
 
 bool FEditorViewportCommandTool::SaveScene()
 {
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
+	UEditorEngine* EditorEngine = GetEditorEngine();
 	return EditorEngine ? EditorEngine->SaveScene() : false;
 }
 
 bool FEditorViewportCommandTool::SaveSceneAs()
 {
-	UEditorEngine* EditorEngine = Cast<UEditorEngine>(GEngine);
+	UEditorEngine* EditorEngine = GetEditorEngine();
 	return EditorEngine ? EditorEngine->SaveSceneAsWithDialog() : false;
 }
 

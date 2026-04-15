@@ -18,6 +18,7 @@
 class UGizmoComponent;
 class FLevelEditorViewportClient;
 class FEditorViewportClient;
+class FViewportClient;
 class FOverlayStatSystem;
 class UGameViewportClient;
 
@@ -49,6 +50,8 @@ public:
 	bool SaveSceneAsWithDialog();
 	bool SaveSceneAs(const FString& InSceneName);
 	bool OpenAssetFolder() const;
+	void EnqueueFooterEventLog(const FString& InMessage);
+	bool DequeueFooterEventLog(FString& OutMessage);
 	using FActorSpawnFactory = std::function<AActor*(UWorld*)>;
 	using FActorPostSpawnInitializer = std::function<bool(AActor*)>;
 	struct FPlaceableActorEntry
@@ -127,8 +130,18 @@ private:
 	void EndPlayMap();
 	bool EnterPIEPossessedMode();
 	bool EnterPIEEjectedMode();
+	bool IsPIEPossessedMode() const;
+	bool IsPIEEjectedMode() const;
 	EInteractionDomain GetCurrentInteractionDomain() const;
 	bool HandleGlobalShortcuts(const FViewportInputContext& InputContext);
+	void UpdateViewportMouseSuppression(bool bAnyPopupOpen);
+	void ConfigureInputRouterCapture(bool bAnyPopupOpen);
+	void ResolveViewportRoutingTarget(FLevelEditorViewportClient* VC, FViewportClient*& OutReceiverClient, EInteractionDomain& OutDomain);
+	void RegisterInputRouterTargets();
+	void SyncGameViewportPIEControlState(bool bPossessedMode);
+	bool HasViewportMousePressEvent(const FViewportInputContext& RoutedInputContext) const;
+	void ActivateViewportFromBinding(const FInteractionBinding& InteractionBinding);
+	void HandlePostRoutingInput(FViewportInputContext& RoutedInputContext, const FInteractionBinding& InteractionBinding, bool bAnyPopupOpen);
 	void RegisterDefaultPlaceableActors();
 	const FPlaceableActorEntry* FindPlaceableActorEntryById(const FString& InPlaceableId) const;
 
@@ -151,4 +164,5 @@ private:
 	bool bSuppressViewportMouseUntilButtonsReleased = false;
 	FString CurrentLevelFilePath;
 	TArray<FPlaceableActorEntry> PlaceableActorEntries;
+	TArray<FString> PendingFooterEventLogs;
 };

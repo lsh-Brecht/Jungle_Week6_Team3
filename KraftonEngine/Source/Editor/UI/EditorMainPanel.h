@@ -7,11 +7,13 @@
 #include "Editor/UI/EditorPropertyWidget.h"
 #include "Editor/UI/EditorSceneWidget.h"
 #include "Editor/UI/EditorStatWidget.h"
+#include "Math/Vector.h"
 #include "Profiling/Stats.h"
 
 class FRenderer;
 class UEditorEngine;
 class FWindowsWindow;
+class AActor;
 struct ID3D11ShaderResourceView;
 
 class FEditorMainPanel
@@ -25,6 +27,8 @@ public:
 	void RestoreEditorWindowsAfterPIE();
 
 private:
+	void UpdateFooterEventLogs();
+	void ProcessPendingDebugActions();
 	void RenderMainMenuBar();
 	void RenderEditorToolbar();
 	void RenderDockSpace();
@@ -57,5 +61,26 @@ private:
 	bool bHasSavedUIVisibility = false;
 	bool bSavedShowWidgetList = false;
 	FEditorSettings::FUIVisibility SavedUIVisibility{};
+	bool bFooterEventStateInitialized = false;
+	bool bPrevPIEPlaying = false;
+	int32 PrevPIEControlMode = -1;
+	bool bPrevHadLevelPath = false;
+	FString PrevLevelPath;
+	int32 DebugPlaceActorTypeIndex = 0;
+	int32 DebugGridRows = 10;
+	int32 DebugGridCols = 10;
+	int32 DebugGridLayers = 1;
+	float DebugGridSpacing = 2.0f;
+	bool bDebugGridCenter = true;
+	bool bDebugUseCameraOrigin = true;
+	float DebugCameraForwardDistance = 30.0f;
+	FVector DebugManualGridOrigin = FVector(0.0f, 0.0f, 0.0f);
+	bool bDebugRandomYaw = false;
+	float DebugRandomYawRange = 180.0f;
+	bool bDebugApplyJitter = false;
+	float DebugJitterXY = 0.0f;
+	float DebugJitterZ = 0.0f;
+	TArray<AActor*> DebugLastSpawnedActors;
+	bool bPendingClearLastBatch = false;
 	ID3D11ShaderResourceView* AddActorIconSRV = nullptr;
 };

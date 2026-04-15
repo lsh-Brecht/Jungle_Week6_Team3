@@ -175,6 +175,23 @@ public:
 		return nullptr;
 	}
 
+	// 포인터를 역참조하지 않고 현재 라이브 객체 배열에 존재하는지로 유효성만 확인한다.
+	bool IsAlivePointer(const UObject* InPtr) const
+	{
+		if (!InPtr)
+		{
+			return false;
+		}
+		for (UObject* Obj : GUObjectArray)
+		{
+			if (Obj == InPtr)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	UObject* FindByIndex(uint32 Index)
 	{
 		if (Index >= GUObjectArray.size()) return nullptr;

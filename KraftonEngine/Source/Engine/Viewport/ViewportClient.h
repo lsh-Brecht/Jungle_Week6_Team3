@@ -22,4 +22,10 @@ public:
 		OutRestoreScreenPos = { 0, 0 };
 		return false;
 	}
+	virtual bool WantsAbsoluteMouseClip(const FViewportInputContext& Context, RECT& OutClipScreenRect) const
+	{
+		(void)Context;
+		OutClipScreenRect = { 0, 0, 0, 0 };
+		return false;
+	}
 };

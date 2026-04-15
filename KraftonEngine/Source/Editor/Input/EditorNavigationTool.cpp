@@ -12,6 +12,19 @@
 
 #include <cmath>
 
+namespace
+{
+float NormalizeSignedAngle(float Angle)
+{
+	float Wrapped = std::fmod(Angle + 180.0f, 360.0f);
+	if (Wrapped < 0.0f)
+	{
+		Wrapped += 360.0f;
+	}
+	return Wrapped - 180.0f;
+}
+}
+
 FEditorNavigationTool::FEditorNavigationTool(FEditorViewportClient* InOwner)
 	: Owner(InOwner)
 {
@@ -29,7 +42,7 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 	{
 		return false;
 	}
-	if (Context.bImGuiCapturedMouse && !Context.bCaptured && !Context.bHovered)
+	if (EditorViewportInputUtils::IsMouseBlockedByImGuiForViewport(Context))
 	{
 		return false;
 	}
@@ -170,7 +183,7 @@ bool FEditorNavigationTool::HandleInput(float DeltaTime)
 	{
 		if (bMiddlePan || bAltPan || bRightLook)
 		{
-			const float PanScale = CameraState.OrthoWidth * 0.002f * MoveSensitivity;
+			const float PanScale = CameraState.OrthoWidth * 0.001f * MoveSensitivity;
 			AddCameraMoveInputLocal(FVector(0.0f, -DeltaX * PanScale, DeltaY * PanScale));
 			if (DeltaX != 0.0f || DeltaY != 0.0f)
 			{
@@ -248,6 +261,9 @@ void FEditorNavigationTool::SyncCameraTargetFromCurrent()
 
 	CameraTargetLocation = Owner->GetCamera()->GetWorldLocation();
 	CameraTargetRotation = Owner->GetCamera()->GetRelativeRotation();
+	CameraTargetRotation.Yaw = NormalizeSignedAngle(CameraTargetRotation.Yaw);
+	CameraTargetRotation.Pitch = Clamp(NormalizeSignedAngle(CameraTargetRotation.Pitch), -89.9f, 89.9f);
+	CameraTargetRotation.Roll = 0.0f;
 	bCameraTargetInitialized = true;
 }
 
@@ -283,15 +299,29 @@ void FEditorNavigationTool::ApplyCameraSmoothing(float DeltaTime, bool bBypassSm
 	Camera->SetWorldLocation(NextLocation);
 
 	FRotator CurrentRotation = Camera->GetRelativeRotation();
+	CurrentRotation.Yaw = NormalizeSignedAngle(CurrentRotation.Yaw);
+	CurrentRotation.Pitch = Clamp(NormalizeSignedAngle(CurrentRotation.Pitch), -89.9f, 89.9f);
 	CurrentRotation.Yaw = InterpAngle(CurrentRotation.Yaw, CameraTargetRotation.Yaw, RotateAlpha);
 	CurrentRotation.Pitch = InterpAngle(CurrentRotation.Pitch, CameraTargetRotation.Pitch, RotateAlpha);
+	const float RemainingYawDelta = NormalizeSignedAngle(CameraTargetRotation.Yaw - CurrentRotation.Yaw);
+	const float RemainingPitchDelta = NormalizeSignedAngle(CameraTargetRotation.Pitch - CurrentRotation.Pitch);
+	if (std::fabs(RemainingYawDelta) < 0.01f)
+	{
+		CurrentRotation.Yaw = CameraTargetRotation.Yaw;
+	}
+	if (std::fabs(RemainingPitchDelta) < 0.01f)
+	{
+		CurrentRotation.Pitch = CameraTargetRotation.Pitch;
+	}
+	CurrentRotation.Yaw = NormalizeSignedAngle(CurrentRotation.Yaw);
+	CurrentRotation.Pitch = Clamp(NormalizeSignedAngle(CurrentRotation.Pitch), -89.9f, 89.9f);
 	CurrentRotation.Roll = 0.0f;
 	Camera->SetRelativeRotation(CurrentRotation);
 }
 
 float FEditorNavigationTool::InterpAngle(float Current, float Target, float Alpha) const
 {
-	const float Delta = std::fmod(Target - Current + 540.0f, 360.0f) - 180.0f;
+	const float Delta = NormalizeSignedAngle(Target - Current);
 	return Current + Delta * Alpha;
 }
 
@@ -328,8 +358,8 @@ void FEditorNavigationTool::AddCameraRotateInput(float DeltaYaw, float DeltaPitc
 	}
 
 	constexpr float PseudoScale = 0.65f;
-	CameraTargetRotation.Yaw += DeltaYaw * PseudoScale;
-	CameraTargetRotation.Pitch = Clamp(CameraTargetRotation.Pitch + DeltaPitch * PseudoScale, -89.9f, 89.9f);
+	CameraTargetRotation.Yaw = NormalizeSignedAngle(CameraTargetRotation.Yaw + DeltaYaw * PseudoScale);
+	CameraTargetRotation.Pitch = Clamp(NormalizeSignedAngle(CameraTargetRotation.Pitch + DeltaPitch * PseudoScale), -89.9f, 89.9f);
 	CameraTargetRotation.Roll = 0.0f;
 }
 
