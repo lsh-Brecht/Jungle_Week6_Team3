@@ -8,6 +8,7 @@
 #include "Render/Resource/ConstantBufferPool.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/Runtime/Engine.h"
 #include "Profiling/Timer.h"
 
@@ -43,6 +44,17 @@ void FRenderer::Create(HWND hWindow)
 	SubUVBatcher.Create(Device.GetDevice());
 	BillboardBatcher.Create(Device.GetDevice());
 	IdPickPerObjectCB.Create(Device.GetDevice(), sizeof(FPerObjectConstants));
+	{
+		D3D11_SAMPLER_DESC SampDesc = {};
+		SampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+		SampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		SampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		SampDesc.MinLOD = 0.0f;
+		SampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+		Device.GetDevice()->CreateSamplerState(&SampDesc, &IdPickSampler);
+	}
 
 	InitializePassRenderStates();
 	InitializePassBatchers();
@@ -86,6 +98,7 @@ void FRenderer::Release()
 	SubUVBatcher.Release();
 	BillboardBatcher.Release();
 	IdPickPerObjectCB.Release();
+	SafeRelease(IdPickSampler);
 
 	for (FConstantBuffer& CB : PerObjectCBPool)
 	{
@@ -228,12 +241,16 @@ void FRenderer::PrepareBatchers(const FRenderBus& Bus)
 		{
 			if (Entry.Billboard.Texture)
 			{
+				// Billboard visual size is authored by Width/Height only.
+				// Do not feed PerObject matrix scale here, otherwise ID-pass scale compensation
+				// leaks into color rendering and causes pick/visual size mismatch.
+				const FVector BillboardVisualScale(1.0f, 1.0f, 1.0f);
 				BillboardBatcher.AddSprite(
 					Entry.Billboard.Texture->SRV,
 					Entry.PerObject.Model.GetLocation(),
 					Bus.GetCameraRight(),
 					Bus.GetCameraUp(),
-					Entry.PerObject.Model.GetScale(),
+					BillboardVisualScale,
 					Entry.Billboard.Width,
                   Entry.Billboard.Height,
 					Entry.bSelected
@@ -886,7 +903,14 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 	}
 
 	const auto& MaskProxies = Bus.GetProxies(ERenderPass::SelectionMask);
-	if (MaskProxies.empty())
+	const bool bHasMaskProxies = !MaskProxies.empty();
+	const bool bHasSelectedFont = FontBatcher.GetSelectedQuadCount() > 0;
+	const bool bHasSelectedSubUV = SubUVBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasSelectedBillboard = BillboardBatcher.GetSelectedSpriteCount() > 0;
+	const bool bHasAnySelectionMask =
+		bHasMaskProxies || bHasSelectedFont || bHasSelectedSubUV || bHasSelectedBillboard;
+
+	if (!bHasAnySelectionMask)
 	{
 		if (ViewportRTV)
 		{
@@ -897,20 +921,23 @@ void FRenderer::ExecuteSelectionMaskPass(const FRenderBus& Bus, ID3D11DeviceCont
 
 	Context->OMSetRenderTargets(1, &OutlineMaskRTV, nullptr);
 
-    ExecutePass(MaskProxies, Bus, Context);
+	if (bHasMaskProxies)
+	{
+		ExecutePass(MaskProxies, Bus, Context);
+	}
 
-	if (FontBatcher.GetSelectedQuadCount() > 0)
+	if (bHasSelectedFont)
 	{
 		const FFontResource* FontRes = FResourceManager::Get().FindFont(FName("Default"));
 		FontBatcher.DrawSelectionMaskBatch(Context, FontRes);
 	}
 
-	if (SubUVBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedSubUV)
 	{
 		SubUVBatcher.DrawSelectionMaskBatch(Context);
 	}
 
-	if (BillboardBatcher.GetSelectedSpriteCount() > 0)
+	if (bHasSelectedBillboard)
 	{
 		BillboardBatcher.DrawSelectionMaskBatch(Context);
 	}
@@ -1227,7 +1254,7 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 		return;
 	}
 
-	ID3D11SamplerState* Sampler = Resources.DefaultSampler;
+	ID3D11SamplerState* Sampler = IdPickSampler ? IdPickSampler : Resources.DefaultSampler;
 	Context->PSSetSamplers(0, 1, &Sampler);
 
 	FMeshBuffer* LastMeshBuffer = nullptr;
@@ -1236,6 +1263,10 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 	for (const FPrimitiveSceneProxy* Proxy : Proxies)
 	{
 		if (!Proxy || !Proxy->Owner || !Proxy->MeshBuffer || !Proxy->MeshBuffer->IsValid() || Proxy->ProxyId == UINT32_MAX)
+		{
+			continue;
+		}
+		if (!Proxy->Owner->SupportsPicking())
 		{
 			continue;
 		}
@@ -1343,7 +1374,37 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 	}
 }
 
-void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView* IdPickRTV, ID3D11DepthStencilView* DSV)
+void FRenderer::RenderIdPickDebugVisualization(ID3D11DeviceContext* Context, ID3D11ShaderResourceView* IdPickSRV, ID3D11RenderTargetView* IdDebugRTV)
+{
+	if (!Context || !IdPickSRV || !IdDebugRTV)
+	{
+		return;
+	}
+
+	FShader* DebugShader = FShaderManager::Get().GetShader(EShaderType::IDPickDebugVisualize);
+	if (!DebugShader)
+	{
+		return;
+	}
+
+	Context->OMSetRenderTargets(1, &IdDebugRTV, nullptr);
+	DebugShader->Bind(Context);
+	Context->PSSetShaderResources(0, 1, &IdPickSRV);
+	Context->IASetInputLayout(nullptr);
+	Context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	Context->Draw(3, 0);
+
+	ID3D11ShaderResourceView* NullSRV = nullptr;
+	Context->PSSetShaderResources(0, 1, &NullSRV);
+}
+
+void FRenderer::RenderIdPickBuffer(
+	const FRenderBus& Bus,
+	ID3D11RenderTargetView* IdPickRTV,
+	ID3D11DepthStencilView* DSV,
+	ID3D11ShaderResourceView* IdPickSRV,
+	ID3D11RenderTargetView* IdDebugRTV)
 {
 	if (!IdPickRTV || !DSV)
 	{
@@ -1358,11 +1419,17 @@ void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView
 
 	const uint32 ClearValue[4] = { 0u, 0u, 0u, 0u };
 	Context->ClearRenderTargetView(IdPickRTV, reinterpret_cast<const float*>(ClearValue));
+	Context->ClearDepthStencilView(DSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	Context->OMSetRenderTargets(1, &IdPickRTV, DSV);
 
-	Device.SetDepthStencilState(EDepthStencilState::DepthReadOnly);
+	// ID 버퍼도 "실제로 보이는 표면" 기준으로 선택되도록 깊이 쓰기를 활성화한다.
+	// (DepthReadOnly면 draw order에 따라 뒤에 그린 프록시가 앞을 덮어 오선택이 발생한다.)
+	Device.SetDepthStencilState(EDepthStencilState::Default);
 	Device.SetBlendState(EBlendState::Opaque);
-	Device.SetRasterizerState(ERasterizerState::SolidBackCull);
+	// ID Picking은 배처 경로(예: Billboard)를 우회해 proxy 메시를 직접 그리므로
+	// winding/축 변환 차이로 백페이스 컬링에 걸리면 ID가 비어버릴 수 있다.
+	// 픽킹 정확도 우선을 위해 ID 패스는 양면 래스터로 고정한다.
+	Device.SetRasterizerState(ERasterizerState::SolidNoCull);
 	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	FShader* PrimitiveShader = FShaderManager::Get().GetShader(EShaderType::IDPickPrimitive);
@@ -1384,6 +1451,8 @@ void FRenderer::RenderIdPickBuffer(const FRenderBus& Bus, ID3D11RenderTargetView
 	{
 		ExecuteIdPickPass(Bus.GetProxies(Pass), Context, PrimitiveShader, BillboardShader, StaticMeshShader);
 	}
+
+	RenderIdPickDebugVisualization(Context, IdPickSRV, IdDebugRTV);
 }
 
 // PostProcess 이후 fog 영향을 받지 않아야 하는 에디터 오버레이를 렌더링한다.

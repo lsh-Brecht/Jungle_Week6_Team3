@@ -17,7 +17,7 @@ void URotatingMovementComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		return;
 	}
 
-  const FRotator DeltaRotation = RotationRate * DeltaTime;
+	const FRotator DeltaRotation = RotationRate * DeltaTime;
 	if (DeltaRotation.IsNearlyZero())
 	{
 		return;
@@ -25,40 +25,40 @@ void URotatingMovementComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 	const FQuat DeltaQuat = DeltaRotation.ToQuaternion();
 	const FVector OldWorldLocation = UpdatedSceneComponent->GetWorldLocation();
-	const FQuat OldWorldQuat = UpdatedSceneComponent->GetWorldMatrix().ToQuat();
+	const FQuat OldWorldQuat = UpdatedSceneComponent->GetWorldQuat();
+	const bool bHasPivotTranslation = PivotTranslation.Length() > 0.0f;
+	const FVector OldPivotOffsetWorld = bHasPivotTranslation
+		? OldWorldQuat.RotateVector(PivotTranslation)
+		: FVector(0.0f, 0.0f, 0.0f);
 
 	FQuat NewWorldQuat = OldWorldQuat;
+	FVector NewWorldLocation = OldWorldLocation;
 
-	if (bRotationInlocalSpace)
+	if (bRotationInLocalSpace)
 	{
 		// 로컬 축 기준 회전
 		UpdatedSceneComponent->AddLocalRotation(DeltaQuat);
-		NewWorldQuat = UpdatedSceneComponent->GetWorldMatrix().ToQuat();
+		NewWorldQuat = UpdatedSceneComponent->GetWorldQuat();
+		if (bHasPivotTranslation)
+		{
+			const FVector NewPivotOffsetWorld = NewWorldQuat.RotateVector(PivotTranslation);
+			const FVector PivotWorldLocation = OldWorldLocation - OldPivotOffsetWorld;
+			NewWorldLocation = PivotWorldLocation + NewPivotOffsetWorld;
+			UpdatedSceneComponent->SetWorldLocation(NewWorldLocation);
+		}
 	}
 	else
 	{
 		// 월드 축 기준 회전
 		NewWorldQuat = (DeltaQuat * OldWorldQuat).GetNormalized();
-
-		USceneComponent* ParentComponent = UpdatedSceneComponent->GetParent();
-		if (ParentComponent)
+		if (bHasPivotTranslation)
 		{
-			const FQuat ParentWorldQuat = ParentComponent->GetWorldMatrix().ToQuat();
-			const FQuat NewRelativeQuat = (NewWorldQuat * ParentWorldQuat.Inverse()).GetNormalized();
-			UpdatedSceneComponent->SetRelativeRotation(NewRelativeQuat);
+			const FVector NewPivotOffsetWorld = NewWorldQuat.RotateVector(PivotTranslation);
+			const FVector PivotWorldLocation = OldWorldLocation - OldPivotOffsetWorld;
+			NewWorldLocation = PivotWorldLocation + NewPivotOffsetWorld;
 		}
-		else
-		{
-			UpdatedSceneComponent->SetRelativeRotation(NewWorldQuat);
-		}
-	}
 
-	if (PivotTranslation.Length() > 0.0f)
-	{
-		const FVector OldPivotOffsetWorld = OldWorldQuat.RotateVector(PivotTranslation);
-		const FVector NewPivotOffsetWorld = NewWorldQuat.RotateVector(PivotTranslation);
-		const FVector PivotWorldLocation = OldWorldLocation - OldPivotOffsetWorld;
-		const FVector NewWorldLocation = PivotWorldLocation + NewPivotOffsetWorld;
+		UpdatedSceneComponent->SetWorldRotation(NewWorldQuat);
 		UpdatedSceneComponent->SetWorldLocation(NewWorldLocation);
 	}
 }
@@ -69,7 +69,7 @@ void URotatingMovementComponent::Serialize(FArchive& Ar)
 	Ar << RotationRate.Pitch;
 	Ar << RotationRate.Yaw;
 	Ar << RotationRate.Roll;
-   Ar << bRotationInlocalSpace;
+	Ar << bRotationInLocalSpace;
 	Ar << PivotTranslation;
 }
 
@@ -77,6 +77,6 @@ void URotatingMovementComponent::GetEditableProperties(TArray<FPropertyDescripto
 {
 	UMovementComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Rotation Rate", EPropertyType::Rotator, &RotationRate, 0.0f, 0.0f, 0.1f });
-   OutProps.push_back({ "Rotation In Local Space", EPropertyType::Bool, &bRotationInlocalSpace, 0.0f, 0.0f, 0.0f });
+	OutProps.push_back({ "Rotation In Local Space", EPropertyType::Bool, &bRotationInLocalSpace, 0.0f, 0.0f, 0.0f });
 	OutProps.push_back({ "Pivot Translation", EPropertyType::Vec3, &PivotTranslation, 0.0f, 0.0f, 0.1f });
 }

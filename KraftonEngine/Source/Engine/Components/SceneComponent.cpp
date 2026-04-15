@@ -332,6 +332,17 @@ const FMatrix& USceneComponent::GetWorldInverseMatrix() const
 	return CachedInverseWorldMatrix;
 }
 
+FQuat USceneComponent::GetWorldQuat() const
+{
+	const FQuat LocalQuat = RelativeTransform.Rotation.GetNormalized();
+	if (ParentComponent != nullptr)
+	{
+		return (ParentComponent->GetWorldQuat() * LocalQuat).GetNormalized();
+	}
+
+	return LocalQuat;
+}
+
 void USceneComponent::SetWorldLocation(FVector NewWorldLocation)
 {
 	if (ParentComponent != nullptr)
@@ -347,6 +358,25 @@ void USceneComponent::SetWorldLocation(FVector NewWorldLocation)
 	{
 		SetRelativeLocation(NewWorldLocation);
 	}
+}
+
+void USceneComponent::SetWorldRotation(const FQuat& NewWorldRotation)
+{
+	if (ParentComponent != nullptr)
+	{
+		const FQuat ParentWorldQuat = ParentComponent->GetWorldQuat();
+		const FQuat NewRelativeQuat = (ParentWorldQuat.Inverse() * NewWorldRotation).GetNormalized();
+		SetRelativeRotation(NewRelativeQuat);
+	}
+	else
+	{
+		SetRelativeRotation(NewWorldRotation);
+	}
+}
+
+void USceneComponent::SetWorldRotation(const FRotator& NewWorldRotation)
+{
+	SetWorldRotation(NewWorldRotation.ToQuaternion());
 }
 
 FVector USceneComponent::GetWorldLocation() const

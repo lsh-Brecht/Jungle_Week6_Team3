@@ -49,7 +49,10 @@ public:
 	void SetRelativeRotationWithEulerHint(const FQuat& NewQuat, const FRotator& EulerHint);
 	const FMatrix& GetWorldMatrix() const;
 	const FMatrix& GetWorldInverseMatrix() const;
+	FQuat GetWorldQuat() const;
 	void SetWorldLocation(FVector NewWorldLocation);
+	void SetWorldRotation(const FQuat& NewWorldRotation);
+	void SetWorldRotation(const FRotator& NewWorldRotation);
 	FVector GetWorldLocation() const;
 	FVector GetWorldScale() const;
 	const FTransform& GetRelativeTransform() const { return RelativeTransform; }

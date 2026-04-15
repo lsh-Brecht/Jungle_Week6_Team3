@@ -203,7 +203,12 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		Renderer.Render(Bus);
 	}
 
-	Renderer.RenderIdPickBuffer(Bus, VP->GetIdPickRTV(), VP->GetDSV());
+	Renderer.RenderIdPickBuffer(
+		Bus,
+		VP->GetIdPickRTV(),
+		VP->GetDSV(),
+		VP->GetIdPickSRV(),
+		VP->GetIdPickDebugRTV());
 
 	// 5. GPU Occlusion — DSV 언바인딩 후 Hi-Z 생성 + Occlusion Test 디스패치
 	if (bEnableGPUOcclusion && GPUOcclusion.IsInitialized())

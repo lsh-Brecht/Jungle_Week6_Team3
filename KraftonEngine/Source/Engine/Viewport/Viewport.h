@@ -38,6 +38,9 @@ public:
 	ID3D11ShaderResourceView* GetStencilSRV() const { return StencilSRV; }
 	ID3D11DepthStencilView* GetDSV() const { return DSV; }
 	ID3D11RenderTargetView* GetIdPickRTV() const { return IdPickRTV; }
+	ID3D11ShaderResourceView* GetIdPickSRV() const { return IdPickSRV; }
+	ID3D11RenderTargetView* GetIdPickDebugRTV() const { return IdPickDebugRTV; }
+	ID3D11ShaderResourceView* GetIdPickDebugSRV() const { return IdPickDebugSRV; }
 	bool ReadIdPickAt(uint32 InX, uint32 InY, ID3D11DeviceContext* Ctx, uint32& OutId) const;
 	const D3D11_VIEWPORT& GetViewportRect() const { return ViewportRect; }
 
@@ -56,7 +59,11 @@ private:
 	ID3D11ShaderResourceView* SRV = nullptr;		// ImGui::Image() 출력용
 	ID3D11Texture2D* IdPickTexture = nullptr;
 	ID3D11RenderTargetView* IdPickRTV = nullptr;
+	ID3D11ShaderResourceView* IdPickSRV = nullptr;
 	ID3D11Texture2D* IdPickReadbackTexture = nullptr;
+	ID3D11Texture2D* IdPickDebugTexture = nullptr;
+	ID3D11RenderTargetView* IdPickDebugRTV = nullptr;
+	ID3D11ShaderResourceView* IdPickDebugSRV = nullptr;
 
 	// 뎁스/스텐실 (TYPELESS 텍스처 → DSV + DepthSRV + StencilSRV 분리)
 	ID3D11Texture2D* DepthTexture = nullptr;

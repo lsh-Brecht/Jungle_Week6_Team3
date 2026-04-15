@@ -673,6 +673,7 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 		}
 		Settings.PickingMode = static_cast<EEditorPickingMode>(PickingModeIndex);
 	}
+	ImGui::Checkbox("Show ID Buffer Overlay", &Settings.bShowIdBufferOverlay);
 
 	ImGui::Separator();
 	if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
