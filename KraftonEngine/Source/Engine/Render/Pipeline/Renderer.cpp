@@ -329,7 +329,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	const ERenderPass PassOrder[] = {
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
-		ERenderPass::MeshDecal,
+		ERenderPass::ProjectionDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Grid,
 		ERenderPass::SubUV,
@@ -349,7 +349,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
-		if ((CurPass == ERenderPass::Decal || CurPass == ERenderPass::MeshDecal) && !InRenderBus.GetShowFlags().bDecal)
+		if ((CurPass == ERenderPass::Decal || CurPass == ERenderPass::ProjectionDecal) && !InRenderBus.GetShowFlags().bDecal)
 		{
 			continue;
 		}
@@ -423,11 +423,11 @@ void FRenderer::InitializePassRenderStates()
 
 	//								DepthStencil							Blend						Rasterizer							Topology								WireframeAware
 	S[(uint32)E::Opaque] =			{ EDepthStencilState::Default,			EBlendState::Opaque,		ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
- S[(uint32)E::Decal] =			{ EDepthStencilState::NoDepth,		EBlendState::AlphaBlend,	ERasterizerState::SolidFrontCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::Decal] =			{ EDepthStencilState::NoDepth,		EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	//	Outline에 대한 Masking 방해로 인해 Patch
 	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
-	S[(uint32)E::MeshDecal] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
+	S[(uint32)E::ProjectionDecal] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Translucent] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::SubUV] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
@@ -1278,12 +1278,12 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 		}
 
 		const bool bIsStaticMesh = (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::StaticMesh));
-		const bool bIsMeshDecal = (Proxy->Pass == ERenderPass::MeshDecal)
-			|| (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::MeshDecal));
+		const bool bIsProjectionDecal = (Proxy->Pass == ERenderPass::ProjectionDecal)
+			|| (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::ProjectionDecal));
 		const bool bIsBillboard = (Proxy->Pass == ERenderPass::Billboard);
-		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsMeshDecal || bIsBillboard;
+		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsProjectionDecal || bIsBillboard;
 		FShader* IdShader = PrimitiveShader;
-		if (bIsStaticMesh || bIsMeshDecal)
+		if (bIsStaticMesh || bIsProjectionDecal)
 		{
 			IdShader = StaticMeshShader;
 		}
@@ -1448,7 +1448,7 @@ void FRenderer::RenderIdPickBuffer(
 	{
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
-		ERenderPass::MeshDecal,
+		ERenderPass::ProjectionDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Billboard
 	};
@@ -1545,3 +1545,4 @@ void FRenderer::UpdateSceneEffectBuffer(ID3D11DeviceContext* Context, const FRen
 	Context->VSSetConstantBuffers(ECBSlot::SceneEffect, 1, &b5);
 	Context->PSSetConstantBuffers(ECBSlot::SceneEffect, 1, &b5);
 }
+

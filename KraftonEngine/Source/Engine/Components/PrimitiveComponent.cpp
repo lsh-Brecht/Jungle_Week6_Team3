@@ -54,6 +54,20 @@ void UPrimitiveComponent::SetVisibility(bool bNewVisible)
 	MarkRenderVisibilityDirty();
 }
 
+void UPrimitiveComponent::SetSkipGPUOcclusion(bool bInSkip)
+{
+	if (bSkipGPUOcclusion == bInSkip)
+	{
+		return;
+	}
+
+	bSkipGPUOcclusion = bInSkip;
+	if (SceneProxy)
+	{
+		SceneProxy->bSkipGPUOcclusion = bSkipGPUOcclusion;
+	}
+}
+
 // ============================================================
 // MarkRenderTransformDirty / MarkRenderVisibilityDirty
 //   프록시 dirty + Octree(액터 단위 dirty) + PickingBVH dirty + VisibleSet 무효화

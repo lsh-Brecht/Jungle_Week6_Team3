@@ -141,6 +141,7 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 	const bool bShowBoundingVolume = RenderBus.GetShowFlags().bBoundingVolume;
 	const bool bShowSelectionOutline = RenderBus.GetShowFlags().bSelectionOutline;
 	const bool bShowDecal = RenderBus.GetShowFlags().bDecal;
+	const bool bShowBillboardText = RenderBus.GetShowFlags().bBillboardText;
 	SCOPE_STAT_CAT("CollectVisibleProxy", "3_Collect");
 
 	const FGPUOcclusionCulling* Occlusion = RenderBus.GetOcclusionCulling();
@@ -175,14 +176,15 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 
 		if (!Proxy->bVisible) continue;
 
-		if (!bShowDecal && (Proxy->Pass == ERenderPass::Decal || Proxy->Pass == ERenderPass::MeshDecal)) continue;
+		if (!bShowDecal && (Proxy->Pass == ERenderPass::Decal || Proxy->Pass == ERenderPass::ProjectionDecal)) continue;
+		if (!bShowBillboardText && (Proxy->Pass == ERenderPass::Billboard || Proxy->Pass == ERenderPass::Font)) continue;
 
 		// AABB 수집 — 오클루전 체크 전에 수집해야 다음 프레임에 재평가 가능
 		if (OcclusionMut)
 			OcclusionMut->GatherAABB(Proxy);
 
 		// GPU Occlusion Culling — 이전 프레임에서 가려진 프록시 스킵
-		if (Occlusion && !Proxy->bNeverCull && Occlusion->IsOccluded(Proxy))
+		if (Occlusion && !Proxy->bNeverCull && !Proxy->bSkipGPUOcclusion && Occlusion->IsOccluded(Proxy))
 			continue;
 
 		// Batcher 경유 렌더링 (Font, SubUV)
@@ -217,4 +219,5 @@ void FRenderCollector::CollectVisibleProxies(const TArray<FPrimitiveSceneProxy*>
 	if (OcclusionMut && OcclusionMut->IsInitialized())
 		OcclusionMut->EndGatherAABB();
 }
+
 

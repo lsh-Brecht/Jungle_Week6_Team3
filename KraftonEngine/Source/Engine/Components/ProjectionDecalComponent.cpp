@@ -1,13 +1,13 @@
-#include "Components/MeshDecalComponent.h"
+﻿#include "Components/ProjectionDecalComponent.h"
 
 #include "Materials/MaterialInterface.h"
-#include "Mesh/MeshDecalMeshBuilder.h"
+#include "Mesh/ProjectionDecalMeshBuilder.h"
 #include "Mesh/ObjManager.h"
 #include "Object/ObjectFactory.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Render/Proxy/FScene.h"
-#include "Render/Proxy/MeshDecalSceneProxy.h"
+#include "Render/Proxy/ProjectionDecalSceneProxy.h"
 #include "Resource/ResourceManager.h"
 #include "Serialization/Archive.h"
 #include "Texture/Texture2D.h"
@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <cstring>
 
-IMPLEMENT_CLASS(UMeshDecalComponent, UPrimitiveComponent)
+IMPLEMENT_CLASS(UProjectionDecalComponent, UPrimitiveComponent)
 
 namespace
 {
@@ -46,7 +46,7 @@ namespace
 		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
 	}
 
-	void EnsureFadeCanTick(UMeshDecalComponent* Component)
+	void EnsureFadeCanTick(UProjectionDecalComponent* Component)
 	{
 		if (!Component)
 		{
@@ -62,40 +62,40 @@ namespace
 	}
 }
 
-UMeshDecalComponent::UMeshDecalComponent()
+UProjectionDecalComponent::UProjectionDecalComponent()
 {
 	bTickEnable = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
-	OriginalAlpha = MeshDecalColor.A;
+	OriginalAlpha = ProjectionDecalColor.A;
 }
 
-void UMeshDecalComponent::Serialize(FArchive& Ar)
+void UProjectionDecalComponent::Serialize(FArchive& Ar)
 {
 	UPrimitiveComponent::Serialize(Ar);
 
 	if (Ar.IsSaving())
 	{
-		if (MeshDecalTextureName.IsValid())
+		if (ProjectionDecalTextureName.IsValid())
 		{
-			MeshDecalMaterialPath = MakeDecalTextureMaterialPath(MeshDecalTextureName);
+			ProjectionDecalMaterialPath = MakeDecalTextureMaterialPath(ProjectionDecalTextureName);
 		}
 		else
 		{
-			MeshDecalMaterialPath = MeshDecalMaterial ? MeshDecalMaterial->GetAssetPathFileName() : "None";
+			ProjectionDecalMaterialPath = ProjectionDecalMaterial ? ProjectionDecalMaterial->GetAssetPathFileName() : "None";
 		}
-		MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
+		ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
 	}
 
-	Ar << MeshDecalSize;
-	Ar << MeshDecalColor;
+	Ar << ProjectionDecalSize;
+	Ar << ProjectionDecalColor;
 	Ar << FadeStartDelay;
 	Ar << FadeDuration;
 	Ar << FadeInDuration;
 	Ar << FadeInStartDelay;
 	Ar << bDestroyOwnerAfterFade;
-	Ar << MeshDecalMaterialPath;
-	Ar << MeshDecalMaterialSlot.bUVScroll;
+	Ar << ProjectionDecalMaterialPath;
+	Ar << ProjectionDecalMaterialSlot.bUVScroll;
 	Ar << SortOrder;
 	Ar << bReceivesDecalOnly;
 	Ar << bExcludeSameOwner;
@@ -103,25 +103,25 @@ void UMeshDecalComponent::Serialize(FArchive& Ar)
 
 	if (Ar.IsLoading())
 	{
-		MeshDecalSize = SanitizeSize(MeshDecalSize);
-		OriginalAlpha = MeshDecalColor.A;
-		MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
+		ProjectionDecalSize = SanitizeSize(ProjectionDecalSize);
+		OriginalAlpha = ProjectionDecalColor.A;
+		ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
 		ReloadMaterialFromPath();
-		MarkMeshDecalDirty();
+		MarkProjectionDecalDirty();
 		MarkWorldBoundsDirty();
 	}
 }
 
-void UMeshDecalComponent::PostDuplicate()
+void UProjectionDecalComponent::PostDuplicate()
 {
 	UPrimitiveComponent::PostDuplicate();
-	OriginalAlpha = MeshDecalColor.A;
+	OriginalAlpha = ProjectionDecalColor.A;
 	ReloadMaterialFromPath();
-	MarkMeshDecalDirty();
+	MarkProjectionDecalDirty();
 	MarkWorldBoundsDirty();
 }
 
-void UMeshDecalComponent::BeginPlay()
+void UProjectionDecalComponent::BeginPlay()
 {
 	UPrimitiveComponent::BeginPlay();
 
@@ -142,41 +142,41 @@ void UMeshDecalComponent::BeginPlay()
 	}
 }
 
-void UMeshDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
+void UProjectionDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
 {
 	UPrimitiveComponent::GetEditableProperties(OutProps);
-	OutProps.push_back({ "Mesh Decal Size", EPropertyType::Vec3, &MeshDecalSize });
-	OutProps.push_back({ "Mesh Decal Material", EPropertyType::MaterialSlot, &MeshDecalMaterialSlot });
+	OutProps.push_back({ "Projection Decal Size", EPropertyType::Vec3, &ProjectionDecalSize });
+	OutProps.push_back({ "Projection Decal Material", EPropertyType::MaterialSlot, &ProjectionDecalMaterialSlot });
 	OutProps.push_back({ "Fade Start Delay", EPropertyType::Float, &FadeStartDelay });
 	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
 	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
 	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
 	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
-	OutProps.push_back({ "Mesh Decal Color", EPropertyType::Vec4, &MeshDecalColor });
+	OutProps.push_back({ "Projection Decal Color", EPropertyType::Vec4, &ProjectionDecalColor });
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
 	OutProps.push_back({ "Receives Decal Only", EPropertyType::Bool, &bReceivesDecalOnly });
 	OutProps.push_back({ "Exclude Same Owner", EPropertyType::Bool, &bExcludeSameOwner });
 	OutProps.push_back({ "Loose Triangle Accept", EPropertyType::Bool, &bLooseTriangleAccept });
 }
 
-void UMeshDecalComponent::PostEditProperty(const char* PropertyName)
+void UProjectionDecalComponent::PostEditProperty(const char* PropertyName)
 {
 	UPrimitiveComponent::PostEditProperty(PropertyName);
 
-	if (std::strcmp(PropertyName, "Mesh Decal Size") == 0)
+	if (std::strcmp(PropertyName, "Projection Decal Size") == 0)
 	{
-		SetMeshDecalSize(MeshDecalSize);
+		SetProjectionDecalSize(ProjectionDecalSize);
 	}
-	else if (std::strcmp(PropertyName, "Mesh Decal Material") == 0 || std::strcmp(PropertyName, "Element 0") == 0)
+	else if (std::strcmp(PropertyName, "Projection Decal Material") == 0 || std::strcmp(PropertyName, "Element 0") == 0)
 	{
-		MeshDecalMaterialPath = MeshDecalMaterialSlot.Path;
+		ProjectionDecalMaterialPath = ProjectionDecalMaterialSlot.Path;
 		ReloadMaterialFromPath();
-		MarkMeshDecalDirty();
+		MarkProjectionDecalDirty();
 		MarkProxyDirty(EDirtyFlag::Material);
 	}
-	else if (std::strcmp(PropertyName, "Mesh Decal Color") == 0)
+	else if (std::strcmp(PropertyName, "Projection Decal Color") == 0)
 	{
-		SetMeshDecalColor(MeshDecalColor);
+		SetProjectionDecalColor(ProjectionDecalColor);
 	}
 	else if (std::strcmp(PropertyName, "Fade Start Delay") == 0
 		|| std::strcmp(PropertyName, "Fade Duration") == 0
@@ -199,7 +199,7 @@ void UMeshDecalComponent::PostEditProperty(const char* PropertyName)
 			bPendingFadeOutAfterFadeIn = false;
 			if (OriginalAlpha > 0.0f)
 			{
-				MeshDecalColor.A = OriginalAlpha;
+				ProjectionDecalColor.A = OriginalAlpha;
 			}
 			MarkProxyDirty(EDirtyFlag::Transform);
 		}
@@ -212,48 +212,48 @@ void UMeshDecalComponent::PostEditProperty(const char* PropertyName)
 		|| std::strcmp(PropertyName, "Exclude Same Owner") == 0
 		|| std::strcmp(PropertyName, "Loose Triangle Accept") == 0)
 	{
-		MarkMeshDecalDirty();
+		MarkProjectionDecalDirty();
 	}
 }
 
-void UMeshDecalComponent::OnTransformDirty()
+void UProjectionDecalComponent::OnTransformDirty()
 {
 	UPrimitiveComponent::OnTransformDirty();
-	MarkMeshDecalDirty();
+	MarkProjectionDecalDirty();
 }
 
-void UMeshDecalComponent::SetMeshDecalSize(const FVector& InSize)
+void UProjectionDecalComponent::SetProjectionDecalSize(const FVector& InSize)
 {
-	MeshDecalSize = SanitizeSize(InSize);
+	ProjectionDecalSize = SanitizeSize(InSize);
 	MarkWorldBoundsDirty();
-	MarkMeshDecalDirty();
+	MarkProjectionDecalDirty();
 }
 
-void UMeshDecalComponent::SetMeshDecalMaterial(UMaterialInterface* InMaterial)
+void UProjectionDecalComponent::SetProjectionDecalMaterial(UMaterialInterface* InMaterial)
 {
-	MeshDecalMaterial = InMaterial;
-	MeshDecalTextureName = FName();
-	MeshDecalTexture = nullptr;
-	MeshDecalMaterialPath = MeshDecalMaterial ? MeshDecalMaterial->GetAssetPathFileName() : "None";
-	MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
-	MarkMeshDecalDirty();
+	ProjectionDecalMaterial = InMaterial;
+	ProjectionDecalTextureName = FName();
+	ProjectionDecalTexture = nullptr;
+	ProjectionDecalMaterialPath = ProjectionDecalMaterial ? ProjectionDecalMaterial->GetAssetPathFileName() : "None";
+	ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
+	MarkProjectionDecalDirty();
 	MarkProxyDirty(EDirtyFlag::Material);
 }
 
-void UMeshDecalComponent::SetMeshDecalTexture(const FName& TextureName)
+void UProjectionDecalComponent::SetProjectionDecalTexture(const FName& TextureName)
 {
-	MeshDecalMaterial = nullptr;
-	MeshDecalTextureName = TextureName;
-	MeshDecalTexture = FResourceManager::Get().FindTexture(TextureName);
-	MeshDecalMaterialPath = MeshDecalTexture ? MakeDecalTextureMaterialPath(TextureName) : "None";
-	MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
-	MarkMeshDecalDirty();
+	ProjectionDecalMaterial = nullptr;
+	ProjectionDecalTextureName = TextureName;
+	ProjectionDecalTexture = FResourceManager::Get().FindTexture(TextureName);
+	ProjectionDecalMaterialPath = ProjectionDecalTexture ? MakeDecalTextureMaterialPath(TextureName) : "None";
+	ProjectionDecalMaterialSlot.Path = ProjectionDecalMaterialPath;
+	MarkProjectionDecalDirty();
 	MarkProxyDirty(EDirtyFlag::Material);
 }
 
-void UMeshDecalComponent::SetMeshDecalColor(const FLinearColor& Color)
+void UProjectionDecalComponent::SetProjectionDecalColor(const FLinearColor& Color)
 {
-	MeshDecalColor = Color;
+	ProjectionDecalColor = Color;
 	if (!bIsFadeInActive && !bIsFadeOutActive)
 	{
 		OriginalAlpha = Color.A;
@@ -261,7 +261,7 @@ void UMeshDecalComponent::SetMeshDecalColor(const FLinearColor& Color)
 	MarkProxyDirty(EDirtyFlag::Transform);
 }
 
-void UMeshDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
+void UProjectionDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
 {
 	FadeStartDelay = std::max(0.0f, StartDelay);
 	FadeDuration = std::max(0.0f, Duration);
@@ -271,12 +271,12 @@ void UMeshDecalComponent::SetFadeOut(float StartDelay, float Duration, bool Dest
 	FadeOutTimeElapsed = 0.0f;
 	bIsFadeOutActive = true;
 	bPendingFadeOutAfterFadeIn = false;
-	OriginalAlpha = MeshDecalColor.A;
+	OriginalAlpha = ProjectionDecalColor.A;
 	SetVisibility(true);
 	EnsureFadeCanTick(this);
 }
 
-void UMeshDecalComponent::SetFadeIn(float StartDelay, float Duration)
+void UProjectionDecalComponent::SetFadeIn(float StartDelay, float Duration)
 {
 	FadeInStartDelay = std::max(0.0f, StartDelay);
 	FadeInDuration = std::max(0.0f, Duration);
@@ -287,15 +287,15 @@ void UMeshDecalComponent::SetFadeIn(float StartDelay, float Duration)
 
 	if (OriginalAlpha <= 0.0f)
 	{
-		OriginalAlpha = (MeshDecalColor.A > 0.0f) ? MeshDecalColor.A : 1.0f;
+		OriginalAlpha = (ProjectionDecalColor.A > 0.0f) ? ProjectionDecalColor.A : 1.0f;
 	}
-	MeshDecalColor.A = 0.0f;
+	ProjectionDecalColor.A = 0.0f;
 	SetVisibility(true);
 	EnsureFadeCanTick(this);
 	MarkProxyDirty(EDirtyFlag::Transform);
 }
 
-void UMeshDecalComponent::RestartFadePreviewSequence()
+void UProjectionDecalComponent::RestartFadePreviewSequence()
 {
 	FadeStartDelay = std::max(0.0f, FadeStartDelay);
 	FadeDuration = std::max(0.0f, FadeDuration);
@@ -319,25 +319,25 @@ void UMeshDecalComponent::RestartFadePreviewSequence()
 		bIsFadeInActive = false;
 		bIsFadeOutActive = false;
 		bPendingFadeOutAfterFadeIn = false;
-		MeshDecalColor.A = OriginalAlpha;
+		ProjectionDecalColor.A = OriginalAlpha;
 		SetVisibility(true);
 		MarkProxyDirty(EDirtyFlag::Transform);
 	}
 }
 
-bool UMeshDecalComponent::FitSizeToTextureAspect()
+bool UProjectionDecalComponent::FitSizeToTextureAspect()
 {
 	uint32 TextureWidth = 0;
 	uint32 TextureHeight = 0;
 
-	if (MeshDecalTexture)
+	if (ProjectionDecalTexture)
 	{
-		TextureWidth = MeshDecalTexture->Width;
-		TextureHeight = MeshDecalTexture->Height;
+		TextureWidth = ProjectionDecalTexture->Width;
+		TextureHeight = ProjectionDecalTexture->Height;
 	}
-	else if (MeshDecalMaterial)
+	else if (ProjectionDecalMaterial)
 	{
-		if (UTexture2D* DiffuseTexture = MeshDecalMaterial->GetDiffuseTexture())
+		if (UTexture2D* DiffuseTexture = ProjectionDecalMaterial->GetDiffuseTexture())
 		{
 			TextureWidth = DiffuseTexture->GetWidth();
 			TextureHeight = DiffuseTexture->GetHeight();
@@ -349,55 +349,55 @@ bool UMeshDecalComponent::FitSizeToTextureAspect()
 		return false;
 	}
 
-	if (MeshDecalSize.Y <= 0.0f)
+	if (ProjectionDecalSize.Y <= 0.0f)
 	{
-		MeshDecalSize.Y = 1.0f;
+		ProjectionDecalSize.Y = 1.0f;
 	}
 
 	const FVector WorldScale = GetWorldScale();
 	const float SafeWorldScaleY = (WorldScale.Y > 0.001f) ? WorldScale.Y : 1.0f;
 	const float SafeWorldScaleZ = (WorldScale.Z > 0.001f) ? WorldScale.Z : 1.0f;
 	const float TextureAspectYZ = static_cast<float>(TextureHeight) / static_cast<float>(TextureWidth);
-	MeshDecalSize.Z = (MeshDecalSize.Y * SafeWorldScaleY * TextureAspectYZ) / SafeWorldScaleZ;
+	ProjectionDecalSize.Z = (ProjectionDecalSize.Y * SafeWorldScaleY * TextureAspectYZ) / SafeWorldScaleZ;
 	MarkWorldBoundsDirty();
-	MarkMeshDecalDirty();
+	MarkProjectionDecalDirty();
 	return true;
 }
 
-void UMeshDecalComponent::SetSortOrder(int32 InSortOrder)
+void UProjectionDecalComponent::SetSortOrder(int32 InSortOrder)
 {
 	SortOrder = InSortOrder;
 	MarkProxyDirty(EDirtyFlag::Material);
 }
 
-void UMeshDecalComponent::MarkMeshDecalDirty()
+void UProjectionDecalComponent::MarkProjectionDecalDirty()
 {
-	bMeshDecalDirty = true;
+	bProjectionDecalDirty = true;
 	MarkProxyDirty(EDirtyFlag::Mesh);
 }
 
-void UMeshDecalComponent::EnsureMeshDecalMeshBuilt()
+void UProjectionDecalComponent::EnsureProjectionDecalMeshBuilt()
 {
-	if (!bMeshDecalDirty)
+	if (!bProjectionDecalDirty)
 	{
 		return;
 	}
 
-	BuildMeshDecalMesh();
-	bMeshDecalDirty = false;
+	BuildProjectionDecalMesh();
+	bProjectionDecalDirty = false;
 }
 
-FMatrix UMeshDecalComponent::GetMeshDecalLocalToWorldMatrix() const
+FMatrix UProjectionDecalComponent::GetProjectionDecalLocalToWorldMatrix() const
 {
-	return FMatrix::MakeScaleMatrix(MeshDecalSize) * GetWorldMatrix();
+	return FMatrix::MakeScaleMatrix(ProjectionDecalSize) * GetWorldMatrix();
 }
 
-FMatrix UMeshDecalComponent::GetWorldToMeshDecalMatrix() const
+FMatrix UProjectionDecalComponent::GetWorldToProjectionDecalMatrix() const
 {
-	return GetMeshDecalLocalToWorldMatrix().GetInverse();
+	return GetProjectionDecalLocalToWorldMatrix().GetInverse();
 }
 
-void UMeshDecalComponent::GetMeshDecalBoxCorners(FVector(&OutCorners)[8]) const
+void UProjectionDecalComponent::GetProjectionDecalBoxCorners(FVector(&OutCorners)[8]) const
 {
 	static const FVector UnitCorners[8] =
 	{
@@ -407,17 +407,17 @@ void UMeshDecalComponent::GetMeshDecalBoxCorners(FVector(&OutCorners)[8]) const
 		FVector(0.5f, 0.5f, 0.5f), FVector(-0.5f, 0.5f, 0.5f)
 	};
 
-	const FMatrix LocalToWorld = GetMeshDecalLocalToWorldMatrix();
+	const FMatrix LocalToWorld = GetProjectionDecalLocalToWorldMatrix();
 	for (int32 i = 0; i < 8; ++i)
 	{
 		OutCorners[i] = LocalToWorld.TransformPositionWithW(UnitCorners[i]);
 	}
 }
 
-FBoundingBox UMeshDecalComponent::GetMeshDecalWorldAABB() const
+FBoundingBox UProjectionDecalComponent::GetProjectionDecalWorldAABB() const
 {
 	FVector Corners[8];
-	GetMeshDecalBoxCorners(Corners);
+	GetProjectionDecalBoxCorners(Corners);
 
 	FBoundingBox Bounds;
 	for (const FVector& Corner : Corners)
@@ -427,22 +427,22 @@ FBoundingBox UMeshDecalComponent::GetMeshDecalWorldAABB() const
 	return Bounds;
 }
 
-void UMeshDecalComponent::UpdateWorldAABB() const
+void UProjectionDecalComponent::UpdateWorldAABB() const
 {
-	const FBoundingBox Bounds = GetMeshDecalWorldAABB();
+	const FBoundingBox Bounds = GetProjectionDecalWorldAABB();
 	WorldAABBMinLocation = Bounds.Min;
 	WorldAABBMaxLocation = Bounds.Max;
 	bWorldAABBDirty = false;
 	bHasValidWorldAABB = Bounds.IsValid();
 }
 
-FPrimitiveSceneProxy* UMeshDecalComponent::CreateSceneProxy()
+FPrimitiveSceneProxy* UProjectionDecalComponent::CreateSceneProxy()
 {
-	EnsureMeshDecalMeshBuilt();
-	return new FMeshDecalSceneProxy(this);
+	EnsureProjectionDecalMeshBuilt();
+	return new FProjectionDecalSceneProxy(this);
 }
 
-void UMeshDecalComponent::CreateRenderState()
+void UProjectionDecalComponent::CreateRenderState()
 {
 	if (SceneProxy)
 	{
@@ -466,14 +466,14 @@ void UMeshDecalComponent::CreateRenderState()
 		return;
 	}
 
-	ArrowOuterProxy = new FMeshDecalArrowSceneProxy(this, false);
+	ArrowOuterProxy = new FProjectionDecalArrowSceneProxy(this, false);
 	Scene->RegisterProxy(ArrowOuterProxy);
 
-	ArrowInnerProxy = new FMeshDecalArrowSceneProxy(this, true);
+	ArrowInnerProxy = new FProjectionDecalArrowSceneProxy(this, true);
 	Scene->RegisterProxy(ArrowInnerProxy);
 }
 
-void UMeshDecalComponent::DestroyRenderState()
+void UProjectionDecalComponent::DestroyRenderState()
 {
 	if (Owner && Owner->GetWorld())
 	{
@@ -493,7 +493,7 @@ void UMeshDecalComponent::DestroyRenderState()
 	UPrimitiveComponent::DestroyRenderState();
 }
 
-void UMeshDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+void UProjectionDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
@@ -508,11 +508,11 @@ void UMeshDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 			if (FadeInDuration > 0.0f)
 			{
 				const float Progress = (FadeInTimeElapsed - FadeInStartDelay) / FadeInDuration;
-				MeshDecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
+				ProjectionDecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
 			}
 			else
 			{
-				MeshDecalColor.A = OriginalAlpha;
+				ProjectionDecalColor.A = OriginalAlpha;
 			}
 
 			bColorChanged = true;
@@ -541,11 +541,11 @@ void UMeshDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 			if (FadeDuration > 0.0f)
 			{
 				const float Progress = (FadeOutTimeElapsed - FadeStartDelay) / FadeDuration;
-				MeshDecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
+				ProjectionDecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
 			}
 			else
 			{
-				MeshDecalColor.A = 0.0f;
+				ProjectionDecalColor.A = 0.0f;
 			}
 
 			bColorChanged = true;
@@ -565,7 +565,7 @@ void UMeshDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	}
 }
 
-void UMeshDecalComponent::BuildMeshDecalMesh()
+void UProjectionDecalComponent::BuildProjectionDecalMesh()
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -574,29 +574,30 @@ void UMeshDecalComponent::BuildMeshDecalMesh()
 		return;
 	}
 
-	FMeshDecalMeshBuilder::BuildRenderableMesh(*this, *World, RenderableMesh);
+	FProjectionDecalMeshBuilder::BuildRenderableMesh(*this, *World, RenderableMesh);
 }
 
-void UMeshDecalComponent::ReloadMaterialFromPath()
+void UProjectionDecalComponent::ReloadMaterialFromPath()
 {
-	if (MeshDecalMaterialPath.empty() || MeshDecalMaterialPath == "None")
+	if (ProjectionDecalMaterialPath.empty() || ProjectionDecalMaterialPath == "None")
 	{
-		MeshDecalMaterial = nullptr;
-		MeshDecalTextureName = FName();
-		MeshDecalTexture = nullptr;
+		ProjectionDecalMaterial = nullptr;
+		ProjectionDecalTextureName = FName();
+		ProjectionDecalTexture = nullptr;
 		return;
 	}
 
-	if (IsDecalTextureMaterialPath(MeshDecalMaterialPath))
+	if (IsDecalTextureMaterialPath(ProjectionDecalMaterialPath))
 	{
-		MeshDecalMaterial = nullptr;
-		MeshDecalTextureName = FName(GetDecalTextureNameFromMaterialPath(MeshDecalMaterialPath));
-		MeshDecalTexture = FResourceManager::Get().FindTexture(MeshDecalTextureName);
+		ProjectionDecalMaterial = nullptr;
+		ProjectionDecalTextureName = FName(GetDecalTextureNameFromMaterialPath(ProjectionDecalMaterialPath));
+		ProjectionDecalTexture = FResourceManager::Get().FindTexture(ProjectionDecalTextureName);
 		return;
 	}
 
-	MeshDecalMaterial = FObjManager::GetOrLoadMaterial(MeshDecalMaterialPath);
-	MeshDecalTextureName = FName();
-	MeshDecalTexture = nullptr;
+	ProjectionDecalMaterial = FObjManager::GetOrLoadMaterial(ProjectionDecalMaterialPath);
+	ProjectionDecalTextureName = FName();
+	ProjectionDecalTexture = nullptr;
 }
+
 

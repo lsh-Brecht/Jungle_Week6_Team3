@@ -105,34 +105,34 @@ struct FDrawCallStats
 struct FDecalStats
 {
 	static uint32 DecalActorCount;
-	static uint32 MeshDecalActorCount;
+	static uint32 ProjectionDecalActorCount;
 	static uint32 RenderedDecalCount;
-	static uint32 RenderedMeshDecalCount;
+	static uint32 RenderedProjectionDecalCount;
 	static uint32 AffectedObjectCountSum;
 	static uint32 AffectedObjectCountMax;
-	static uint32 MeshDecalVertexCount;
-	static uint32 MeshDecalTriangleCount;
-	static uint32 MeshDecalSectionCount;
+	static uint32 ProjectionDecalVertexCount;
+	static uint32 ProjectionDecalTriangleCount;
+	static uint32 ProjectionDecalSectionCount;
 
 	static void SetDecalActorCount(uint32 InCount) { DecalActorCount = InCount; }
-	static void SetMeshDecalActorCount(uint32 InCount) { MeshDecalActorCount = InCount; }
+	static void SetProjectionDecalActorCount(uint32 InCount) { ProjectionDecalActorCount = InCount; }
 	static void SetRenderedDecalCount(uint32 InCount) { RenderedDecalCount = InCount; }
-	static void SetRenderedMeshDecalCount(uint32 InCount) { RenderedMeshDecalCount = InCount; }
+	static void SetRenderedProjectionDecalCount(uint32 InCount) { RenderedProjectionDecalCount = InCount; }
 	static void SetAffectedObjectCountSum(uint32 InCount) { AffectedObjectCountSum = InCount; }
 	static void SetAffectedObjectCountMax(uint32 InCount) { AffectedObjectCountMax = InCount; }
-	static void SetMeshDecalVertexCount(uint32 InCount) { MeshDecalVertexCount = InCount; }
-	static void SetMeshDecalTriangleCount(uint32 InCount) { MeshDecalTriangleCount = InCount; }
-	static void SetMeshDecalSectionCount(uint32 InCount) { MeshDecalSectionCount = InCount; }
+	static void SetProjectionDecalVertexCount(uint32 InCount) { ProjectionDecalVertexCount = InCount; }
+	static void SetProjectionDecalTriangleCount(uint32 InCount) { ProjectionDecalTriangleCount = InCount; }
+	static void SetProjectionDecalSectionCount(uint32 InCount) { ProjectionDecalSectionCount = InCount; }
 
 	static uint32 GetDecalActorCount() { return DecalActorCount; }
-	static uint32 GetMeshDecalActorCount() { return MeshDecalActorCount; }
+	static uint32 GetProjectionDecalActorCount() { return ProjectionDecalActorCount; }
 	static uint32 GetRenderedDecalCount() { return RenderedDecalCount; }
-	static uint32 GetRenderedMeshDecalCount() { return RenderedMeshDecalCount; }
+	static uint32 GetRenderedProjectionDecalCount() { return RenderedProjectionDecalCount; }
 	static uint32 GetAffectedObjectCountSum() { return AffectedObjectCountSum; }
 	static uint32 GetAffectedObjectCountMax() { return AffectedObjectCountMax; }
-	static uint32 GetMeshDecalVertexCount() { return MeshDecalVertexCount; }
-	static uint32 GetMeshDecalTriangleCount() { return MeshDecalTriangleCount; }
-	static uint32 GetMeshDecalSectionCount() { return MeshDecalSectionCount; }
+	static uint32 GetProjectionDecalVertexCount() { return ProjectionDecalVertexCount; }
+	static uint32 GetProjectionDecalTriangleCount() { return ProjectionDecalTriangleCount; }
+	static uint32 GetProjectionDecalSectionCount() { return ProjectionDecalSectionCount; }
 };
 
 // --- LOD Distribution Counter ---
@@ -164,3 +164,4 @@ struct FLODStats
 #define SCOPE_STAT(Name)           ((void)0)
 #define SCOPE_STAT_CAT(Name, Cat)  ((void)0)
 #endif
+

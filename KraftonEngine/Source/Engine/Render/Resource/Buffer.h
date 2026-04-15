@@ -44,11 +44,13 @@ public:
 	void Release();
 
 	void Update(ID3D11DeviceContext* InDeviceContext, const void* InData, uint32 InByteWidth);
+	uint32 GetByteWidth() const { return ByteWidth; }
 
 	ID3D11Buffer* GetBuffer();
 
 private:
 	ID3D11Buffer* Buffer = nullptr;
+	uint32 ByteWidth = 0;
 };
 
 

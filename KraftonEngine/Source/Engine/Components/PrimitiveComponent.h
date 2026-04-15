@@ -29,6 +29,8 @@ public:
 
 	void SetVisibility(bool bNewVisible);
 	inline bool IsVisible() const { return bIsVisible; }
+	void SetSkipGPUOcclusion(bool bInSkip);
+	bool ShouldSkipGPUOcclusion() const { return bSkipGPUOcclusion; }
 
 	// 월드 공간 AABB를 FBoundingBox로 반환 (파트 B LineBatcher와의 인터페이스)
 	FBoundingBox GetWorldBoundingBox() const;
@@ -88,6 +90,7 @@ protected:
 	mutable bool bWorldAABBDirty = true;
 	mutable bool bHasValidWorldAABB = false;
 	bool bIsVisible = true;
+	bool bSkipGPUOcclusion = false;
 	FPrimitiveSceneProxy* SceneProxy = nullptr;
 	
 	FOctree* OctreeNode = nullptr;

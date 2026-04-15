@@ -4,14 +4,14 @@
 
 uint32 FDrawCallStats::Count = 0;
 uint32 FDecalStats::DecalActorCount = 0;
-uint32 FDecalStats::MeshDecalActorCount = 0;
+uint32 FDecalStats::ProjectionDecalActorCount = 0;
 uint32 FDecalStats::RenderedDecalCount = 0;
-uint32 FDecalStats::RenderedMeshDecalCount = 0;
+uint32 FDecalStats::RenderedProjectionDecalCount = 0;
 uint32 FDecalStats::AffectedObjectCountSum = 0;
 uint32 FDecalStats::AffectedObjectCountMax = 0;
-uint32 FDecalStats::MeshDecalVertexCount = 0;
-uint32 FDecalStats::MeshDecalTriangleCount = 0;
-uint32 FDecalStats::MeshDecalSectionCount = 0;
+uint32 FDecalStats::ProjectionDecalVertexCount = 0;
+uint32 FDecalStats::ProjectionDecalTriangleCount = 0;
+uint32 FDecalStats::ProjectionDecalSectionCount = 0;
 
 #if STATS
 uint32 FLODStats::LODCount[4] = { 0, 0, 0, 0 };
@@ -76,3 +76,4 @@ void FStatManager::TakeSnapshot()
 		Accum.FrameTotal = 0.0;
 	}
 }
+

@@ -5,7 +5,7 @@
 Texture2D g_txColor : register(t0);
 SamplerState g_Sample : register(s0);
 
-struct PS_Input_MeshDecal
+struct PS_Input_ProjectionDecal
 {
     float4 position : SV_POSITION;
     float4 color : COLOR;
@@ -13,9 +13,9 @@ struct PS_Input_MeshDecal
     float3 localNormal : TEXCOORD1;
 };
 
-PS_Input_MeshDecal VS(VS_Input_PNCT input)
+PS_Input_ProjectionDecal VS(VS_Input_PNCT input)
 {
-    PS_Input_MeshDecal output;
+    PS_Input_ProjectionDecal output;
     output.position = ApplyMVP(input.position);
     output.color = input.color * SectionColor * PrimitiveColor;
     output.localPos = input.position;
@@ -23,7 +23,7 @@ PS_Input_MeshDecal VS(VS_Input_PNCT input)
     return output;
 }
 
-float4 PS(PS_Input_MeshDecal input) : SV_TARGET
+float4 PS(PS_Input_ProjectionDecal input) : SV_TARGET
 {
     if (abs(input.localPos.x) > 0.5f || abs(input.localPos.y) > 0.5f || abs(input.localPos.z) > 0.5f)
     {
@@ -51,3 +51,4 @@ float4 PS(PS_Input_MeshDecal input) : SV_TARGET
     finalColor.rgb = lerp(finalColor.rgb, WireframeRGB, bIsWireframe);
     return finalColor;
 }
+
