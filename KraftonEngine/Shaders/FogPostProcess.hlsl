@@ -77,7 +77,7 @@ float4 PS(PS_Input input) : SV_TARGET
         // deferred 예제의 fakeDist = 1000과 같은 역할이며, 배경에도 fog 색을 자연스럽게 입히기 위한 분기입니다.
         float3 finalColor = sourceColor.rgb;
 
-        // 여러 fog actor가 있으면 deferred 예제와 동일하게 각 fog를 순차적으로 누적 적용합니다.
+        // CPU에서 선택한 Primary fog 하나만 적용합니다.
         for (uint i = 0; i < FogCount; ++i)
         {
             const float fogWeight = ComputeFarDepthFogWeight(Fogs[i]);
