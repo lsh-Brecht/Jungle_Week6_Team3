@@ -10,7 +10,8 @@ enum class EShaderType : uint32
 	Gizmo,
 	Editor,
 	StaticMesh,
-    Decal,
+	Decal,
+	MeshDecal,
 	//	SelectionMask 전용(OutlineMask RT 기록용)
 	SelectionMask,
 	//	PostProcess 체인 셰이더

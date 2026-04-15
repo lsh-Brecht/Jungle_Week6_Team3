@@ -329,6 +329,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 	const ERenderPass PassOrder[] = {
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
+		ERenderPass::MeshDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Grid,
 		ERenderPass::SubUV,
@@ -348,7 +349,7 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
-		if (CurPass == ERenderPass::Decal && !InRenderBus.GetShowFlags().bDecal)
+		if ((CurPass == ERenderPass::Decal || CurPass == ERenderPass::MeshDecal) && !InRenderBus.GetShowFlags().bDecal)
 		{
 			continue;
 		}
@@ -426,6 +427,7 @@ void FRenderer::InitializePassRenderStates()
 	//	Outline에 대한 Masking 방해로 인해 Patch
 	
 	// S[(uint32)E::Font] = { EDepthStencilState::Default,      EBlendState::AlphaBlend, ERasterizerState::SolidBackCull,  D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true };
+	S[(uint32)E::MeshDecal] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Translucent] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	false };
 	S[(uint32)E::SubUV] =			{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
 	S[(uint32)E::Billboard] =		{ EDepthStencilState::DepthReadOnly,	EBlendState::AlphaBlend,	ERasterizerState::SolidBackCull,	D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,	true };
@@ -1276,10 +1278,12 @@ void FRenderer::ExecuteIdPickPass(const TArray<const FPrimitiveSceneProxy*>& Pro
 		}
 
 		const bool bIsStaticMesh = (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::StaticMesh));
+		const bool bIsMeshDecal = (Proxy->Pass == ERenderPass::MeshDecal)
+			|| (Proxy->Shader == FShaderManager::Get().GetShader(EShaderType::MeshDecal));
 		const bool bIsBillboard = (Proxy->Pass == ERenderPass::Billboard);
-		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsBillboard;
+		const bool bUseTextureAlphaPick = bIsStaticMesh || bIsMeshDecal || bIsBillboard;
 		FShader* IdShader = PrimitiveShader;
-		if (bIsStaticMesh)
+		if (bIsStaticMesh || bIsMeshDecal)
 		{
 			IdShader = StaticMeshShader;
 		}
@@ -1444,6 +1448,7 @@ void FRenderer::RenderIdPickBuffer(
 	{
 		ERenderPass::Opaque,
 		ERenderPass::Decal,
+		ERenderPass::MeshDecal,
 		ERenderPass::Translucent,
 		ERenderPass::Billboard
 	};
