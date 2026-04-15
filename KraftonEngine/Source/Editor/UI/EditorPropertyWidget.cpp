@@ -880,12 +880,15 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				}
 			}
 
-      // UVScroll은 StaticMesh element 슬롯에서만 노출
-		if (bElementSlot)
+      // UVScroll은 StaticMesh element 슬롯과 MeshDecal 머티리얼 슬롯에서 노출
+		if (bElementSlot || Prop.Name == "Mesh Decal Material")
 		{
 			bool bScroll = (Slot->bUVScroll != 0);
 			if (ImGui::Checkbox("Scroll", &bScroll))
+			{
 				Slot->bUVScroll = bScroll ? 1 : 0;
+				bChanged = true;
+			}
 		}
 
 		ImGui::EndGroup();

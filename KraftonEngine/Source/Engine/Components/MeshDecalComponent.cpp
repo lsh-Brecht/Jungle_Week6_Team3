@@ -4,6 +4,7 @@
 #include "Mesh/MeshDecalMeshBuilder.h"
 #include "Mesh/ObjManager.h"
 #include "Object/ObjectFactory.h"
+#include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Render/Proxy/FScene.h"
 #include "Render/Proxy/MeshDecalSceneProxy.h"
@@ -44,6 +45,29 @@ namespace
 	{
 		return FString(DecalTextureMaterialPrefix) + TextureName.ToString();
 	}
+
+	void EnsureFadeCanTick(UMeshDecalComponent* Component)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		if (AActor* OwnerActor = Component->GetOwner())
+		{
+			OwnerActor->bNeedsTick = true;
+		}
+
+		Component->SetComponentTickEnabled(true);
+	}
+}
+
+UMeshDecalComponent::UMeshDecalComponent()
+{
+	bTickEnable = true;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
+	OriginalAlpha = MeshDecalColor.A;
 }
 
 void UMeshDecalComponent::Serialize(FArchive& Ar)
@@ -64,7 +88,14 @@ void UMeshDecalComponent::Serialize(FArchive& Ar)
 	}
 
 	Ar << MeshDecalSize;
+	Ar << MeshDecalColor;
+	Ar << FadeStartDelay;
+	Ar << FadeDuration;
+	Ar << FadeInDuration;
+	Ar << FadeInStartDelay;
+	Ar << bDestroyOwnerAfterFade;
 	Ar << MeshDecalMaterialPath;
+	Ar << MeshDecalMaterialSlot.bUVScroll;
 	Ar << SortOrder;
 	Ar << bReceivesDecalOnly;
 	Ar << bExcludeSameOwner;
@@ -73,6 +104,7 @@ void UMeshDecalComponent::Serialize(FArchive& Ar)
 	if (Ar.IsLoading())
 	{
 		MeshDecalSize = SanitizeSize(MeshDecalSize);
+		OriginalAlpha = MeshDecalColor.A;
 		MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
 		ReloadMaterialFromPath();
 		MarkMeshDecalDirty();
@@ -83,9 +115,31 @@ void UMeshDecalComponent::Serialize(FArchive& Ar)
 void UMeshDecalComponent::PostDuplicate()
 {
 	UPrimitiveComponent::PostDuplicate();
+	OriginalAlpha = MeshDecalColor.A;
 	ReloadMaterialFromPath();
 	MarkMeshDecalDirty();
 	MarkWorldBoundsDirty();
+}
+
+void UMeshDecalComponent::BeginPlay()
+{
+	UPrimitiveComponent::BeginPlay();
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig && bHasFadeOutConfig)
+	{
+		RestartFadePreviewSequence();
+	}
+	else if (bHasFadeInConfig)
+	{
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
 }
 
 void UMeshDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
@@ -93,6 +147,12 @@ void UMeshDecalComponent::GetEditableProperties(TArray<FPropertyDescriptor>& Out
 	UPrimitiveComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Mesh Decal Size", EPropertyType::Vec3, &MeshDecalSize });
 	OutProps.push_back({ "Mesh Decal Material", EPropertyType::MaterialSlot, &MeshDecalMaterialSlot });
+	OutProps.push_back({ "Fade Start Delay", EPropertyType::Float, &FadeStartDelay });
+	OutProps.push_back({ "Fade Duration", EPropertyType::Float, &FadeDuration });
+	OutProps.push_back({ "Fade In Duration", EPropertyType::Float, &FadeInDuration });
+	OutProps.push_back({ "Fade In Start Delay", EPropertyType::Float, &FadeInStartDelay });
+	OutProps.push_back({ "Destroy Owner After Fade", EPropertyType::Bool, &bDestroyOwnerAfterFade });
+	OutProps.push_back({ "Mesh Decal Color", EPropertyType::Vec4, &MeshDecalColor });
 	OutProps.push_back({ "Sort Order", EPropertyType::Int, &SortOrder });
 	OutProps.push_back({ "Receives Decal Only", EPropertyType::Bool, &bReceivesDecalOnly });
 	OutProps.push_back({ "Exclude Same Owner", EPropertyType::Bool, &bExcludeSameOwner });
@@ -112,6 +172,37 @@ void UMeshDecalComponent::PostEditProperty(const char* PropertyName)
 		MeshDecalMaterialPath = MeshDecalMaterialSlot.Path;
 		ReloadMaterialFromPath();
 		MarkMeshDecalDirty();
+		MarkProxyDirty(EDirtyFlag::Material);
+	}
+	else if (std::strcmp(PropertyName, "Mesh Decal Color") == 0)
+	{
+		SetMeshDecalColor(MeshDecalColor);
+	}
+	else if (std::strcmp(PropertyName, "Fade Start Delay") == 0
+		|| std::strcmp(PropertyName, "Fade Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Duration") == 0
+		|| std::strcmp(PropertyName, "Fade In Start Delay") == 0)
+	{
+		if (Owner && Owner->HasActorBegunPlay())
+		{
+			RestartFadePreviewSequence();
+		}
+		else
+		{
+			FadeStartDelay = std::max(0.0f, FadeStartDelay);
+			FadeDuration = std::max(0.0f, FadeDuration);
+			FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+			FadeInDuration = std::max(0.0f, FadeInDuration);
+
+			bIsFadeInActive = false;
+			bIsFadeOutActive = false;
+			bPendingFadeOutAfterFadeIn = false;
+			if (OriginalAlpha > 0.0f)
+			{
+				MeshDecalColor.A = OriginalAlpha;
+			}
+			MarkProxyDirty(EDirtyFlag::Transform);
+		}
 	}
 	else if (std::strcmp(PropertyName, "Sort Order") == 0)
 	{
@@ -158,6 +249,80 @@ void UMeshDecalComponent::SetMeshDecalTexture(const FName& TextureName)
 	MeshDecalMaterialSlot.Path = MeshDecalMaterialPath;
 	MarkMeshDecalDirty();
 	MarkProxyDirty(EDirtyFlag::Material);
+}
+
+void UMeshDecalComponent::SetMeshDecalColor(const FLinearColor& Color)
+{
+	MeshDecalColor = Color;
+	if (!bIsFadeInActive && !bIsFadeOutActive)
+	{
+		OriginalAlpha = Color.A;
+	}
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
+void UMeshDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
+{
+	FadeStartDelay = std::max(0.0f, StartDelay);
+	FadeDuration = std::max(0.0f, Duration);
+	bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
+
+	bIsFadeInActive = false;
+	FadeOutTimeElapsed = 0.0f;
+	bIsFadeOutActive = true;
+	bPendingFadeOutAfterFadeIn = false;
+	OriginalAlpha = MeshDecalColor.A;
+	SetVisibility(true);
+	EnsureFadeCanTick(this);
+}
+
+void UMeshDecalComponent::SetFadeIn(float StartDelay, float Duration)
+{
+	FadeInStartDelay = std::max(0.0f, StartDelay);
+	FadeInDuration = std::max(0.0f, Duration);
+
+	bIsFadeOutActive = false;
+	FadeInTimeElapsed = 0.0f;
+	bIsFadeInActive = true;
+
+	if (OriginalAlpha <= 0.0f)
+	{
+		OriginalAlpha = (MeshDecalColor.A > 0.0f) ? MeshDecalColor.A : 1.0f;
+	}
+	MeshDecalColor.A = 0.0f;
+	SetVisibility(true);
+	EnsureFadeCanTick(this);
+	MarkProxyDirty(EDirtyFlag::Transform);
+}
+
+void UMeshDecalComponent::RestartFadePreviewSequence()
+{
+	FadeStartDelay = std::max(0.0f, FadeStartDelay);
+	FadeDuration = std::max(0.0f, FadeDuration);
+	FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+	FadeInDuration = std::max(0.0f, FadeInDuration);
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig)
+	{
+		bPendingFadeOutAfterFadeIn = bHasFadeOutConfig;
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
+	else
+	{
+		bIsFadeInActive = false;
+		bIsFadeOutActive = false;
+		bPendingFadeOutAfterFadeIn = false;
+		MeshDecalColor.A = OriginalAlpha;
+		SetVisibility(true);
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 bool UMeshDecalComponent::FitSizeToTextureAspect()
@@ -326,6 +491,78 @@ void UMeshDecalComponent::DestroyRenderState()
 	}
 
 	UPrimitiveComponent::DestroyRenderState();
+}
+
+void UMeshDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+{
+	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	bool bColorChanged = false;
+
+	if (bIsFadeInActive)
+	{
+		FadeInTimeElapsed += DeltaTime;
+
+		if (FadeInTimeElapsed >= FadeInStartDelay)
+		{
+			if (FadeInDuration > 0.0f)
+			{
+				const float Progress = (FadeInTimeElapsed - FadeInStartDelay) / FadeInDuration;
+				MeshDecalColor.A = OriginalAlpha * std::clamp(Progress, 0.0f, 1.0f);
+			}
+			else
+			{
+				MeshDecalColor.A = OriginalAlpha;
+			}
+
+			bColorChanged = true;
+
+			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
+			{
+				bIsFadeInActive = false;
+				if (bPendingFadeOutAfterFadeIn && ((FadeStartDelay > 0.0f) || (FadeDuration > 0.0f)))
+				{
+					SetFadeOut(FadeStartDelay, FadeDuration, false);
+				}
+				else
+				{
+					bPendingFadeOutAfterFadeIn = false;
+				}
+			}
+		}
+	}
+
+	if (bIsFadeOutActive)
+	{
+		FadeOutTimeElapsed += DeltaTime;
+
+		if (FadeOutTimeElapsed >= FadeStartDelay)
+		{
+			if (FadeDuration > 0.0f)
+			{
+				const float Progress = (FadeOutTimeElapsed - FadeStartDelay) / FadeDuration;
+				MeshDecalColor.A = OriginalAlpha * (1.0f - std::clamp(Progress, 0.0f, 1.0f));
+			}
+			else
+			{
+				MeshDecalColor.A = 0.0f;
+			}
+
+			bColorChanged = true;
+
+			if (FadeOutTimeElapsed >= FadeStartDelay + FadeDuration)
+			{
+				bIsFadeOutActive = false;
+				SetVisibility(false);
+				SetComponentTickEnabled(false);
+			}
+		}
+	}
+
+	if (bColorChanged)
+	{
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 void UMeshDecalComponent::BuildMeshDecalMesh()

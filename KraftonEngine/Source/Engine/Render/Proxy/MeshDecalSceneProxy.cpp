@@ -73,7 +73,8 @@ UMeshDecalComponent* FMeshDecalSceneProxy::GetMeshDecalComponent() const
 void FMeshDecalSceneProxy::UpdateTransform()
 {
 	UMeshDecalComponent* MeshDecal = GetMeshDecalComponent();
-	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(MeshDecal->GetMeshDecalLocalToWorldMatrix());
+	PerObjectConstants.Model = MeshDecal->GetMeshDecalLocalToWorldMatrix();
+	PerObjectConstants.Color = MeshDecal->GetMeshDecalColor().ToVector4();
 	CachedWorldPos = PerObjectConstants.Model.GetLocation();
 	CachedBounds = MeshDecal->GetWorldBoundingBox();
 	MarkPerObjectCBDirty();
@@ -143,6 +144,7 @@ void FMeshDecalSceneProxy::UpdateMesh()
 			Draw.DiffuseSRV = Texture->SRV;
 			Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
 		}
+		Draw.bIsUVScroll = MeshDecal->IsMeshDecalUVScrollEnabled() ? 1 : 0;
 
 		SectionDraws.push_back(Draw);
 	}

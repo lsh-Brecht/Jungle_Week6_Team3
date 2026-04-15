@@ -34,6 +34,7 @@ public:
 	void SetMaterial(int32 ElementIndex, UMaterialInterface* InMaterial);
 	UMaterialInterface* GetMaterial(int32 ElementIndex) const;
 	const TArray<UMaterialInterface*>& GetOverrideMaterials() const { return OverrideMaterials; }
+	const TArray<FMaterialSlot>& GetMaterialSlots() const { return MaterialSlots; }
 
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;

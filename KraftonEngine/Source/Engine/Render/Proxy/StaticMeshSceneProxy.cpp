@@ -120,6 +120,7 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 
 	const auto& Slots = Mesh->GetStaticMaterials();
 	const auto& Overrides = SMC->GetOverrideMaterials();
+	const auto& MaterialSlots = SMC->GetMaterialSlots();
 	LODCount = Mesh->GetLODCount();
 
 	// 각 LOD별 SectionDraws + MeshBuffer 구축
@@ -137,9 +138,13 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 			Draw.IndexCount = Section.NumTriangles * 3;
 
 			int32 i = Section.MaterialIndex;
-         if (i >= 0 && i < static_cast<int32>(Slots.size()))
+			if (i >= 0 && i < static_cast<int32>(Slots.size()))
 			{
                UMaterialInterface* Mat = nullptr;
+				if (i < static_cast<int32>(MaterialSlots.size()))
+				{
+					Draw.bIsUVScroll = MaterialSlots[i].bUVScroll ? 1 : 0;
+				}
 
 				if (i < static_cast<int32>(Overrides.size()) && Overrides[i])
 					Mat = Overrides[i];
