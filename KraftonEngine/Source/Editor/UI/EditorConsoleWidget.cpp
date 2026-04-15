@@ -2,6 +2,8 @@
 #include "Editor/EditorEngine.h"
 #include "Editor/Subsystem/OverlayStatSystem.h"
 
+#include <cctype>
+
 void FEditorConsoleWidget::AddLog(const char* fmt, ...) {
 	char buf[1024];
 	va_list args;
@@ -32,12 +34,16 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 
 			if (Args.size() < 2)
 			{
-				AddLog("Usage: stat fps | stat memory | stat none\n");
+				AddLog("Usage: stat fps | stat memory | stat decal | stat none\n");
 				return;
 			}
 
 			FOverlayStatSystem& StatSystem = EditorEngine->GetOverlayStatSystem();
-			const FString& SubCommand = Args[1];
+            FString SubCommand = Args[1];
+			for (char& Ch : SubCommand)
+			{
+				Ch = static_cast<char>(::tolower(static_cast<unsigned char>(Ch)));
+			}
 
 			if (SubCommand == "fps")
 			{
@@ -49,6 +55,11 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 				StatSystem.ShowMemory(true);
 				AddLog("Overlay stat enabled: memory\n");
 			}
+          else if (SubCommand == "decal")
+			{
+				StatSystem.ShowDecal(true);
+				AddLog("Overlay stat enabled: decal\n");
+			}
 			else if (SubCommand == "none")
 			{
 				StatSystem.HideAll();
@@ -57,7 +68,7 @@ void FEditorConsoleWidget::Initialize(UEditorEngine* InEditorEngine)
 			else
 			{
 				AddLog("[ERROR] Unknown stat command: '%s'\n", SubCommand.c_str());
-				AddLog("Usage: stat fps | stat memory | stat none\n");
+              AddLog("Usage: stat fps | stat memory | stat decal | stat none\n");
 			}
 		});
 }

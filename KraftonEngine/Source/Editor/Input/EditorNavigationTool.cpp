@@ -228,12 +228,17 @@ void FEditorNavigationTool::FocusOnTarget(const FVector& Target, float DesiredDi
 	UCameraComponent* Camera = Owner->GetCamera();
 	if (Camera->IsOrthogonal())
 	{
-		const FVector Right = CameraTargetRotation.GetRightVector().Normalized();
-		const FVector Up = CameraTargetRotation.GetUpVector().Normalized();
-		const FVector ToTarget = Target - CameraTargetLocation;
-		CameraTargetLocation = CameraTargetLocation + Right * ToTarget.Dot(Right) + Up * ToTarget.Dot(Up);
+		// Fixed/Free Ortho 포커스는 카메라 회전을 건드리지 않고
+		// 현재 뷰 평면(Right/Up) 상에서만 이동시켜 target을 중앙에 맞춘다.
+		// 기존 회전 재설정 경로는 Ortho 축이 틀어지거나 다른 시점처럼 보이는 원인이 된다.
+		const FVector CurrentLocation = Camera->GetWorldLocation();
+		const FVector Right = Camera->GetRightVector().Normalized();
+		const FVector Up = Camera->GetUpVector().Normalized();
+		const FVector ToTarget = Target - CurrentLocation;
+		const FVector DeltaInViewPlane = Right * ToTarget.Dot(Right) + Up * ToTarget.Dot(Up);
+		CameraTargetLocation = CurrentLocation + DeltaInViewPlane;
 		Camera->SetWorldLocation(CameraTargetLocation);
-		Camera->SetRelativeRotation(CameraTargetRotation);
+		CameraTargetRotation = Camera->GetRelativeRotation();
 		return;
 	}
 

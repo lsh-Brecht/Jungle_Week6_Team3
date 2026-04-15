@@ -296,6 +296,7 @@ void FLevelViewportLayout::SetActiveViewport(FLevelEditorViewportClient* InClien
 	if (ActiveViewportClient)
 	{
 		ActiveViewportClient->SetActive(true);
+		ActiveViewportClient->SyncNavigationCameraTargetFromCurrent();
 		UWorld* World = Editor->GetWorld();
 		if (World && ActiveViewportClient->GetCamera())
 		{
@@ -1479,7 +1480,7 @@ void FLevelViewportLayout::RenderPlaceActorPopup(bool bPlaceActorPopupWasOpen)
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(110.0f, 0.0f), ImGuiCond_Appearing);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(130.0f, 0.0f), ImVec2(130.0f, FLT_MAX));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(130.0f, 40.f), ImVec2(130.0f, FLT_MAX));
 	if (ImGui::BeginPopup("##ViewportPlaceActorPopup"))
 	{
 		if (ContextMenuState.bForceNextPopupPos)

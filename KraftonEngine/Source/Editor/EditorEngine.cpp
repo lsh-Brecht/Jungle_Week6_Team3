@@ -541,6 +541,28 @@ void UEditorEngine::StartPlayInEditorSession(const FRequestPlaySessionParams& Pa
 	Info.OriginalRequestParams = Params;
 	Info.PIEStartTime = 0.0;
 	Info.PreviousActiveWorldHandle = GetActiveWorldHandle();
+	const TArray<FLevelEditorViewportClient*>& LevelViewportClients = ViewportLayout.GetLevelViewportClients();
+	Info.SavedViewportCameras.clear();
+	Info.SavedViewportCameras.reserve(LevelViewportClients.size());
+	for (FLevelEditorViewportClient* VC : LevelViewportClients)
+	{
+		if (!VC)
+		{
+			continue;
+		}
+
+		FPIEViewportCameraSnapshotEntry Entry;
+		Entry.ViewportClient = VC;
+		if (UCameraComponent* VCCamera = VC->GetCamera())
+		{
+			Entry.Snapshot.Location = VCCamera->GetWorldLocation();
+			Entry.Snapshot.Rotation = VCCamera->GetRelativeRotation();
+			Entry.Snapshot.CameraState = VCCamera->GetCameraState();
+			Entry.Snapshot.bValid = true;
+		}
+		Info.SavedViewportCameras.push_back(Entry);
+	}
+
 	if (FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport())
 	{
 		if (UCameraComponent* VCCamera = ActiveVC->GetCamera())
@@ -639,21 +661,51 @@ void UEditorEngine::EndPlayMap()
 		EditorWorld->InvalidateVisibleSet();
 		EditorWorld->GetScene().MarkAllPerObjectCBDirty();
 
-		// ActiveCamera는 PIE 시작 시 PIE 월드로 옮겨졌고 PIE 월드와 함께 파괴됐다.
-		// Editor 월드의 ActiveCamera는 여전히 그 dangling 포인터를 가리킬 수 있으므로
-		// 활성 뷰포트의 카메라로 다시 바인딩해 줘야 frustum culling이 정상 동작한다.
-		if (FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport())
+		// PIE 시작 시점의 모든 에디터 뷰포트 카메라를 복원한다.
+		for (const FPIEViewportCameraSnapshotEntry& Entry : PlayInEditorSessionInfo->SavedViewportCameras)
 		{
-			if (UCameraComponent* VCCamera = ActiveVC->GetCamera())
+			if (!Entry.ViewportClient || !Entry.Snapshot.bValid)
 			{
-				if (PlayInEditorSessionInfo->SavedViewportCamera.bValid)
+				continue;
+			}
+
+			if (UCameraComponent* VCCamera = Entry.ViewportClient->GetCamera())
+			{
+				VCCamera->SetWorldLocation(Entry.Snapshot.Location);
+				VCCamera->SetRelativeRotation(Entry.Snapshot.Rotation);
+				VCCamera->SetCameraState(Entry.Snapshot.CameraState);
+			}
+		}
+
+		// 레거시 백업(활성 슬롯 1개)과의 호환: 혹시 배열 복원이 비어 있으면 기존 경로 사용.
+		if (PlayInEditorSessionInfo->SavedViewportCameras.empty() && PlayInEditorSessionInfo->SavedViewportCamera.bValid)
+		{
+			if (FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport())
+			{
+				if (UCameraComponent* VCCamera = ActiveVC->GetCamera())
 				{
 					const FPIEViewportCameraSnapshot& SavedCamera = PlayInEditorSessionInfo->SavedViewportCamera;
 					VCCamera->SetWorldLocation(SavedCamera.Location);
 					VCCamera->SetRelativeRotation(SavedCamera.Rotation);
 					VCCamera->SetCameraState(SavedCamera.CameraState);
 				}
+			}
+		}
 
+		for (FLevelEditorViewportClient* VC : ViewportLayout.GetLevelViewportClients())
+		{
+			if (VC)
+			{
+				VC->SyncNavigationCameraTargetFromCurrent();
+			}
+		}
+
+		// ActiveCamera는 PIE 시작 시 PIE 월드로 옮겨졌고 PIE 월드와 함께 파괴됐다.
+		// Editor 월드의 ActiveCamera는 여전히 dangling일 수 있으므로 활성 뷰포트 카메라로 재바인딩.
+		if (FLevelEditorViewportClient* ActiveVC = ViewportLayout.GetActiveViewport())
+		{
+			if (UCameraComponent* VCCamera = ActiveVC->GetCamera())
+			{
 				EditorWorld->SetActiveCamera(VCCamera);
 			}
 		}

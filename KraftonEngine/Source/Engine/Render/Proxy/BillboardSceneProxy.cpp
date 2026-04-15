@@ -12,6 +12,9 @@ FBillboardSceneProxy::FBillboardSceneProxy(UBillboardComponent* InComponent)
 {
 	bPerViewportUpdate = true;
 	bShowAABB = false;
+	// Billboard는 per-viewport 회전 특성상 GPU occlusion에서 false negative가 발생할 수 있다.
+	// Frustum culling은 유지하고, occlusion만 제외한다.
+	bSkipGPUOcclusion = true;
 	// 텍스처가 세팅돼 있으면 SubUV batcher 경로를 사용한다 (1x1 atlas로 단일 텍스처 렌더링).
 	// 텍스처가 없으면 기존 Primitive 셰이더 경로 유지.
 	bBatcherRendered = (InComponent && InComponent->GetTexture() != nullptr);

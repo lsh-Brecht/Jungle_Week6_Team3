@@ -92,4 +92,11 @@ cbuffer MaterialBuffer : register(b4)
     float4 SectionColor;
 }
 
+// b7: ID picking
+cbuffer PickingBuffer : register(b7)
+{
+    uint PickingId;
+    float3 _pickPad;
+}
+
 #endif // CONSTANT_BUFFERS_HLSL

@@ -73,6 +73,9 @@ FDecalSceneProxy::FDecalSceneProxy(UDecalComponent* InComponent)
 	bShowAABB = false;
 	bSupportsOutline = false;
 	bPerViewportUpdate = true; // OBB-Frustum 컬링을 위해 매 프레임 UpdatePerViewport 호출
+	// Single viewport에서만 활성화되는 GPU occlusion에 의해
+	// 선택 볼륨(Decal/SpotLight) 가이드가 사라지지 않도록 제외한다.
+	bSkipGPUOcclusion = true;
 }
 
 void FDecalSceneProxy::UpdateMesh()
@@ -194,7 +197,13 @@ void FDecalSceneProxy::UpdatePerViewport(const FRenderBus& Bus)
 	if (World)
 	{
 		FDecalGeometryChecker Checker;
-		bHasGeometry = Checker.HasOverlappingGeometry(DecalComp, *World);
+       int32 OverlappingObjectCount = 0;
+		bHasGeometry = Checker.HasOverlappingGeometry(DecalComp, *World, &OverlappingObjectCount);
+        LastOverlappingObjectCount = (OverlappingObjectCount > 0) ? static_cast<uint32>(OverlappingObjectCount) : 0;
+	}
+	else
+	{
+		LastOverlappingObjectCount = 0;
 	}
 
 	// 지오메트리 상태가 바뀐 경우에만 SectionDraws 재구성
@@ -259,6 +268,7 @@ FDecalArrowSceneProxy::FDecalArrowSceneProxy(UDecalComponent* InComponent, bool 
 {
 	bPerViewportUpdate = true;
 	bNeverCull = true;
+	bSkipGPUOcclusion = true;
 	bShowAABB = false;
 	bSupportsOutline = false;
 	Pass = bInner ? ERenderPass::GizmoInner : ERenderPass::GizmoOuter;

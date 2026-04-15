@@ -6,9 +6,11 @@
 #include "Viewport/Viewport.h"
 #include "Components/CameraComponent.h"
 #include "Components/GizmoComponent.h"
+#include "GameFramework/DecalActor.h"
 #include "GameFramework/World.h"
 #include "Profiling/Stats.h"
 #include "Profiling/GPUProfiler.h"
+#include "Render/Proxy/DecalSceneProxy.h"
 
 FEditorRenderPipeline::FEditorRenderPipeline(UEditorEngine* InEditor, FRenderer& InRenderer)
 	: Editor(InEditor)
@@ -128,7 +130,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		// Gizmo axis mask must be updated before per-viewport proxy collection.
 		// Otherwise gizmo proxy can read stale mask from a previous viewport/frame.
 		if (UGizmoComponent* Gizmo = Editor->GetGizmo())
-			Gizmo->UpdateAxisMask(Opts.ViewportType);
+			Gizmo->UpdateAxisMask(Opts.ViewportType, Camera->IsOrthogonal());
 
 		Collector.CollectVisibleList(World, VisibleProxiesForViewport, Bus);
 
@@ -159,6 +161,34 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		if (EffectiveShowFlags.bOctree)
 			Collector.CollectOctreeDebug(World->GetOctree(), Bus);
 
+	}
+
+	{
+		uint32 DecalActorCount = 0;
+		for (AActor* Actor : World->GetActors())
+		{
+			if (Cast<ADecalActor>(Actor))
+			{
+				++DecalActorCount;
+			}
+		}
+
+     const TArray<const FPrimitiveSceneProxy*>& RenderedDecalProxies = Bus.GetProxies(ERenderPass::Decal);
+		uint32 AffectedObjectCount = 0;
+        for (const FPrimitiveSceneProxy* Proxy : RenderedDecalProxies)
+		{
+			if (!Proxy)
+			{
+				continue;
+			}
+
+           const FDecalSceneProxy* DecalProxy = static_cast<const FDecalSceneProxy*>(Proxy);
+			AffectedObjectCount += DecalProxy->GetLastOverlappingObjectCount();
+		}
+
+		FDecalStats::SetDecalActorCount(DecalActorCount);
+		FDecalStats::SetRenderedDecalCount(static_cast<uint32>(RenderedDecalProxies.size()));
+		FDecalStats::SetAffectedObjectCount(AffectedObjectCount);
 	}
 
 	// 3. Batcher 준비
