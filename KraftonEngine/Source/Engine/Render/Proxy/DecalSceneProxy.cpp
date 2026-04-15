@@ -1,4 +1,4 @@
-﻿#include "Render/Proxy/DecalSceneProxy.h"
+#include "Render/Proxy/DecalSceneProxy.h"
 
 #include "Components/DecalComponent.h"
 #include "Materials/MaterialInterface.h"
@@ -22,8 +22,8 @@ void FDecalSceneProxy::UpdateTransform()
 {
 	UDecalComponent* Decal = GetDecalComponent();
 
-	// RenderableMesh의 Position이 decal local 기준이므로
-	// 모델 행렬은 decal local -> world 여야 합니다.
+	// CPU가 SAT까지 통과시킨 triangle들을 decal local 공간으로 저장해 두므로,
+	// 렌더링 때는 "decal local -> world" 모델 행렬만 넘기면 원래 receiver 표면 위치에 다시 올라갑니다.
 	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(Decal->GetDecalLocalToWorldMatrix());
 	CachedWorldPos = PerObjectConstants.Model.GetLocation();
 	CachedBounds = Decal->GetWorldBoundingBox();
@@ -53,6 +53,9 @@ void FDecalSceneProxy::UpdateMesh()
 		return;
 	}
 
+	// 여기서 GPU에 올리는 메쉬는 "박스로 clip된 메쉬"가 아니라,
+	// SAT를 통과한 receiver triangle을 decal local 좌표로 옮긴 결과입니다.
+	// 실제 decal box 마스킹은 pixel shader가 localPos 범위 검사로 처리합니다.
 	TMeshData<FVertexPNCT> MeshData;
 	MeshData.Vertices.reserve(SrcMesh.Vertices.size());
 	MeshData.Indices = SrcMesh.Indices;

@@ -111,26 +111,25 @@ void UDecalComponent::BuildDecalMesh()
 	}
 
 	TArray<FDecalPrimitiveCandidate> Candidates;
-	TArray<FDecalSourceTriangle> SourceTriangles;
-	TArray<FDecalLocalTriangle> LocalTriangles;
-	TArray<FDecalCoarseOverlapTriangle> CoarseTriangles;
-	TArray<FDecalSATTriangle> SATTriangles;
-	TArray<FDecalClippedPolygon> ClippedPolygons;
-	TArray<FDecalTriangulatedTriangle> Triangles;
-	TArray<FDecalUVTriangle> UVTriangles;
+	TArray<FDecalPrimitiveCandidate> SATFilteredCandidates;
 
+	/*
+		현재 decal 경로:
+		1) 월드 AABB로 1차 후보 mesh 수집
+		2) decal OBB vs mesh AABB SAT로 실제 겹치는 mesh만 남김
+		3) 통과한 mesh 전체를 decal local 공간으로 GPU에 업로드
+		4) pixel shader에서 localPos를 검사해 decal box 밖 픽셀 discard
+		5) localPos(YZ)로 UV를 계산해 texture를 샘플링
+
+		즉 SAT는 "primitive bounds 필터"에만 쓰고,
+		삼각형 clip은 하지 않는 projection 스타일 경로입니다.
+	*/
 	FDecalMeshBuilder::GatherBroadPhaseCandidates(*this, *World, Candidates, nullptr);
-	FDecalMeshBuilder::GatherBVHFilteredTriangles(*this, Candidates, SourceTriangles, nullptr);
-	FDecalMeshBuilder::TransformTrianglesToDecalLocal(*this, SourceTriangles, LocalTriangles, nullptr);
-	FDecalMeshBuilder::GatherCoarseOverlapTriangles(LocalTriangles, CoarseTriangles, nullptr);
-	FDecalMeshBuilder::GatherSATOverlapTriangles(CoarseTriangles, SATTriangles, nullptr);
-	FDecalMeshBuilder::ClipSATTrianglesAgainstDecalBox(SATTriangles, ClippedPolygons, nullptr);
-	FDecalMeshBuilder::TriangulateClippedPolygons(ClippedPolygons, Triangles, nullptr);
-	FDecalMeshBuilder::ComputeTriangleUVs(Triangles, UVTriangles, nullptr);
-	FDecalMeshBuilder::BuildRenderableMesh(UVTriangles, RenderableMesh, nullptr);
+	FDecalMeshBuilder::FilterPrimitiveCandidatesByDecalOBBSAT(*this, Candidates, SATFilteredCandidates);
+	FDecalMeshBuilder::BuildProjectedRenderableMeshFromCandidates(*this, SATFilteredCandidates, RenderableMesh);
 
-	DebugReceiverTriangles = SATTriangles;
-	DebugClippedTriangles = Triangles;
+	DebugReceiverTriangles.clear();
+	DebugClippedTriangles.clear();
 }
 
 void UDecalComponent::RebuildDecalMeshNow()

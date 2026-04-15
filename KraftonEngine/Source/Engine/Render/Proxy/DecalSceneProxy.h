@@ -2,7 +2,6 @@
 
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Render/Resource/Buffer.h"
-
 class UDecalComponent;
 
 class FDecalSceneProxy : public FPrimitiveSceneProxy

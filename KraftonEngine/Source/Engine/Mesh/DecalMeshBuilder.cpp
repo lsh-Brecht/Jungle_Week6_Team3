@@ -11,6 +11,13 @@
 
 namespace
 {
+	struct FOrientedBox
+	{
+		FVector Center;
+		FVector Axis[3];
+		FVector Extent;
+	};
+
 	FVector ComputeTriangleNormal(const FVector& A, const FVector& B, const FVector& C)
 	{
 		const FVector Edge01 = B - A;
@@ -360,6 +367,119 @@ namespace
 			LocalBounds.Expand(WorldToMesh.TransformPositionWithW(WorldCorner));
 		}
 		return LocalBounds;
+	}
+
+	FOrientedBox MakeDecalWorldOBB(const UDecalComponent& DecalComponent)
+	{
+		const FMatrix DecalLocalToWorld = DecalComponent.GetDecalLocalToWorldMatrix();
+
+		FOrientedBox Box;
+		Box.Center = DecalLocalToWorld.TransformPositionWithW(FVector(0.0f, 0.0f, 0.0f));
+
+		FVector AxisVectors[3] =
+		{
+			DecalLocalToWorld.TransformVector(FVector(1.0f, 0.0f, 0.0f)),
+			DecalLocalToWorld.TransformVector(FVector(0.0f, 1.0f, 0.0f)),
+			DecalLocalToWorld.TransformVector(FVector(0.0f, 0.0f, 1.0f))
+		};
+
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			const float AxisLength = AxisVectors[AxisIndex].Length();
+			Box.Extent.Data[AxisIndex] = AxisLength * 0.5f;
+			Box.Axis[AxisIndex] = AxisLength > 0.000001f
+				? AxisVectors[AxisIndex] / AxisLength
+				: FVector(AxisIndex == 0 ? 1.0f : 0.0f, AxisIndex == 1 ? 1.0f : 0.0f, AxisIndex == 2 ? 1.0f : 0.0f);
+		}
+
+		return Box;
+	}
+
+	FOrientedBox MakeWorldAABBAsOBB(const FBoundingBox& Bounds)
+	{
+		FOrientedBox Box;
+		Box.Center = (Bounds.Min + Bounds.Max) * 0.5f;
+		Box.Extent = (Bounds.Max - Bounds.Min) * 0.5f;
+		Box.Axis[0] = FVector(1.0f, 0.0f, 0.0f);
+		Box.Axis[1] = FVector(0.0f, 1.0f, 0.0f);
+		Box.Axis[2] = FVector(0.0f, 0.0f, 1.0f);
+		return Box;
+	}
+
+	bool IntersectsOBBvsOBB(const FOrientedBox& A, const FOrientedBox& B)
+	{
+		float R[3][3] = {};
+		float AbsR[3][3] = {};
+
+		for (int32 i = 0; i < 3; ++i)
+		{
+			for (int32 j = 0; j < 3; ++j)
+			{
+				R[i][j] = A.Axis[i].Dot(B.Axis[j]);
+				AbsR[i][j] = std::abs(R[i][j]) + 0.00001f;
+			}
+		}
+
+		const FVector Delta = B.Center - A.Center;
+		float T[3] =
+		{
+			Delta.Dot(A.Axis[0]),
+			Delta.Dot(A.Axis[1]),
+			Delta.Dot(A.Axis[2])
+		};
+
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float RA = A.Extent.Data[i];
+			const float RB =
+				B.Extent.X * AbsR[i][0] +
+				B.Extent.Y * AbsR[i][1] +
+				B.Extent.Z * AbsR[i][2];
+			if (std::abs(T[i]) > RA + RB)
+			{
+				return false;
+			}
+		}
+
+		for (int32 j = 0; j < 3; ++j)
+		{
+			const float RA =
+				A.Extent.X * AbsR[0][j] +
+				A.Extent.Y * AbsR[1][j] +
+				A.Extent.Z * AbsR[2][j];
+			const float RB = B.Extent.Data[j];
+			const float ProjectedT = std::abs(T[0] * R[0][j] + T[1] * R[1][j] + T[2] * R[2][j]);
+			if (ProjectedT > RA + RB)
+			{
+				return false;
+			}
+		}
+
+		for (int32 i = 0; i < 3; ++i)
+		{
+			for (int32 j = 0; j < 3; ++j)
+			{
+				const int32 I1 = (i + 1) % 3;
+				const int32 I2 = (i + 2) % 3;
+				const int32 J1 = (j + 1) % 3;
+				const int32 J2 = (j + 2) % 3;
+
+				const float RA =
+					A.Extent.Data[I1] * AbsR[I2][j] +
+					A.Extent.Data[I2] * AbsR[I1][j];
+				const float RB =
+					B.Extent.Data[J1] * AbsR[i][J2] +
+					B.Extent.Data[J2] * AbsR[i][J1];
+				const float ProjectedT = std::abs(T[I2] * R[I1][j] - T[I1] * R[I2][j]);
+
+				if (ProjectedT > RA + RB)
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
 	}
 
 	void AppendTriangleFromStartIndex(
@@ -827,6 +947,107 @@ void FDecalMeshBuilder::GatherSATOverlapTriangles(
 	if (OutStats)
 	{
 		*OutStats = LocalStats;
+	}
+}
+
+void FDecalMeshBuilder::FilterPrimitiveCandidatesByDecalOBBSAT(
+	const UDecalComponent& DecalComponent,
+	const TArray<FDecalPrimitiveCandidate>& InCandidates,
+	TArray<FDecalPrimitiveCandidate>& OutCandidates)
+{
+	OutCandidates.clear();
+
+	/*
+		이 SAT는 삼각형용이 아니라 primitive bounds용입니다.
+		다른 팀이 말한 "OBB와 AABB SAT"는 이 단계에 해당합니다.
+		- decal: 회전된 OBB
+		- receiver mesh: 월드 AABB
+	*/
+	const FOrientedBox DecalOBB = MakeDecalWorldOBB(DecalComponent);
+
+	for (const FDecalPrimitiveCandidate& Candidate : InCandidates)
+	{
+		if (!Candidate.PrimitiveWorldAABB.IsValid())
+		{
+			continue;
+		}
+
+		const FOrientedBox PrimitiveBounds = MakeWorldAABBAsOBB(Candidate.PrimitiveWorldAABB);
+		if (IntersectsOBBvsOBB(DecalOBB, PrimitiveBounds))
+		{
+			OutCandidates.push_back(Candidate);
+		}
+	}
+}
+
+void FDecalMeshBuilder::BuildProjectedRenderableMeshFromCandidates(
+	const UDecalComponent& DecalComponent,
+	const TArray<FDecalPrimitiveCandidate>& Candidates,
+	FDecalRenderableMesh& OutMesh)
+{
+	OutMesh.Clear();
+
+	if (Candidates.empty())
+	{
+		return;
+	}
+
+	const FMatrix WorldToDecal = DecalComponent.GetWorldToDecalMatrix();
+	FDecalRenderableSection Section;
+	Section.FirstIndex = 0;
+
+	for (const FDecalPrimitiveCandidate& Candidate : Candidates)
+	{
+		if (!Candidate.MeshAsset)
+		{
+			continue;
+		}
+
+		const TArray<FNormalVertex>& SourceVertices = Candidate.MeshAsset->Vertices;
+		const TArray<uint32>& SourceIndices = Candidate.MeshAsset->Indices;
+		if (SourceVertices.empty() || SourceIndices.empty())
+		{
+			continue;
+		}
+
+		/*
+			여기서는 candidate mesh 전체를 decal local 공간으로 옮깁니다.
+			실제 decal box 마스킹은 PS가 localPos 범위 검사로 처리합니다.
+			즉 CPU는 "후보 mesh 선택"까지만 맡고, projection 느낌은 shader가 담당합니다.
+		*/
+		const uint32 BaseVertexIndex = static_cast<uint32>(OutMesh.Vertices.size());
+		OutMesh.Vertices.reserve(OutMesh.Vertices.size() + SourceVertices.size());
+		OutMesh.Indices.reserve(OutMesh.Indices.size() + SourceIndices.size());
+
+		for (const FNormalVertex& SourceVertex : SourceVertices)
+		{
+			const FVector WorldPosition = Candidate.MeshToWorld.TransformPositionWithW(SourceVertex.pos);
+			const FVector DecalLocalPosition = WorldToDecal.TransformPositionWithW(WorldPosition);
+
+			FVector WorldNormal = Candidate.MeshToWorld.TransformVector(SourceVertex.normal);
+			WorldNormal.Normalize();
+
+			FVector DecalLocalNormal = WorldToDecal.TransformVector(WorldNormal);
+			DecalLocalNormal.Normalize();
+
+			FDecalRenderableVertex Vertex;
+			Vertex.Position = DecalLocalPosition;
+			Vertex.Normal = DecalLocalNormal;
+			Vertex.Color = SourceVertex.color;
+			Vertex.UV = SourceVertex.tex;
+			OutMesh.Vertices.push_back(Vertex);
+		}
+
+		for (uint32 Index : SourceIndices)
+		{
+			OutMesh.Indices.push_back(BaseVertexIndex + Index);
+		}
+	}
+
+	Section.IndexCount = static_cast<uint32>(OutMesh.Indices.size());
+	if (Section.IndexCount > 0)
+	{
+		OutMesh.Sections.push_back(Section);
 	}
 }
 

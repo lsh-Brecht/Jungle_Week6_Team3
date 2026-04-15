@@ -43,6 +43,16 @@ public:
 		TArray<FDecalSATTriangle>& OutSATTriangles,
 		FDecalSATStats* OutStats = nullptr);
 
+	static void FilterPrimitiveCandidatesByDecalOBBSAT(
+		const UDecalComponent& DecalComponent,
+		const TArray<FDecalPrimitiveCandidate>& InCandidates,
+		TArray<FDecalPrimitiveCandidate>& OutCandidates);
+
+	static void BuildProjectedRenderableMeshFromCandidates(
+		const UDecalComponent& DecalComponent,
+		const TArray<FDecalPrimitiveCandidate>& Candidates,
+		FDecalRenderableMesh& OutMesh);
+
 	static void ClipSATTrianglesAgainstDecalBox(
 		const TArray<FDecalSATTriangle>& SATTriangles,
 		TArray<FDecalClippedPolygon>& OutPolygons,

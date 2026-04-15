@@ -365,33 +365,10 @@ void FRenderer::Render(const FRenderBus& InRenderBus)
 			continue;
 		}
 
-		ID3D11RenderTargetView* pCurrentRTV = nullptr;
-		ID3D11DepthStencilView* pCurrentDSV = nullptr;
-
-		if (CurPass == ERenderPass::Decal)
-		{
-			// 1. 현재 바인딩된 RTV와 DSV를 가져옵니다. (가져올 때 내부적으로 Ref Count가 1 증가함)
-			Context->OMGetRenderTargets(1, &pCurrentRTV, &pCurrentDSV);
-
-			// 2. DSV(Depth) 자리에 nullptr을 꽂아서 바인딩을 끊습니다. 
-			// -> 이제 픽셀 셰이더에서 Depth SRV(t1)를 마음껏 읽을 수 있습니다!
-			Context->OMSetRenderTargets(1, &pCurrentRTV, nullptr);
-		}
-
         if (bHasBatcher)
 			PassBatchers[PassIndex].DrawBatch(CurPass, InRenderBus, Context);
 		else
 			ExecutePass(InRenderBus.GetProxies(CurPass), InRenderBus, Context);
-
-		if (CurPass == ERenderPass::Decal)
-		{
-			// 3. 다시 원래의 DSV를 연결하여 다음 패스(Translucent 등)가 정상 작동하도록 복구합니다.
-			Context->OMSetRenderTargets(1, &pCurrentRTV, pCurrentDSV);
-
-			// 4. OMGetRenderTargets 호출로 인해 증가했던 메모리 참조 카운트(Ref Count)를 해제합니다. (메모리 누수 방지)
-			if (pCurrentRTV) pCurrentRTV->Release();
-			if (pCurrentDSV) pCurrentDSV->Release();
-		}
 	}
 }
 
@@ -554,7 +531,6 @@ void FRenderer::ExecutePass(const TArray<const FPrimitiveSceneProxy*>& Proxies, 
 		for (const FPrimitiveSceneProxy* RawProxy : SortedProxyBuffer)
 		{
 			const FPrimitiveSceneProxy& Proxy = *RawProxy;
-			if (Proxy.Pass == ERenderPass::Decal && !ActiveDepthSRV) continue;
 			if (!Proxy.MeshBuffer || !Proxy.MeshBuffer->IsValid()) continue;
 			BindShader(Proxy, Context, State);	
 			BindExtraCB(Proxy, Context);
@@ -726,11 +702,6 @@ void FRenderer::DrawSections(const FPrimitiveSceneProxy& Proxy, ID3D11DeviceCont
 		State.bSamplerBound = true;
 	}
 
-	if (Proxy.Pass == ERenderPass::Decal)
-	{
-		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
-	}
-	
 	// Material CB 슬롯 바인딩 (1회)
 	FConstantBuffer* MaterialCB = FConstantBufferPool::Get().GetBuffer(ECBSlot::Material, sizeof(FMaterialConstants));
 	if (!State.bMaterialBound)
@@ -785,11 +756,6 @@ void FRenderer::DrawSingleSection(const FPrimitiveSceneProxy& Proxy, ID3D11Devic
 	{
 		Ctx->PSSetSamplers(0, 1, &Resources.DefaultSampler);
 		State.bSamplerBound = true;
-	}
-
-	if (Proxy.Pass == ERenderPass::Decal)
-	{
-		Ctx->PSSetShaderResources(1, 1, &ActiveDepthSRV);
 	}
 
 	// Material CB 슬롯 바인딩 (1회)
