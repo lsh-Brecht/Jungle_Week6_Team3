@@ -253,7 +253,7 @@ void FInputRouter::RegisterTarget(
 	Targets.push_back(std::move(Entry));
 }
 
-bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& OutBinding)
+bool FInputRouter::Tick(float DeltaTime, FViewportInputContext& OutContext, FInteractionBinding& OutBinding)
 {
 	const FInputSystemSnapshot InputSnapshot = InputSystem::Get().TickAndMakeSnapshot();
 	if (bForceViewportMouseBlock && bRelativeMouseModeActive)
@@ -292,7 +292,7 @@ bool FInputRouter::Tick(FViewportInputContext& OutContext, FInteractionBinding& 
 		FCursorControl::Clear();
 		return false;
 	}
-	PopulateDispatchContext(InputSnapshot, MouseClientPos, TargetEntry, TargetRect, OutContext, OutBinding);
+	PopulateDispatchContext(InputSnapshot, DeltaTime, MouseClientPos, TargetEntry, TargetRect, OutContext, OutBinding);
 
 	// ImGui가 마우스를 소비 중이면(relative 제외) viewport 마우스 상태를 강제로 비활성화한다.
 	// 이벤트뿐 아니라 Frame(KeyDown/Dragging) 기반 입력도 차단해야 드래그/다운 트리거가 새지 않는다.
@@ -324,6 +324,7 @@ void FInputRouter::ResetTrackingState()
 
 void FInputRouter::PopulateDispatchContext(
 	const FInputSystemSnapshot& InputSnapshot,
+	float DeltaTime,
 	const POINT& MouseClientPos,
 	FTargetEntry* TargetEntry,
 	const FRect& TargetRect,
@@ -347,6 +348,7 @@ void FInputRouter::PopulateDispatchContext(
 	}
 
 	OutContext.Frame = Frame;
+	OutContext.DeltaSeconds = (DeltaTime > 0.0f) ? DeltaTime : 0.0f;
 	OutContext.TargetViewport = TargetEntry->Viewport;
 	OutContext.TargetClient = TargetEntry->Client;
 	OutContext.Domain = TargetEntry->Domain;

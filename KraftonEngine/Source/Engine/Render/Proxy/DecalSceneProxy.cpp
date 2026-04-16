@@ -238,7 +238,7 @@ void FDecalSceneProxy::RebuildSectionDraw()
 		if (const FTextureResource* Texture = DecalComp->GetDecalTexture())
 		{
 			Draw.DiffuseSRV = Texture->SRV;
-			Draw.DiffuseColor = DecalComp->DecalColor.ToVector4();
+			Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
 		}
 		else if (UMaterialInterface* Material = DecalComp->GetDecalMaterial())
 		{
@@ -250,7 +250,7 @@ void FDecalSceneProxy::RebuildSectionDraw()
 		}
 		else
 		{
-			Draw.DiffuseColor = DecalComp->DecalColor.ToVector4();
+			Draw.DiffuseColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
 		}
     }
 

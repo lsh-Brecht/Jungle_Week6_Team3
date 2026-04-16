@@ -288,7 +288,7 @@ void UEditorEngine::Tick(float DeltaTime)
 
 	FViewportInputContext RoutedInputContext;
 	FInteractionBinding InteractionBinding;
-	if (InputRouter.Tick(RoutedInputContext, InteractionBinding))
+	if (InputRouter.Tick(DeltaTime, RoutedInputContext, InteractionBinding))
 	{
 		HandlePostRoutingInput(RoutedInputContext, InteractionBinding, bAnyPopupOpen);
 	}

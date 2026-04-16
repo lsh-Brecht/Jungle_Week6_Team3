@@ -70,7 +70,7 @@ void UObjViewerEngine::Tick(float DeltaTime)
 
 	FViewportInputContext RoutedInputContext;
 	FInteractionBinding InteractionBinding;
-	InputRouter.Tick(RoutedInputContext, InteractionBinding);
+	InputRouter.Tick(DeltaTime, RoutedInputContext, InteractionBinding);
 
 	ViewportClient.Tick(DeltaTime);
 	WorldTick(DeltaTime);

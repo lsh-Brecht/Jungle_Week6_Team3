@@ -59,7 +59,7 @@ bool UGameViewportClient::ProcessInput(FViewportInputContext& Context)
 	const bool bKeyboardBlocked = Context.bImGuiCapturedKeyboard;
 	const bool bMouseBlocked = Context.bImGuiCapturedMouse && !Context.bCaptured;
 
-	const float DeltaTime = 1.0f / 60.0f;
+	const float DeltaTime = (Context.DeltaSeconds > 0.0f) ? Context.DeltaSeconds : (1.0f / 60.0f);
 	const FVector MoveInput = BuildMoveInput(Context, bKeyboardBlocked);
 	const bool bMoved = ApplyMoveInput(MoveInput, DeltaTime);
 	const bool bCanLook = ApplyLookInput(Context, bMouseBlocked);
@@ -129,7 +129,7 @@ bool UGameViewportClient::ApplyMoveInput(const FVector& MoveInput, float DeltaTi
 	}
 
 	const FVector NormalizedMoveInput = MoveInput.Normalized();
-	const float MoveSpeed = 0.3f;
+	constexpr float MoveSpeedUnitsPerSecond = 10.f;
 	FVector FlatForward = PIEPlayerActor->GetActorForward();
 	FVector FlatRight = PIEPlayerActor->GetRootComponent()
 		? PIEPlayerActor->GetRootComponent()->GetRightVector()
@@ -146,7 +146,7 @@ bool UGameViewportClient::ApplyMoveInput(const FVector& MoveInput, float DeltaTi
 	}
 
 	const FVector WorldDelta = FlatForward * NormalizedMoveInput.X + FlatRight * NormalizedMoveInput.Y;
-	PIEPlayerActor->AddActorWorldOffset(WorldDelta * (MoveSpeed * DeltaTime));
+	PIEPlayerActor->AddActorWorldOffset(WorldDelta * (MoveSpeedUnitsPerSecond * DeltaTime));
 	return true;
 }
 

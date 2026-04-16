@@ -118,6 +118,7 @@ struct FViewportInputContext
 {
 	FInputFrame Frame;
 	TArray<FInputEvent> Events;
+	float DeltaSeconds = 0.0f;
 
 	FViewport* TargetViewport = nullptr;
 	FViewportClient* TargetClient = nullptr;

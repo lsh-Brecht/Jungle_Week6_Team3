@@ -26,7 +26,7 @@ public:
 		FRectProvider InRectProvider,
 		FWorldResolver InWorldResolver);
 
-	bool Tick(FViewportInputContext& OutContext, FInteractionBinding& OutBinding);
+	bool Tick(float DeltaTime, FViewportInputContext& OutContext, FInteractionBinding& OutBinding);
 
 private:
 	struct FTargetEntry
@@ -45,6 +45,7 @@ private:
 	POINT GetTargetRectScreenCenter(const FRect& TargetRect) const;
 	void PopulateDispatchContext(
 		const FInputSystemSnapshot& InputSnapshot,
+		float DeltaTime,
 		const POINT& MouseClientPos,
 		FTargetEntry* TargetEntry,
 		const FRect& TargetRect,

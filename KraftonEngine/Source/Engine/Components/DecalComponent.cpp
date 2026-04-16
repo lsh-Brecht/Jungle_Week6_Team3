@@ -21,6 +21,21 @@ namespace
 {
 	constexpr const char* DecalTextureMaterialPrefix = "Texture:";
 
+	void EnsureFadeCanTick(UDecalComponent* Component)
+	{
+		if (!Component)
+		{
+			return;
+		}
+
+		if (AActor* OwnerActor = Component->GetOwner())
+		{
+			OwnerActor->bNeedsTick = true;
+		}
+
+		Component->SetComponentTickEnabled(true);
+	}
+
 	bool IsDecalTextureMaterialPath(const FString& Path)
 	{
 		return Path.rfind(DecalTextureMaterialPrefix, 0) == 0;
@@ -54,8 +69,8 @@ float UDecalComponent::GetFadeInDuration() const { return FadeInDuration; }
 
 void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyOwnerAfterFade)
 {
-	FadeStartDelay = StartDelay;
-	FadeDuration = Duration;
+	FadeStartDelay = std::max(0.0f, StartDelay);
+	FadeDuration = std::max(0.0f, Duration);
 	bDestroyOwnerAfterFade = DestroyOwnerAfterFade;
 
   bIsFadeInActive = false;
@@ -64,13 +79,13 @@ void UDecalComponent::SetFadeOut(float StartDelay, float Duration, bool DestroyO
    bPendingFadeOutAfterFadeIn = false;
 	OriginalAlpha = DecalColor.A;
    SetVisibility(true);
-	SetComponentTickEnabled(true);
+	EnsureFadeCanTick(this);
 }
 
 void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 {
-	FadeInStartDelay = StartDelay;
-	FadeInDuration = Duration;
+	FadeInStartDelay = std::max(0.0f, StartDelay);
+	FadeInDuration = std::max(0.0f, Duration);
 
    bIsFadeOutActive = false;
 	FadeInTimeElapsed = 0.0f;
@@ -83,7 +98,7 @@ void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 	}
 	DecalColor.A = 0.0f;
 	SetVisibility(true);
-	SetComponentTickEnabled(true);
+	EnsureFadeCanTick(this);
 
 	// 첫 프레임부터 즉시 렌더 스레드에 반영되도록Dirty 마킹
 	MarkProxyDirty(EDirtyFlag::Transform);
@@ -91,8 +106,32 @@ void UDecalComponent::SetFadeIn(float StartDelay, float Duration)
 
 void UDecalComponent::RestartFadePreviewSequence()
 {
-	bPendingFadeOutAfterFadeIn = true;
-	SetFadeIn(FadeInStartDelay, FadeInDuration);
+	FadeStartDelay = std::max(0.0f, FadeStartDelay);
+	FadeDuration = std::max(0.0f, FadeDuration);
+	FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+	FadeInDuration = std::max(0.0f, FadeInDuration);
+
+	const bool bHasFadeInConfig = (FadeInStartDelay > 0.0f) || (FadeInDuration > 0.0f);
+	const bool bHasFadeOutConfig = (FadeStartDelay > 0.0f) || (FadeDuration > 0.0f);
+
+	if (bHasFadeInConfig)
+	{
+		bPendingFadeOutAfterFadeIn = bHasFadeOutConfig;
+		SetFadeIn(FadeInStartDelay, FadeInDuration);
+	}
+	else if (bHasFadeOutConfig)
+	{
+		SetFadeOut(FadeStartDelay, FadeDuration, false);
+	}
+	else
+	{
+		bIsFadeInActive = false;
+		bIsFadeOutActive = false;
+		bPendingFadeOutAfterFadeIn = false;
+		DecalColor.A = OriginalAlpha;
+		SetVisibility(true);
+		MarkProxyDirty(EDirtyFlag::Transform);
+	}
 }
 
 void UDecalComponent::SetDecalColor(const FLinearColor& Color)
@@ -318,11 +357,17 @@ void UDecalComponent::Serialize(FArchive& Ar)
     Ar << DecalMaterialSlot.Path;
     Ar << DecalMaterialSlot.bUVScroll;
     Ar << DecalSortOrder;
+
+	if (Ar.IsLoading())
+	{
+		OriginalAlpha = DecalColor.A;
+	}
 }
 
 void UDecalComponent::PostDuplicate()
 {
     UPrimitiveComponent::PostDuplicate();
+	OriginalAlpha = DecalColor.A;
 
 	if (IsDecalTextureMaterialPath(DecalMaterialSlot.Path))
 	{
@@ -421,6 +466,22 @@ void UDecalComponent::PostEditProperty(const char* PropertyName)
 		{
 			RestartFadePreviewSequence();
 		}
+		else
+		{
+			FadeStartDelay = std::max(0.0f, FadeStartDelay);
+			FadeDuration = std::max(0.0f, FadeDuration);
+			FadeInStartDelay = std::max(0.0f, FadeInStartDelay);
+			FadeInDuration = std::max(0.0f, FadeInDuration);
+
+			bIsFadeInActive = false;
+			bIsFadeOutActive = false;
+			bPendingFadeOutAfterFadeIn = false;
+			if (OriginalAlpha > 0.0f)
+			{
+				DecalColor.A = OriginalAlpha;
+			}
+			MarkProxyDirty(EDirtyFlag::Transform);
+		}
 	}
 
 }
@@ -455,9 +516,13 @@ void UDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			if (FadeInTimeElapsed >= FadeInStartDelay + FadeInDuration)
 			{
 				bIsFadeInActive = false;
-               if (bPendingFadeOutAfterFadeIn)
+               if (bPendingFadeOutAfterFadeIn && ((FadeStartDelay > 0.0f) || (FadeDuration > 0.0f)))
 				{
 					SetFadeOut(FadeStartDelay, FadeDuration, false);
+				}
+				else
+				{
+					bPendingFadeOutAfterFadeIn = false;
 				}
 			}
 		}
