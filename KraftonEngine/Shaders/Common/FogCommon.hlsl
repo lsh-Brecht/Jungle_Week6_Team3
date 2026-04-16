@@ -19,7 +19,6 @@ float GetFogDensity(FogUniformParameters fog)
 }
 
 // 에디터/컴포넌트 쪽에서 다루는 fog density를 셰이더용 스케일로 변환합니다.
-// deferred 참고 구현에서도 동일하게 0.1 스케일을 둬서 화면상 변화량을 제어했습니다.
 float GetScaledFogDensity(FogUniformParameters fog)
 {
     return GetFogDensity(fog) * FOG_DENSITY_SCALE;
@@ -60,7 +59,6 @@ float GetFogMaxOpacity(FogUniformParameters fog)
 
 float ComputeFogHeightAttenuation(FogUniformParameters fog, float sampleHeight)
 {
-    // deferred 참고 코드의 heightFactor와 동일한 개념입니다.
     // fog 평면보다 위로 갈수록 안개가 옅어지고, fog 평면 아래는 최대 밀도로 유지합니다.
     const float relativeHeight = max(sampleHeight - GetFogHeight(fog), 0.0f);
     return exp(-relativeHeight * GetFogHeightFalloff(fog));
@@ -84,7 +82,6 @@ float ComputeFogTransmittanceFromDistance(FogUniformParameters fog, float distan
         return 1.0f;
     }
 
-    // deferred 예제의 fogAmount = exp(-density * heightFactor * distance)와 같은 식입니다.
     // 여기서는 fog가 낀 후 남는 "원본 색의 비율(전달률, transmittance)"을 반환합니다.
     const float effectiveDistance = distanceToCamera - startDistance;
     const float fogIntegral = effectiveDistance * GetScaledFogDensity(fog) * heightAttenuation;

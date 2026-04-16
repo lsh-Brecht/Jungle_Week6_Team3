@@ -85,7 +85,6 @@ float4 PS(PS_Input input) : SV_TARGET
     for (uint i = 0; i < FogCount; ++i)
     {
         //복원한 worldPos와 카메라 위치로 실제 표면 거리 및 높이 감쇠를 계산합니다.
-        //그 뒤 deferred 예제와 동일한 형태로 최종 fog weight를 구해 scene color와 섞습니다.
         const float fogWeight = ComputeSceneFogWeight(Fogs[i], worldPos);
         finalColor = lerp(finalColor, Fogs[i].ExponentialFogColorParameter.rgb, fogWeight);
     }
