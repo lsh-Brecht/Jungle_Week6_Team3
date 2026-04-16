@@ -30,7 +30,9 @@ float4 PS(PS_Input_ProjectionDecal input) : SV_TARGET
         discard;
     }
 
-    const float projectorFacing = saturate(-input.localNormal.x);
+    // Projection decals are authored to project along the component's default forward axis.
+    // Use the aligned normal sign so artists do not need to add a corrective 180-degree rotation.
+    const float projectorFacing = saturate(input.localNormal.x);
     const float facingFade = lerp(0.65f, 1.0f, projectorFacing);
 
     const float2 decalUV = float2(input.localPos.y + 0.5f, 0.5f - input.localPos.z);

@@ -1,6 +1,7 @@
 ﻿#include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/ProjectionDecalComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/CameraComponent.h"	
 #include "Components/TextRenderComponent.h"
@@ -68,6 +69,7 @@ void UWorld::DestroyActor(AActor* Actor)
 	MarkWorldPrimitivePickingBVHDirty();
 	InvalidateVisibleSet();
 	Partition.RemoveActor(Actor);
+	MarkProjectionDecalsDirty();
 
 	// Mark for garbage collection
 	UObjectManager::Get().DestroyObject(Actor);
@@ -95,6 +97,7 @@ void UWorld::AddActor(AActor* Actor)
 	InsertActorToOctree(Actor);
 	MarkWorldPrimitivePickingBVHDirty();
 	InvalidateVisibleSet();
+	MarkProjectionDecalsDirty();
 
 	// PIE 중 Duplicate(Ctrl+D)나 SpawnActor로 들어온 액터에도 BeginPlay를 보장.
 	if (bHasBegunPlay && !Actor->HasActorBegunPlay())
@@ -112,6 +115,30 @@ void UWorld::MarkWorldPrimitivePickingBVHDirty()
 	}
 
 	WorldPrimitivePickingBVH.MarkDirty();
+}
+
+void UWorld::MarkProjectionDecalsDirty(const UPrimitiveComponent* ChangedPrimitive)
+{
+	for (AActor* Actor : GetActors())
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+
+		for (UActorComponent* Component : Actor->GetComponents())
+		{
+			UProjectionDecalComponent* ProjectionDecalComponent = Cast<UProjectionDecalComponent>(Component);
+			if (!ProjectionDecalComponent || ProjectionDecalComponent == ChangedPrimitive)
+			{
+				continue;
+			}
+
+			// Projection decal render meshes cache receiver geometry in world space,
+			// so receiver transform/visibility changes must invalidate that cache.
+			ProjectionDecalComponent->MarkProjectionDecalDirty();
+		}
+	}
 }
 
 void UWorld::InvalidateVisibleSet()

@@ -7,6 +7,7 @@
 #include "Core/CollisionTypes.h"
 #include "Render/Proxy/FScene.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/World.h"
 #include "Object/ObjectFactory.h"
 
@@ -85,6 +86,10 @@ void UPrimitiveComponent::MarkRenderTransformDirty()
 	World->UpdateActorInOctree(OwnerActor);
 	World->MarkWorldPrimitivePickingBVHDirty();
 	World->InvalidateVisibleSet();
+	if (IsA<UStaticMeshComponent>())
+	{
+		World->MarkProjectionDecalsDirty(this);
+	}
 }
 
 void UPrimitiveComponent::MarkRenderVisibilityDirty()
@@ -100,6 +105,10 @@ void UPrimitiveComponent::MarkRenderVisibilityDirty()
 	World->UpdateActorInOctree(OwnerActor);
 	World->MarkWorldPrimitivePickingBVHDirty();
 	World->InvalidateVisibleSet();
+	if (IsA<UStaticMeshComponent>())
+	{
+		World->MarkProjectionDecalsDirty(this);
+	}
 }
 
 void UPrimitiveComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)

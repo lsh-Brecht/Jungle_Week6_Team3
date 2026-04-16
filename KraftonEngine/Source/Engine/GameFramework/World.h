@@ -32,6 +32,7 @@ public:
 	T* SpawnActor();
 	void DestroyActor(AActor* Actor);
 	void AddActor(AActor* Actor);
+	void MarkProjectionDecalsDirty(const UPrimitiveComponent* ChangedPrimitive = nullptr);
 	void MarkWorldPrimitivePickingBVHDirty();
 	void BuildWorldPrimitivePickingBVHNow() const;
 	void BeginDeferredPickingBVHUpdate();
